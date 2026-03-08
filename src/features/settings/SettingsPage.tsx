@@ -57,7 +57,7 @@ export const SettingsPage = () => {
                 </div>
                 <div className="space-y-2">
                   <Label>Slug</Label>
-                  <Input defaultValue={tenant?.slug ?? ""} disabled />
+                  <Input defaultValue={user?.tenantSlug ?? ""} disabled />
                 </div>
                 <div className="space-y-2">
                   <Label>Phone</Label>
