@@ -108,10 +108,7 @@ export const ClinicLayout = () => {
           </div>
           <div className="flex items-center gap-2">
             <LanguageSwitcher />
-            <button className="p-2 rounded-md hover:bg-muted relative">
-              <Bell className="h-5 w-5 text-muted-foreground" />
-              <span className="absolute top-1 end-1 h-2 w-2 rounded-full bg-destructive" />
-            </button>
+            <NotificationCenter />
             <button onClick={handleLogout} className="p-2 rounded-md hover:bg-muted text-muted-foreground" title={t("common.logout")}>
               <LogOut className="h-5 w-5" />
             </button>

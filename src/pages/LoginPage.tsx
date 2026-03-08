@@ -152,6 +152,12 @@ export const LoginPage = () => {
             </Button>
           </form>
 
+          <div className="mt-3 text-end">
+            <button onClick={() => navigate("/forgot-password")} className="text-xs text-muted-foreground hover:text-primary hover:underline">
+              Forgot password?
+            </button>
+          </div>
+
           <div className="mt-4 text-center text-sm">
             {mode === "login" ? (
               <p className="text-muted-foreground">
