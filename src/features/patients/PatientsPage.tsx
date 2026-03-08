@@ -6,6 +6,7 @@ import { StatusBadge } from "@/shared/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { PermissionGuard } from "@/core/auth/PermissionGuard";
 import { UserPlus, Search, Eye } from "lucide-react";
+import { AddPatientModal } from "./AddPatientModal";
 
 interface Patient {
   id: string;
@@ -33,6 +34,7 @@ export const PatientsPage = () => {
   const navigate = useNavigate();
   const { clinicSlug } = useParams();
   const [search, setSearch] = useState("");
+  const [showAdd, setShowAdd] = useState(false);
 
   const filtered = DEMO_PATIENTS.filter((p) =>
     p.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -82,7 +84,7 @@ export const PatientsPage = () => {
       <div className="page-header">
         <h1 className="page-title">{t("patients.title")}</h1>
         <PermissionGuard permission="manage_patients">
-          <Button>
+          <Button onClick={() => setShowAdd(true)}>
             <UserPlus className="h-4 w-4" />
             {t("patients.addPatient")}
           </Button>
@@ -101,6 +103,8 @@ export const PatientsPage = () => {
       </div>
 
       <DataTable columns={columns} data={filtered} keyExtractor={(p) => p.id} emptyMessage={t("common.noData")} />
+
+      <AddPatientModal open={showAdd} onClose={() => setShowAdd(false)} onSuccess={() => {}} />
     </div>
   );
 };
