@@ -72,6 +72,7 @@ export const useAuth = create<AuthState>()(
         user,
         supabaseUser: supabaseUser ?? null,
         isAuthenticated: !!user,
+        isLoading: false,
       }),
       setLoading: (isLoading) => set({ isLoading }),
       logout: async () => {
