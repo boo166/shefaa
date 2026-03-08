@@ -1,12 +1,20 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useI18n } from "@/core/i18n/i18nStore";
+import { useAuth } from "@/core/auth/authStore";
 import { cn } from "@/lib/utils";
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
+import { useSupabaseTable } from "@/hooks/useSupabaseQuery";
+import { Tables } from "@/integrations/supabase/types";
 
-const revenueData = [
+const COLORS = [
+  "hsl(174, 62%, 34%)", "hsl(210, 80%, 52%)", "hsl(152, 60%, 40%)",
+  "hsl(38, 92%, 50%)", "hsl(0, 72%, 51%)",
+];
+
+const DEMO_REVENUE = [
   { month: "Oct", revenue: 32000, expenses: 22000 },
   { month: "Nov", revenue: 38000, expenses: 24000 },
   { month: "Dec", revenue: 35000, expenses: 21000 },
@@ -15,41 +23,78 @@ const revenueData = [
   { month: "Mar", revenue: 48250, expenses: 28000 },
 ];
 
-const patientGrowth = [
-  { month: "Oct", patients: 980 },
-  { month: "Nov", patients: 1050 },
-  { month: "Dec", patients: 1090 },
-  { month: "Jan", patients: 1150 },
-  { month: "Feb", patients: 1220 },
-  { month: "Mar", patients: 1284 },
+const DEMO_PATIENT_GROWTH = [
+  { month: "Oct", patients: 980 }, { month: "Nov", patients: 1050 },
+  { month: "Dec", patients: 1090 }, { month: "Jan", patients: 1150 },
+  { month: "Feb", patients: 1220 }, { month: "Mar", patients: 1284 },
 ];
 
-const departmentData = [
-  { name: "Cardiology", value: 28 },
-  { name: "Orthopedics", value: 22 },
-  { name: "Pediatrics", value: 20 },
-  { name: "Dermatology", value: 15 },
-  { name: "Neurology", value: 15 },
-];
-
-const doctorPerformance = [
-  { name: "Dr. Sarah Ahmed", patients: 142, rating: 4.9, appointments: 38 },
-  { name: "Dr. John Smith", patients: 98, rating: 4.7, appointments: 29 },
-  { name: "Dr. Layla Khalid", patients: 215, rating: 4.8, appointments: 42 },
-  { name: "Dr. Omar Hassan", patients: 67, rating: 4.6, appointments: 18 },
-  { name: "Dr. Amira Nasser", patients: 89, rating: 4.9, appointments: 25 },
-];
-
-const COLORS = [
-  "hsl(174, 62%, 34%)", "hsl(210, 80%, 52%)", "hsl(152, 60%, 40%)",
-  "hsl(38, 92%, 50%)", "hsl(0, 72%, 51%)",
+const DEMO_DEPARTMENT_DATA = [
+  { name: "Cardiology", value: 28 }, { name: "Orthopedics", value: 22 },
+  { name: "Pediatrics", value: 20 }, { name: "Dermatology", value: 15 }, { name: "Neurology", value: 15 },
 ];
 
 type Tab = "revenue" | "patients" | "doctors";
 
 export const ReportsPage = () => {
   const { t } = useI18n();
+  const { user } = useAuth();
+  const isDemo = user?.tenantId === "demo";
   const [activeTab, setActiveTab] = useState<Tab>("revenue");
+
+  const { data: invoices = [] } = useSupabaseTable<Tables<"invoices">>("invoices");
+  const { data: patients = [] } = useSupabaseTable<Tables<"patients">>("patients");
+  const { data: doctors = [] } = useSupabaseTable<Tables<"doctors">>("doctors");
+  const { data: appointments = [] } = useSupabaseTable<Tables<"appointments">>("appointments");
+
+  // Revenue data: group invoices by month
+  const revenueData = useMemo(() => {
+    if (isDemo) return DEMO_REVENUE;
+    const months: Record<string, { revenue: number; expenses: number }> = {};
+    invoices.forEach((inv) => {
+      const d = new Date(inv.invoice_date);
+      const key = d.toLocaleString("en", { month: "short" });
+      if (!months[key]) months[key] = { revenue: 0, expenses: 0 };
+      if (inv.status === "paid") months[key].revenue += Number(inv.amount);
+      else months[key].expenses += Number(inv.amount);
+    });
+    return Object.entries(months).map(([month, vals]) => ({ month, ...vals }));
+  }, [invoices, isDemo]);
+
+  // Patient growth: group by month of created_at
+  const patientGrowth = useMemo(() => {
+    if (isDemo) return DEMO_PATIENT_GROWTH;
+    const sorted = [...patients].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    const months: Record<string, number> = {};
+    sorted.forEach((p, i) => {
+      const key = new Date(p.created_at).toLocaleString("en", { month: "short" });
+      months[key] = i + 1;
+    });
+    return Object.entries(months).map(([month, count]) => ({ month, patients: count }));
+  }, [patients, isDemo]);
+
+  // Department data: group doctors by specialty
+  const departmentData = useMemo(() => {
+    if (isDemo) return DEMO_DEPARTMENT_DATA;
+    const deps: Record<string, number> = {};
+    doctors.forEach((d) => { deps[d.specialty] = (deps[d.specialty] || 0) + 1; });
+    return Object.entries(deps).map(([name, value]) => ({ name, value }));
+  }, [doctors, isDemo]);
+
+  // Doctor performance
+  const doctorPerformance = useMemo(() => {
+    if (isDemo) return [
+      { name: "Dr. Sarah Ahmed", patients: 142, rating: 4.9, appointments: 38 },
+      { name: "Dr. John Smith", patients: 98, rating: 4.7, appointments: 29 },
+      { name: "Dr. Layla Khalid", patients: 215, rating: 4.8, appointments: 42 },
+    ];
+    return doctors.map((doc) => ({
+      name: doc.full_name,
+      patients: 0,
+      rating: Number(doc.rating) || 0,
+      appointments: appointments.filter((a) => a.doctor_id === doc.id).length,
+    }));
+  }, [doctors, appointments, isDemo]);
 
   const tabItems: { key: Tab; label: string }[] = [
     { key: "revenue", label: t("reports.revenue") },
@@ -65,16 +110,11 @@ export const ReportsPage = () => {
 
       <div className="border-b flex gap-1">
         {tabItems.map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            className={cn(
-              "px-4 py-2.5 text-sm font-medium border-b-2 transition-colors",
+          <button key={tab.key} onClick={() => setActiveTab(tab.key)}
+            className={cn("px-4 py-2.5 text-sm font-medium border-b-2 transition-colors",
               activeTab === tab.key ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
             )}
-          >
-            {tab.label}
-          </button>
+          >{tab.label}</button>
         ))}
       </div>
 
@@ -98,7 +138,8 @@ export const ReportsPage = () => {
             <h3 className="font-semibold mb-4">{t("reports.revenueByDepartment")}</h3>
             <ResponsiveContainer width="100%" height={320}>
               <PieChart>
-                <Pie data={departmentData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
+                <Pie data={departmentData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} dataKey="value"
+                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
                   {departmentData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                 </Pie>
                 <Tooltip />
@@ -138,6 +179,9 @@ export const ReportsPage = () => {
                   <td><span className="inline-flex items-center gap-1"><span className="text-warning">★</span> {doc.rating}</span></td>
                 </tr>
               ))}
+              {doctorPerformance.length === 0 && (
+                <tr><td colSpan={4} className="text-center py-6 text-muted-foreground">No data</td></tr>
+              )}
             </tbody>
           </table>
         </div>

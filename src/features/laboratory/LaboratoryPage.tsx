@@ -1,10 +1,13 @@
+import { useState, useMemo } from "react";
 import { useI18n } from "@/core/i18n/i18nStore";
 import { DataTable, Column } from "@/shared/components/DataTable";
 import { StatusBadge } from "@/shared/components/StatusBadge";
+import { StatusFilter } from "@/shared/components/StatusFilter";
 import { StatCard } from "@/shared/components/StatCard";
 import { Button } from "@/components/ui/button";
 import { FlaskConical, Clock, CheckCircle, Plus } from "lucide-react";
 import { useSupabaseTable } from "@/hooks/useSupabaseQuery";
+import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { useAuth } from "@/core/auth/authStore";
 import { Tables } from "@/integrations/supabase/types";
 
@@ -26,6 +29,9 @@ export const LaboratoryPage = () => {
   const { t } = useI18n();
   const { user } = useAuth();
   const isDemo = user?.tenantId === "demo";
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
+
+  useRealtimeSubscription(["lab_orders"]);
 
   const { data: liveLabs = [], isLoading } = useSupabaseTable<LabOrder>("lab_orders", {
     select: "*, patients(full_name), doctors(full_name)",
@@ -39,6 +45,8 @@ export const LaboratoryPage = () => {
         doctor_name: l.doctors?.full_name ?? "—", order_date: l.order_date, status: l.status, result: l.result,
       }));
 
+  const filtered = useMemo(() => statusFilter ? displayData.filter((l) => l.status === statusFilter) : displayData, [displayData, statusFilter]);
+
   const columns: Column<typeof displayData[0]>[] = [
     { key: "patient_name", header: t("appointments.patient"), searchable: true },
     { key: "test_name", header: t("laboratory.test"), searchable: true, render: (l) => <span className="font-medium">{l.test_name}</span> },
@@ -48,10 +56,6 @@ export const LaboratoryPage = () => {
     { key: "result", header: t("common.result"), render: (l) => l.result ? <span className="font-medium">{l.result}</span> : <span className="text-muted-foreground">—</span> },
   ];
 
-  const pending = displayData.filter((l) => l.status === "pending").length;
-  const processing = displayData.filter((l) => l.status === "processing").length;
-  const completed = displayData.filter((l) => l.status === "completed").length;
-
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="page-header">
@@ -60,12 +64,21 @@ export const LaboratoryPage = () => {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <StatCard title={t("laboratory.pendingOrders")} value={String(pending)} icon={Clock} />
-        <StatCard title={t("laboratory.processing")} value={String(processing)} icon={FlaskConical} />
-        <StatCard title={t("laboratory.completedToday")} value={String(completed)} icon={CheckCircle} />
+        <StatCard title={t("laboratory.pendingOrders")} value={String(displayData.filter((l) => l.status === "pending").length)} icon={Clock} />
+        <StatCard title={t("laboratory.processing")} value={String(displayData.filter((l) => l.status === "processing").length)} icon={FlaskConical} />
+        <StatCard title={t("laboratory.completedToday")} value={String(displayData.filter((l) => l.status === "completed").length)} icon={CheckCircle} />
       </div>
 
-      <DataTable columns={columns} data={displayData} keyExtractor={(l) => l.id} searchable isLoading={!isDemo && isLoading} />
+      <DataTable
+        columns={columns} data={filtered} keyExtractor={(l) => l.id} searchable isLoading={!isDemo && isLoading}
+        filterSlot={
+          <StatusFilter
+            options={[{ value: "pending", label: "Pending" }, { value: "processing", label: "Processing" }, { value: "completed", label: "Completed" }]}
+            selected={statusFilter}
+            onChange={setStatusFilter}
+          />
+        }
+      />
     </div>
   );
 };

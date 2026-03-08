@@ -1,13 +1,15 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useI18n } from "@/core/i18n/i18nStore";
 import { StatCard } from "@/shared/components/StatCard";
 import { StatusBadge } from "@/shared/components/StatusBadge";
+import { StatusFilter } from "@/shared/components/StatusFilter";
 import { DataTable, Column } from "@/shared/components/DataTable";
 import { Button } from "@/components/ui/button";
 import { PermissionGuard } from "@/core/auth/PermissionGuard";
 import { DollarSign, CreditCard, FileText, TrendingUp, Plus } from "lucide-react";
 import { NewInvoiceModal } from "./NewInvoiceModal";
 import { useSupabaseTable } from "@/hooks/useSupabaseQuery";
+import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { useAuth } from "@/core/auth/authStore";
 import { useQueryClient } from "@tanstack/react-query";
 import { Tables } from "@/integrations/supabase/types";
@@ -29,26 +31,24 @@ export const BillingPage = () => {
   const queryClient = useQueryClient();
   const isDemo = user?.tenantId === "demo";
   const [showModal, setShowModal] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
+
+  useRealtimeSubscription(["invoices"]);
 
   const { data: liveInvoices = [], isLoading } = useSupabaseTable<Invoice>("invoices", {
     select: "*, patients(full_name)",
     orderBy: { column: "created_at", ascending: false },
   });
-
   const { data: patients = [] } = useSupabaseTable<Tables<"patients">>("patients");
 
   const displayData = isDemo
     ? DEMO_INVOICES
     : liveInvoices.map((inv) => ({
-        id: inv.id,
-        invoice_code: inv.invoice_code,
-        patient_name: inv.patients?.full_name ?? "—",
-        service: inv.service,
-        amount: Number(inv.amount),
-        invoice_date: inv.invoice_date,
-        status: inv.status,
+        id: inv.id, invoice_code: inv.invoice_code, patient_name: inv.patients?.full_name ?? "—",
+        service: inv.service, amount: Number(inv.amount), invoice_date: inv.invoice_date, status: inv.status,
       }));
 
+  const filtered = useMemo(() => statusFilter ? displayData.filter((i) => i.status === statusFilter) : displayData, [displayData, statusFilter]);
   const totalRevenue = displayData.filter((i) => i.status === "paid").reduce((s, i) => s + i.amount, 0);
   const pendingAmount = displayData.filter((i) => i.status === "pending" || i.status === "overdue").reduce((s, i) => s + i.amount, 0);
 
@@ -77,11 +77,19 @@ export const BillingPage = () => {
         <StatCard title={t("billing.collectionRate")} value={displayData.length ? `${Math.round((displayData.filter((i) => i.status === "paid").length / displayData.length) * 100)}%` : "—"} icon={TrendingUp} />
       </div>
 
-      <DataTable columns={columns} data={displayData} keyExtractor={(inv) => inv.id} searchable isLoading={!isDemo && isLoading} />
+      <DataTable
+        columns={columns} data={filtered} keyExtractor={(inv) => inv.id} searchable isLoading={!isDemo && isLoading}
+        filterSlot={
+          <StatusFilter
+            options={[{ value: "paid", label: "Paid" }, { value: "pending", label: "Pending" }, { value: "overdue", label: "Overdue" }]}
+            selected={statusFilter}
+            onChange={setStatusFilter}
+          />
+        }
+      />
 
       <NewInvoiceModal
-        open={showModal}
-        onClose={() => setShowModal(false)}
+        open={showModal} onClose={() => setShowModal(false)}
         onSuccess={() => queryClient.invalidateQueries({ queryKey: ["invoices"] })}
         patients={patients.map((p) => ({ id: p.id, full_name: p.full_name }))}
       />

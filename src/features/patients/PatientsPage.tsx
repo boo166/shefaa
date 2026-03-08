@@ -3,14 +3,17 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useI18n } from "@/core/i18n/i18nStore";
 import { DataTable, Column } from "@/shared/components/DataTable";
 import { StatusBadge } from "@/shared/components/StatusBadge";
+import { StatusFilter } from "@/shared/components/StatusFilter";
 import { Button } from "@/components/ui/button";
 import { PermissionGuard } from "@/core/auth/PermissionGuard";
 import { UserPlus, Eye } from "lucide-react";
 import { AddPatientModal } from "./AddPatientModal";
 import { useSupabaseTable } from "@/hooks/useSupabaseQuery";
+import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { useAuth } from "@/core/auth/authStore";
 import { Tables } from "@/integrations/supabase/types";
 import { useQueryClient } from "@tanstack/react-query";
+import { useMemo } from "react";
 
 type Patient = Tables<"patients">;
 
@@ -28,25 +31,25 @@ export const PatientsPage = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [showAdd, setShowAdd] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const isDemo = user?.tenantId === "demo";
+
+  useRealtimeSubscription(["patients"]);
 
   const { data: livePatients = [], isLoading } = useSupabaseTable<Patient>("patients", {
     orderBy: { column: "created_at", ascending: false },
   });
 
   const patients = isDemo ? DEMO_PATIENTS as unknown as Patient[] : livePatients;
+  const filtered = useMemo(() => statusFilter ? patients.filter((p) => p.status === statusFilter) : patients, [patients, statusFilter]);
 
   const columns: Column<Patient>[] = [
     { key: "patient_code", header: t("patients.patientId"), searchable: true },
     {
-      key: "full_name",
-      header: t("patients.fullName"),
-      searchable: true,
+      key: "full_name", header: t("patients.fullName"), searchable: true,
       render: (p) => (
         <div className="flex items-center gap-3">
-          <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-semibold text-primary">
-            {p.full_name.charAt(0)}
-          </div>
+          <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-semibold text-primary">{p.full_name.charAt(0)}</div>
           <span className="font-medium">{p.full_name}</span>
         </div>
       ),
@@ -55,18 +58,11 @@ export const PatientsPage = () => {
     { key: "blood_type", header: t("patients.bloodType"), render: (p) => p.blood_type ?? "—" },
     { key: "phone", header: t("common.phone"), searchable: true, render: (p) => p.phone ?? "—" },
     {
-      key: "status",
-      header: t("common.status"),
-      render: (p) => (
-        <StatusBadge variant={p.status === "active" ? "success" : "default"}>
-          {t(`patients.${p.status}`)}
-        </StatusBadge>
-      ),
+      key: "status", header: t("common.status"),
+      render: (p) => <StatusBadge variant={p.status === "active" ? "success" : "default"}>{t(`patients.${p.status}`)}</StatusBadge>,
     },
     {
-      key: "actions",
-      header: t("common.actions"),
-      searchable: false,
+      key: "actions", header: t("common.actions"), searchable: false,
       render: (p) => (
         <button onClick={() => navigate(`/tenant/${clinicSlug}/patients/${p.id}`)} className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
           <Eye className="h-4 w-4" />
@@ -80,27 +76,27 @@ export const PatientsPage = () => {
       <div className="page-header">
         <h1 className="page-title">{t("patients.title")}</h1>
         <PermissionGuard permission="manage_patients">
-          <Button onClick={() => setShowAdd(true)}>
-            <UserPlus className="h-4 w-4" />
-            {t("patients.addPatient")}
-          </Button>
+          <Button onClick={() => setShowAdd(true)}><UserPlus className="h-4 w-4" />{t("patients.addPatient")}</Button>
         </PermissionGuard>
       </div>
 
       <DataTable
         columns={columns}
-        data={patients}
+        data={filtered}
         keyExtractor={(p) => p.id}
         emptyMessage={t("common.noData")}
         searchable
         isLoading={!isDemo && isLoading}
+        filterSlot={
+          <StatusFilter
+            options={[{ value: "active", label: t("patients.active") }, { value: "inactive", label: t("patients.inactive") }]}
+            selected={statusFilter}
+            onChange={setStatusFilter}
+          />
+        }
       />
 
-      <AddPatientModal
-        open={showAdd}
-        onClose={() => setShowAdd(false)}
-        onSuccess={() => queryClient.invalidateQueries({ queryKey: ["patients"] })}
-      />
+      <AddPatientModal open={showAdd} onClose={() => setShowAdd(false)} onSuccess={() => queryClient.invalidateQueries({ queryKey: ["patients"] })} />
     </div>
   );
 };
