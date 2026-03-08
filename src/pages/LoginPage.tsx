@@ -172,7 +172,16 @@ export const LoginPage = () => {
             )}
           </div>
 
-          <div className="mt-8">
+          <div className="mt-6 text-center">
+            <button
+              onClick={() => navigate("/tutorial")}
+              className="inline-flex items-center gap-1.5 text-sm text-primary font-medium hover:underline"
+            >
+              📖 How to use MedFlow — Step by step guide
+            </button>
+          </div>
+
+          <div className="mt-6">
             <p className="text-xs text-muted-foreground mb-3">Quick demo login (no account needed):</p>
             <div className="space-y-2">
               {[
