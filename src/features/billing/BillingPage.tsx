@@ -78,7 +78,7 @@ export const BillingPage = () => {
       </div>
 
       <DataTable
-        columns={columns} data={filtered} keyExtractor={(inv) => inv.id} searchable isLoading={!isDemo && isLoading}
+        columns={columns} data={filtered} keyExtractor={(inv) => inv.id} searchable isLoading={!isDemo && isLoading} exportFileName="invoices"
         filterSlot={
           <StatusFilter
             options={[{ value: "paid", label: "Paid" }, { value: "pending", label: "Pending" }, { value: "overdue", label: "Overdue" }]}

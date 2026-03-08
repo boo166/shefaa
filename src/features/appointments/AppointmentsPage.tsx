@@ -84,7 +84,7 @@ export const AppointmentsPage = () => {
       </div>
 
       <DataTable
-        columns={columns} data={filtered} keyExtractor={(a) => a.id} searchable isLoading={!isDemo && isLoading}
+        columns={columns} data={filtered} keyExtractor={(a) => a.id} searchable isLoading={!isDemo && isLoading} exportFileName="appointments"
         filterSlot={
           <StatusFilter
             options={[

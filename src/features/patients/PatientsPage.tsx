@@ -87,6 +87,7 @@ export const PatientsPage = () => {
         emptyMessage={t("common.noData")}
         searchable
         isLoading={!isDemo && isLoading}
+        exportFileName="patients"
         filterSlot={
           <StatusFilter
             options={[{ value: "active", label: t("patients.active") }, { value: "inactive", label: t("patients.inactive") }]}
