@@ -89,16 +89,16 @@ export const TutorialPage = () => {
   ];
 
   const features = [
-    { icon: LayoutDashboard, title: t("common.dashboard"), description: t("tutorial.dashboardDesc"), forRoles: [t("tutorial.allRoles")] },
-    { icon: Users, title: t("common.patients"), description: t("tutorial.patientsDesc"), forRoles: [t("tutorial.admin"), t("tutorial.doctor"), t("tutorial.receptionist"), t("tutorial.nurse")] },
-    { icon: CalendarDays, title: t("common.appointments"), description: t("tutorial.appointmentsDesc"), forRoles: [t("tutorial.admin"), t("tutorial.doctor"), t("tutorial.receptionist"), t("tutorial.nurse")] },
-    { icon: Stethoscope, title: t("common.doctors"), description: t("tutorial.doctorsDesc"), forRoles: [t("tutorial.admin"), t("tutorial.doctor"), t("tutorial.receptionist"), t("tutorial.nurse")] },
-    { icon: Receipt, title: t("common.billing"), description: t("tutorial.billingDesc"), forRoles: [t("tutorial.admin"), t("tutorial.accountant")] },
-    { icon: Pill, title: t("common.pharmacy"), description: t("tutorial.pharmacyDesc"), forRoles: [t("tutorial.admin")] },
-    { icon: FlaskConical, title: t("common.laboratory"), description: t("tutorial.laboratoryDesc"), forRoles: [t("tutorial.admin")] },
-    { icon: Shield, title: t("common.insurance"), description: t("tutorial.insuranceDesc"), forRoles: [t("tutorial.admin"), t("tutorial.accountant")] },
-    { icon: BarChart3, title: t("common.reports"), description: t("tutorial.reportsDesc"), forRoles: [t("tutorial.admin"), t("tutorial.accountant")] },
-    { icon: Settings, title: t("common.settings"), description: t("tutorial.settingsDesc"), forRoles: [t("tutorial.admin")] },
+    { icon: LayoutDashboard, title: t("common.dashboard"), description: t("tutorial.dashboardDesc"), forRoles: [t("tutorial.allRoles")], demoUrl: mockVideoUrl, thumbnail: "/placeholder.svg" },
+    { icon: Users, title: t("common.patients"), description: t("tutorial.patientsDesc"), forRoles: [t("tutorial.admin"), t("tutorial.doctor"), t("tutorial.receptionist"), t("tutorial.nurse")], demoUrl: mockVideoUrl, thumbnail: "/placeholder.svg" },
+    { icon: CalendarDays, title: t("common.appointments"), description: t("tutorial.appointmentsDesc"), forRoles: [t("tutorial.admin"), t("tutorial.doctor"), t("tutorial.receptionist"), t("tutorial.nurse")], demoUrl: mockVideoUrl, thumbnail: "/placeholder.svg" },
+    { icon: Stethoscope, title: t("common.doctors"), description: t("tutorial.doctorsDesc"), forRoles: [t("tutorial.admin"), t("tutorial.doctor"), t("tutorial.receptionist"), t("tutorial.nurse")], demoUrl: mockVideoUrl, thumbnail: "/placeholder.svg" },
+    { icon: Receipt, title: t("common.billing"), description: t("tutorial.billingDesc"), forRoles: [t("tutorial.admin"), t("tutorial.accountant")], demoUrl: mockVideoUrl, thumbnail: "/placeholder.svg" },
+    { icon: Pill, title: t("common.pharmacy"), description: t("tutorial.pharmacyDesc"), forRoles: [t("tutorial.admin")], demoUrl: mockVideoUrl, thumbnail: "/placeholder.svg" },
+    { icon: FlaskConical, title: t("common.laboratory"), description: t("tutorial.laboratoryDesc"), forRoles: [t("tutorial.admin")], demoUrl: mockVideoUrl, thumbnail: "/placeholder.svg" },
+    { icon: Shield, title: t("common.insurance"), description: t("tutorial.insuranceDesc"), forRoles: [t("tutorial.admin"), t("tutorial.accountant")], demoUrl: mockVideoUrl, thumbnail: "/placeholder.svg" },
+    { icon: BarChart3, title: t("common.reports"), description: t("tutorial.reportsDesc"), forRoles: [t("tutorial.admin"), t("tutorial.accountant")], demoUrl: mockVideoUrl, thumbnail: "/placeholder.svg" },
+    { icon: Settings, title: t("common.settings"), description: t("tutorial.settingsDesc"), forRoles: [t("tutorial.admin")], demoUrl: mockVideoUrl, thumbnail: "/placeholder.svg" },
   ];
 
   const tips = [
