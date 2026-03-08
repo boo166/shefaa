@@ -52,7 +52,7 @@ export const ClinicLayout = () => {
           </div>
           <div>
             <h1 className="font-semibold text-sm text-sidebar-primary-foreground">{t("common.appName")}</h1>
-            <p className="text-xs text-sidebar-foreground/60 truncate max-w-[150px]">{tenant?.name}</p>
+            <p className="text-xs text-sidebar-foreground/60 truncate max-w-[150px]">{user?.tenantName}</p>
           </div>
         </div>
 
