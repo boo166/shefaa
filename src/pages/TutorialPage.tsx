@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { LanguageSwitcher } from "@/shared/components/LanguageSwitcher";
 import { Button } from "@/components/ui/button";
+import { useI18n } from "@/core/i18n/i18nStore";
 import {
   ArrowLeft,
   UserPlus,
@@ -26,154 +27,103 @@ import {
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 
-interface Step {
-  icon: React.ElementType;
-  title: string;
-  description: string;
-  details: string[];
-  color: string;
-}
-
-const gettingStartedSteps: Step[] = [
-  {
-    icon: UserPlus,
-    title: "1. Create Your Clinic",
-    description: "Sign up and set up your clinic workspace in seconds.",
-    details: [
-      "Click 'Register' on the login page",
-      "Enter your full name, clinic name, email & password",
-      "A unique workspace is created for your clinic automatically",
-      "Verify your email to activate your account",
-    ],
-    color: "hsl(var(--primary))",
-  },
-  {
-    icon: LogIn,
-    title: "2. Log In",
-    description: "Access your clinic dashboard with your credentials.",
-    details: [
-      "Enter your email and password",
-      "You'll be redirected to your clinic's dashboard",
-      "Your session stays active — no need to log in every time",
-      "Forgot your password? Use the reset link on the login page",
-    ],
-    color: "hsl(var(--info))",
-  },
-  {
-    icon: Users,
-    title: "3. Add Your Team",
-    description: "Invite doctors, nurses, receptionists, and accountants.",
-    details: [
-      "Go to Settings to manage your clinic team",
-      "Each team member gets a role with specific permissions",
-      "Doctors see medical records, receptionists manage scheduling",
-      "Accountants handle billing — everyone sees only what they need",
-    ],
-    color: "hsl(var(--success))",
-  },
-  {
-    icon: LayoutDashboard,
-    title: "4. Start Managing",
-    description: "Use the dashboard to run your clinic day-to-day.",
-    details: [
-      "Register patients and schedule appointments",
-      "Track billing, pharmacy stock, and lab orders",
-      "Monitor clinic performance with real-time stats",
-      "Export data anytime with one-click CSV export",
-    ],
-    color: "hsl(var(--warning))",
-  },
-];
-
-interface Feature {
-  icon: React.ElementType;
-  title: string;
-  description: string;
-  forRoles: string[];
-}
-
-const features: Feature[] = [
-  {
-    icon: LayoutDashboard,
-    title: "Dashboard",
-    description: "At-a-glance view of patients, appointments, doctors, and revenue. Your clinic's command center.",
-    forRoles: ["All roles"],
-  },
-  {
-    icon: Users,
-    title: "Patients",
-    description: "Register patients, search records, view medical history, and track status (active/inactive).",
-    forRoles: ["Admin", "Doctor", "Receptionist", "Nurse"],
-  },
-  {
-    icon: CalendarDays,
-    title: "Appointments",
-    description: "Schedule, view, and manage patient appointments. Filter by status: scheduled, in progress, completed.",
-    forRoles: ["Admin", "Doctor", "Receptionist", "Nurse"],
-  },
-  {
-    icon: Stethoscope,
-    title: "Doctors",
-    description: "View doctor directory with specialties, availability, ratings, and contact information.",
-    forRoles: ["Admin", "Doctor", "Receptionist", "Nurse"],
-  },
-  {
-    icon: Receipt,
-    title: "Billing",
-    description: "Create invoices, track payments (pending/paid/overdue), and manage financial records.",
-    forRoles: ["Admin", "Accountant"],
-  },
-  {
-    icon: Pill,
-    title: "Pharmacy",
-    description: "Manage medication inventory, track stock levels, and get low-stock alerts.",
-    forRoles: ["Admin"],
-  },
-  {
-    icon: FlaskConical,
-    title: "Laboratory",
-    description: "Order lab tests, track results, and link them to patient records.",
-    forRoles: ["Admin"],
-  },
-  {
-    icon: Shield,
-    title: "Insurance",
-    description: "Submit insurance claims, track approval status, and manage providers.",
-    forRoles: ["Admin", "Accountant"],
-  },
-  {
-    icon: BarChart3,
-    title: "Reports",
-    description: "View analytics and generate reports for clinic performance insights.",
-    forRoles: ["Admin", "Accountant"],
-  },
-  {
-    icon: Settings,
-    title: "Settings",
-    description: "Update clinic information, manage team members, and configure your workspace.",
-    forRoles: ["Admin"],
-  },
-];
-
-const tips = [
-  { icon: Bell, title: "Notifications", text: "Click the bell icon in the top bar to see upcoming appointments, lab results, payments, and stock alerts." },
-  { icon: Download, title: "Export Data", text: "Every table has a CSV button — export patient lists, invoices, or appointments with one click." },
-  { icon: Globe, title: "Language", text: "Switch between English and Arabic anytime using the language button in the top bar." },
-  { icon: ShieldCheck, title: "Security", text: "Each clinic's data is completely isolated. Team members only see pages relevant to their role." },
-];
-
-const roleColors: Record<string, string> = {
-  "Admin": "bg-primary/10 text-primary",
-  "Doctor": "bg-info/10 text-info",
-  "Receptionist": "bg-success/10 text-success",
-  "Nurse": "bg-warning/10 text-warning",
-  "Accountant": "bg-destructive/10 text-destructive",
-  "All roles": "bg-muted text-muted-foreground",
-};
-
 export const TutorialPage = () => {
   const navigate = useNavigate();
+  const { t } = useI18n();
   const [expandedStep, setExpandedStep] = useState<number | null>(0);
+
+  const gettingStartedSteps = [
+    {
+      icon: UserPlus,
+      title: t("tutorial.step1Title"),
+      description: t("tutorial.step1Desc"),
+      details: [
+        t("tutorial.step1Detail1"),
+        t("tutorial.step1Detail2"),
+        t("tutorial.step1Detail3"),
+        t("tutorial.step1Detail4"),
+      ],
+      color: "hsl(var(--primary))",
+    },
+    {
+      icon: LogIn,
+      title: t("tutorial.step2Title"),
+      description: t("tutorial.step2Desc"),
+      details: [
+        t("tutorial.step2Detail1"),
+        t("tutorial.step2Detail2"),
+        t("tutorial.step2Detail3"),
+        t("tutorial.step2Detail4"),
+      ],
+      color: "hsl(var(--info))",
+    },
+    {
+      icon: Users,
+      title: t("tutorial.step3Title"),
+      description: t("tutorial.step3Desc"),
+      details: [
+        t("tutorial.step3Detail1"),
+        t("tutorial.step3Detail2"),
+        t("tutorial.step3Detail3"),
+        t("tutorial.step3Detail4"),
+      ],
+      color: "hsl(var(--success))",
+    },
+    {
+      icon: LayoutDashboard,
+      title: t("tutorial.step4Title"),
+      description: t("tutorial.step4Desc"),
+      details: [
+        t("tutorial.step4Detail1"),
+        t("tutorial.step4Detail2"),
+        t("tutorial.step4Detail3"),
+        t("tutorial.step4Detail4"),
+      ],
+      color: "hsl(var(--warning))",
+    },
+  ];
+
+  const features = [
+    { icon: LayoutDashboard, title: t("common.dashboard"), description: t("tutorial.dashboardDesc"), forRoles: [t("tutorial.allRoles")] },
+    { icon: Users, title: t("common.patients"), description: t("tutorial.patientsDesc"), forRoles: [t("tutorial.admin"), t("tutorial.doctor"), t("tutorial.receptionist"), t("tutorial.nurse")] },
+    { icon: CalendarDays, title: t("common.appointments"), description: t("tutorial.appointmentsDesc"), forRoles: [t("tutorial.admin"), t("tutorial.doctor"), t("tutorial.receptionist"), t("tutorial.nurse")] },
+    { icon: Stethoscope, title: t("common.doctors"), description: t("tutorial.doctorsDesc"), forRoles: [t("tutorial.admin"), t("tutorial.doctor"), t("tutorial.receptionist"), t("tutorial.nurse")] },
+    { icon: Receipt, title: t("common.billing"), description: t("tutorial.billingDesc"), forRoles: [t("tutorial.admin"), t("tutorial.accountant")] },
+    { icon: Pill, title: t("common.pharmacy"), description: t("tutorial.pharmacyDesc"), forRoles: [t("tutorial.admin")] },
+    { icon: FlaskConical, title: t("common.laboratory"), description: t("tutorial.laboratoryDesc"), forRoles: [t("tutorial.admin")] },
+    { icon: Shield, title: t("common.insurance"), description: t("tutorial.insuranceDesc"), forRoles: [t("tutorial.admin"), t("tutorial.accountant")] },
+    { icon: BarChart3, title: t("common.reports"), description: t("tutorial.reportsDesc"), forRoles: [t("tutorial.admin"), t("tutorial.accountant")] },
+    { icon: Settings, title: t("common.settings"), description: t("tutorial.settingsDesc"), forRoles: [t("tutorial.admin")] },
+  ];
+
+  const tips = [
+    { icon: Bell, title: t("tutorial.notifications"), text: t("tutorial.tipNotifications") },
+    { icon: Download, title: t("tutorial.exportData"), text: t("tutorial.tipExport") },
+    { icon: Globe, title: t("tutorial.language"), text: t("tutorial.tipLanguage") },
+    { icon: ShieldCheck, title: t("tutorial.security"), text: t("tutorial.tipSecurity") },
+  ];
+
+  const permissionsTable = [
+    { page: t("common.dashboard"), perms: [true, true, true, true, true] },
+    { page: t("common.patients"), perms: [true, true, true, true, false] },
+    { page: t("common.appointments"), perms: [true, true, true, true, false] },
+    { page: t("common.doctors"), perms: [true, true, true, true, true] },
+    { page: t("common.billing"), perms: [true, false, false, false, true] },
+    { page: t("common.pharmacy"), perms: [true, false, false, false, false] },
+    { page: t("common.laboratory"), perms: [true, false, false, false, false] },
+    { page: t("common.insurance"), perms: [true, false, false, false, true] },
+    { page: t("common.reports"), perms: [true, false, false, false, true] },
+    { page: t("common.settings"), perms: [true, false, false, false, false] },
+  ];
+
+  const roleColors: Record<string, string> = {
+    [t("tutorial.admin")]: "bg-primary/10 text-primary",
+    [t("tutorial.doctor")]: "bg-info/10 text-info",
+    [t("tutorial.receptionist")]: "bg-success/10 text-success",
+    [t("tutorial.nurse")]: "bg-warning/10 text-warning",
+    [t("tutorial.accountant")]: "bg-destructive/10 text-destructive",
+    [t("tutorial.allRoles")]: "bg-muted text-muted-foreground",
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -185,7 +135,7 @@ export const TutorialPage = () => {
             className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
             <ArrowLeft className="h-4 w-4" />
-            Back to Login
+            {t("tutorial.backToLogin")}
           </button>
           <LanguageSwitcher />
         </div>
@@ -196,13 +146,13 @@ export const TutorialPage = () => {
         <div className="text-center mb-14">
           <div className="inline-flex items-center gap-2 bg-primary/10 text-primary rounded-full px-4 py-1.5 text-sm font-medium mb-4">
             <Play className="h-3.5 w-3.5" />
-            Getting Started Guide
+            {t("tutorial.gettingStartedGuide")}
           </div>
           <h1 className="text-3xl sm:text-4xl font-bold text-foreground mb-3">
-            Welcome to <span className="text-primary">MedFlow</span>
+            {t("tutorial.welcomeTo")} <span className="text-primary">MedFlow</span>
           </h1>
           <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-            Your complete clinic management platform. Follow this guide to set up and start managing your clinic in minutes.
+            {t("tutorial.heroDescription")}
           </p>
         </div>
 
@@ -210,7 +160,7 @@ export const TutorialPage = () => {
         <section className="mb-16">
           <h2 className="text-xl font-semibold text-foreground mb-6 flex items-center gap-2">
             <span className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary text-sm font-bold">1</span>
-            Getting Started
+            {t("tutorial.gettingStarted")}
           </h2>
           <div className="grid gap-3">
             {gettingStartedSteps.map((step, idx) => (
@@ -261,7 +211,7 @@ export const TutorialPage = () => {
         <section className="mb-16">
           <h2 className="text-xl font-semibold text-foreground mb-6 flex items-center gap-2">
             <span className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary text-sm font-bold">2</span>
-            Features Overview
+            {t("tutorial.featuresOverview")}
           </h2>
           <div className="grid sm:grid-cols-2 gap-4">
             {features.map((feature, idx) => (
@@ -294,7 +244,7 @@ export const TutorialPage = () => {
         <section className="mb-16">
           <h2 className="text-xl font-semibold text-foreground mb-6 flex items-center gap-2">
             <span className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary text-sm font-bold">3</span>
-            Tips & Tricks
+            {t("tutorial.tipsAndTricks")}
           </h2>
           <div className="grid sm:grid-cols-2 gap-4">
             {tips.map((tip, idx) => (
@@ -315,34 +265,23 @@ export const TutorialPage = () => {
         <section className="mb-16">
           <h2 className="text-xl font-semibold text-foreground mb-6 flex items-center gap-2">
             <span className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary text-sm font-bold">4</span>
-            Role Permissions
+            {t("tutorial.rolePermissions")}
           </h2>
           <div className="bg-card rounded-xl border overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-muted/50 border-b">
-                    <th className="text-start px-4 py-3 font-semibold text-foreground">Page</th>
-                    <th className="text-center px-3 py-3 font-semibold text-foreground">Admin</th>
-                    <th className="text-center px-3 py-3 font-semibold text-foreground">Doctor</th>
-                    <th className="text-center px-3 py-3 font-semibold text-foreground">Receptionist</th>
-                    <th className="text-center px-3 py-3 font-semibold text-foreground">Nurse</th>
-                    <th className="text-center px-3 py-3 font-semibold text-foreground">Accountant</th>
+                    <th className="text-start px-4 py-3 font-semibold text-foreground">{t("tutorial.page")}</th>
+                    <th className="text-center px-3 py-3 font-semibold text-foreground">{t("tutorial.admin")}</th>
+                    <th className="text-center px-3 py-3 font-semibold text-foreground">{t("tutorial.doctor")}</th>
+                    <th className="text-center px-3 py-3 font-semibold text-foreground">{t("tutorial.receptionist")}</th>
+                    <th className="text-center px-3 py-3 font-semibold text-foreground">{t("tutorial.nurse")}</th>
+                    <th className="text-center px-3 py-3 font-semibold text-foreground">{t("tutorial.accountant")}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {[
-                    { page: "Dashboard", perms: [true, true, true, true, true] },
-                    { page: "Patients", perms: [true, true, true, true, false] },
-                    { page: "Appointments", perms: [true, true, true, true, false] },
-                    { page: "Doctors", perms: [true, true, true, true, true] },
-                    { page: "Billing", perms: [true, false, false, false, true] },
-                    { page: "Pharmacy", perms: [true, false, false, false, false] },
-                    { page: "Laboratory", perms: [true, false, false, false, false] },
-                    { page: "Insurance", perms: [true, false, false, false, true] },
-                    { page: "Reports", perms: [true, false, false, false, true] },
-                    { page: "Settings", perms: [true, false, false, false, false] },
-                  ].map((row) => (
+                  {permissionsTable.map((row) => (
                     <tr key={row.page} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
                       <td className="px-4 py-2.5 font-medium text-foreground">{row.page}</td>
                       {row.perms.map((has, i) => (
@@ -365,14 +304,14 @@ export const TutorialPage = () => {
         {/* CTA */}
         <div className="text-center pb-10">
           <div className="bg-primary/5 rounded-2xl border border-primary/10 p-8">
-            <h2 className="text-xl font-bold text-foreground mb-2">Ready to get started?</h2>
-            <p className="text-muted-foreground mb-5">Create your clinic account or try the demo to explore all features.</p>
+            <h2 className="text-xl font-bold text-foreground mb-2">{t("tutorial.readyToStart")}</h2>
+            <p className="text-muted-foreground mb-5">{t("tutorial.readyDescription")}</p>
             <div className="flex flex-wrap items-center justify-center gap-3">
               <Button onClick={() => navigate("/login")} size="lg">
-                Go to Login
+                {t("tutorial.goToLogin")}
               </Button>
               <Button variant="outline" size="lg" onClick={() => navigate("/login")}>
-                Try Demo
+                {t("tutorial.tryDemo")}
               </Button>
             </div>
           </div>
