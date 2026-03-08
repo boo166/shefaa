@@ -53,7 +53,7 @@ export const SettingsPage = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Clinic Name</Label>
-                  <Input defaultValue={tenant?.name ?? ""} />
+                  <Input defaultValue={user?.tenantName ?? ""} />
                 </div>
                 <div className="space-y-2">
                   <Label>Slug</Label>
