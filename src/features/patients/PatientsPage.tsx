@@ -64,6 +64,15 @@ export const PatientsPage = () => {
       ),
     },
     { key: "lastVisit", header: t("patients.lastVisit") },
+    {
+      key: "actions",
+      header: t("common.actions"),
+      render: (p) => (
+        <button onClick={() => navigate(`/tenant/${clinicSlug}/patients/${p.id}`)} className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
+          <Eye className="h-4 w-4" />
+        </button>
+      ),
+    },
   ];
 
   return (
