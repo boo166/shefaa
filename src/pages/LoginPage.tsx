@@ -179,6 +179,8 @@ export const LoginPage = () => {
                 { name: "Dr. Sarah Ahmed", email: "admin@medflow.com", role: "clinic_admin" as Role },
                 { name: "Dr. John Smith", email: "doctor@medflow.com", role: "doctor" as Role },
                 { name: "Emily Davis", email: "receptionist@medflow.com", role: "receptionist" as Role },
+                { name: "Linda Carter", email: "nurse@medflow.com", role: "nurse" as Role },
+                { name: "James Wilson", email: "accountant@medflow.com", role: "accountant" as Role },
               ].map((u) => (
                 <button
                   key={u.email}
