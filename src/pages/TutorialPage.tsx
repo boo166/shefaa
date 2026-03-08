@@ -26,16 +26,11 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 export const TutorialPage = () => {
   const navigate = useNavigate();
   const { t } = useI18n();
   const [expandedStep, setExpandedStep] = useState<number | null>(0);
-  const [selectedVideo, setSelectedVideo] = useState<{ title: string; url: string; description: string } | null>(null);
-
-  const mockVideoUrl = "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?autoplay=1"; // Placeholder demo video
-
 
   const gettingStartedSteps = [
     {
@@ -89,16 +84,16 @@ export const TutorialPage = () => {
   ];
 
   const features = [
-    { icon: LayoutDashboard, title: t("common.dashboard"), description: t("tutorial.dashboardDesc"), forRoles: [t("tutorial.allRoles")], demoUrl: mockVideoUrl, thumbnail: "/placeholder.svg" },
-    { icon: Users, title: t("common.patients"), description: t("tutorial.patientsDesc"), forRoles: [t("tutorial.admin"), t("tutorial.doctor"), t("tutorial.receptionist"), t("tutorial.nurse")], demoUrl: mockVideoUrl, thumbnail: "/placeholder.svg" },
-    { icon: CalendarDays, title: t("common.appointments"), description: t("tutorial.appointmentsDesc"), forRoles: [t("tutorial.admin"), t("tutorial.doctor"), t("tutorial.receptionist"), t("tutorial.nurse")], demoUrl: mockVideoUrl, thumbnail: "/placeholder.svg" },
-    { icon: Stethoscope, title: t("common.doctors"), description: t("tutorial.doctorsDesc"), forRoles: [t("tutorial.admin"), t("tutorial.doctor"), t("tutorial.receptionist"), t("tutorial.nurse")], demoUrl: mockVideoUrl, thumbnail: "/placeholder.svg" },
-    { icon: Receipt, title: t("common.billing"), description: t("tutorial.billingDesc"), forRoles: [t("tutorial.admin"), t("tutorial.accountant")], demoUrl: mockVideoUrl, thumbnail: "/placeholder.svg" },
-    { icon: Pill, title: t("common.pharmacy"), description: t("tutorial.pharmacyDesc"), forRoles: [t("tutorial.admin")], demoUrl: mockVideoUrl, thumbnail: "/placeholder.svg" },
-    { icon: FlaskConical, title: t("common.laboratory"), description: t("tutorial.laboratoryDesc"), forRoles: [t("tutorial.admin")], demoUrl: mockVideoUrl, thumbnail: "/placeholder.svg" },
-    { icon: Shield, title: t("common.insurance"), description: t("tutorial.insuranceDesc"), forRoles: [t("tutorial.admin"), t("tutorial.accountant")], demoUrl: mockVideoUrl, thumbnail: "/placeholder.svg" },
-    { icon: BarChart3, title: t("common.reports"), description: t("tutorial.reportsDesc"), forRoles: [t("tutorial.admin"), t("tutorial.accountant")], demoUrl: mockVideoUrl, thumbnail: "/placeholder.svg" },
-    { icon: Settings, title: t("common.settings"), description: t("tutorial.settingsDesc"), forRoles: [t("tutorial.admin")], demoUrl: mockVideoUrl, thumbnail: "/placeholder.svg" },
+    { icon: LayoutDashboard, title: t("common.dashboard"), description: t("tutorial.dashboardDesc"), forRoles: [t("tutorial.allRoles")] },
+    { icon: Users, title: t("common.patients"), description: t("tutorial.patientsDesc"), forRoles: [t("tutorial.admin"), t("tutorial.doctor"), t("tutorial.receptionist"), t("tutorial.nurse")] },
+    { icon: CalendarDays, title: t("common.appointments"), description: t("tutorial.appointmentsDesc"), forRoles: [t("tutorial.admin"), t("tutorial.doctor"), t("tutorial.receptionist"), t("tutorial.nurse")] },
+    { icon: Stethoscope, title: t("common.doctors"), description: t("tutorial.doctorsDesc"), forRoles: [t("tutorial.admin"), t("tutorial.doctor"), t("tutorial.receptionist"), t("tutorial.nurse")] },
+    { icon: Receipt, title: t("common.billing"), description: t("tutorial.billingDesc"), forRoles: [t("tutorial.admin"), t("tutorial.accountant")] },
+    { icon: Pill, title: t("common.pharmacy"), description: t("tutorial.pharmacyDesc"), forRoles: [t("tutorial.admin")] },
+    { icon: FlaskConical, title: t("common.laboratory"), description: t("tutorial.laboratoryDesc"), forRoles: [t("tutorial.admin")] },
+    { icon: Shield, title: t("common.insurance"), description: t("tutorial.insuranceDesc"), forRoles: [t("tutorial.admin"), t("tutorial.accountant")] },
+    { icon: BarChart3, title: t("common.reports"), description: t("tutorial.reportsDesc"), forRoles: [t("tutorial.admin"), t("tutorial.accountant")] },
+    { icon: Settings, title: t("common.settings"), description: t("tutorial.settingsDesc"), forRoles: [t("tutorial.admin")] },
   ];
 
   const tips = [
@@ -220,47 +215,25 @@ export const TutorialPage = () => {
           </h2>
           <div className="grid sm:grid-cols-2 gap-4">
             {features.map((feature, idx) => (
-              <div key={idx} className="bg-card rounded-xl border hover:shadow-md transition-all duration-200 overflow-hidden flex flex-col group">
-                {/* Video Thumbnail */}
-                <div 
-                  className="relative aspect-video bg-muted border-b cursor-pointer overflow-hidden"
-                  onClick={() => setSelectedVideo({ title: feature.title, url: feature.demoUrl, description: feature.description })}
-                >
-                  <img 
-                    src={feature.thumbnail} 
-                    alt={`${feature.title} demo`} 
-                    className="w-full h-full object-cover opacity-80 group-hover:opacity-100 group-hover:scale-105 transition-all duration-500"
-                  />
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/10 group-hover:bg-black/20 transition-colors">
-                    <div className="h-12 w-12 rounded-full bg-background/90 backdrop-blur shadow-lg flex items-center justify-center transform group-hover:scale-110 transition-transform duration-300">
-                      <Play className="h-5 w-5 text-primary ml-1" />
-                    </div>
+              <div key={idx} className="bg-card rounded-xl border p-5 hover:shadow-sm transition-shadow">
+                <div className="flex items-start gap-3 mb-3">
+                  <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                    <feature.icon className="h-4.5 w-4.5" />
                   </div>
-                  <div className="absolute bottom-2 right-2 bg-black/70 backdrop-blur-sm text-white text-[10px] font-medium px-2 py-1 rounded-md">
-                    Watch demo
+                  <div>
+                    <h3 className="font-semibold text-foreground text-sm">{feature.title}</h3>
+                    <p className="text-sm text-muted-foreground mt-1">{feature.description}</p>
                   </div>
                 </div>
-
-                <div className="p-5 flex-1 flex flex-col">
-                  <div className="flex items-start gap-3 mb-3">
-                    <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0">
-                      <feature.icon className="h-4.5 w-4.5" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-foreground text-sm">{feature.title}</h3>
-                      <p className="text-sm text-muted-foreground mt-1">{feature.description}</p>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-1.5 mt-auto pt-4 border-t">
-                    {feature.forRoles.map((role) => (
-                      <span
-                        key={role}
-                        className={cn("text-xs px-2 py-0.5 rounded-full font-medium", roleColors[role] ?? "bg-muted text-muted-foreground")}
-                      >
-                        {role}
-                      </span>
-                    ))}
-                  </div>
+                <div className="flex flex-wrap gap-1.5 ms-12">
+                  {feature.forRoles.map((role) => (
+                    <span
+                      key={role}
+                      className={cn("text-xs px-2 py-0.5 rounded-full font-medium", roleColors[role] ?? "bg-muted text-muted-foreground")}
+                    >
+                      {role}
+                    </span>
+                  ))}
                 </div>
               </div>
             ))}
@@ -344,34 +317,6 @@ export const TutorialPage = () => {
           </div>
         </div>
       </div>
-
-      {/* Video Modal */}
-      <Dialog open={!!selectedVideo} onOpenChange={(open) => !open && setSelectedVideo(null)}>
-        <DialogContent className="sm:max-w-[800px] p-0 overflow-hidden bg-background">
-          <DialogHeader className="p-6 pb-0">
-            <DialogTitle className="text-xl flex items-center gap-2">
-              <Play className="h-5 w-5 text-primary" />
-              {selectedVideo?.title} Demo
-            </DialogTitle>
-            <DialogDescription className="text-base mt-2">
-              {selectedVideo?.description}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="p-6 pt-4">
-            <div className="relative aspect-video rounded-xl overflow-hidden bg-muted border shadow-inner">
-              {selectedVideo && (
-                <iframe
-                  src={selectedVideo.url}
-                  title={`${selectedVideo.title} Video Walkthrough`}
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                  className="absolute inset-0 w-full h-full border-0"
-                ></iframe>
-              )}
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };
