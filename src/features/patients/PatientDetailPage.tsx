@@ -228,7 +228,11 @@ export const PatientDetailPage = () => {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => generatePatientReportPDF({ patient, medicalRecords, prescriptions, labOrders, invoices })}>
+          <Button variant="outline" onClick={() => generatePatientReportPDF({
+            patient, medicalRecords, prescriptions, labOrders, invoices,
+            clinic: tenant ? { name: tenant.name, logoUrl: tenant.logo_url } : undefined,
+            locale: locale as "en" | "ar",
+          })}>
             <Printer className="h-4 w-4" /> {t("patients.printReport")}
           </Button>
           <Button variant="outline" onClick={() => navigate(`/tenant/${clinicSlug}/appointments`)}>
