@@ -67,10 +67,17 @@ export const PharmacyPage = () => {
     const status = newStock === 0 ? "out_of_stock" : newStock < 50 ? "low_stock" : "in_stock";
     const { error } = await supabase.from("medications").update({ stock: newStock, status }).eq("id", id);
     if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: t("common.error"), description: error.message, variant: "destructive" });
     } else {
       queryClient.invalidateQueries({ queryKey: ["medications"] });
     }
+  };
+
+  const getMedStatusLabel = (status: string) => {
+    if (status === "in_stock") return t("pharmacy.inStock");
+    if (status === "low_stock") return t("pharmacy.lowStock");
+    if (status === "out_of_stock") return t("pharmacy.outOfStock");
+    return status;
   };
 
   const columns: Column<typeof meds[0]>[] = [
