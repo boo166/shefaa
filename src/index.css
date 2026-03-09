@@ -105,8 +105,13 @@
 
 @layer components {
   .stat-card {
-    @apply bg-card rounded-lg border p-5;
+    @apply bg-card rounded-xl border p-5;
     box-shadow: var(--shadow-card);
+    transition: box-shadow 0.2s ease, transform 0.15s ease;
+  }
+
+  .stat-card:hover {
+    box-shadow: var(--shadow-elevated);
   }
 
   .data-table {
@@ -114,7 +119,7 @@
   }
 
   .data-table th {
-    @apply text-muted-foreground font-medium text-left px-4 py-3 border-b;
+    @apply text-muted-foreground font-medium text-left px-5 py-3.5 border-b text-xs uppercase tracking-wider;
   }
 
   [dir="rtl"] .data-table th {
@@ -122,11 +127,11 @@
   }
 
   .data-table td {
-    @apply px-4 py-3 border-b;
+    @apply px-5 py-3.5 border-b border-border/50;
   }
 
   .sidebar-item {
-    @apply flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors;
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-150;
   }
 
   .sidebar-item:hover {
@@ -134,7 +139,7 @@
   }
 
   .sidebar-item.active {
-    @apply bg-sidebar-accent text-sidebar-primary;
+    @apply bg-sidebar-accent text-sidebar-primary font-medium;
   }
 
   .page-header {
@@ -142,7 +147,7 @@
   }
 
   .page-title {
-    @apply text-2xl font-semibold tracking-tight;
+    @apply text-2xl font-bold tracking-tight;
   }
 
   .badge-status {
@@ -150,11 +155,11 @@
   }
 
   .animate-fade-in {
-    animation: fadeIn 0.2s ease-in-out;
+    animation: fadeIn 0.3s ease-out;
   }
 
   @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(4px); }
+    from { opacity: 0; transform: translateY(6px); }
     to { opacity: 1; transform: translateY(0); }
   }
 }
