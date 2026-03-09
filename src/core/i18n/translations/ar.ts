@@ -153,6 +153,13 @@ export const ar = {
     labOrdersCount: "طلبات المختبر",
     totalBilled: "إجمالي المُفوتر",
     totalPaid: "إجمالي المدفوع",
+    importPatients: "استيراد المرضى",
+    importDescription: "ارفع ملف CSV لاستيراد المرضى بالجملة. العمود المطلوب: full_name. اختياري: date_of_birth, gender, blood_type, phone, email, address, insurance_provider.",
+    downloadTemplate: "تحميل القالب",
+    selectCSVFile: "اختر ملف CSV",
+    clickToSelectFile: "انقر لاختيار ملف",
+    import: "استيراد",
+    importCSV: "استيراد CSV",
   },
   appointments: {
     title: "المواعيد",
