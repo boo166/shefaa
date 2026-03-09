@@ -154,6 +154,13 @@ export const DoctorsPage = () => {
                             {t("doctors.toggleStatus")}
                           </button>
                           <button
+                            className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-start"
+                            onClick={() => { setScheduleDoctor({ id: doc.id, name: doc.full_name }); setOpenMenu(null); }}
+                          >
+                            <CalendarClock className="h-3.5 w-3.5" />
+                            {t("doctors.schedule")}
+                          </button>
+                          <button
                             className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-destructive text-start"
                             onClick={() => { setDeleteId(doc.id); setOpenMenu(null); }}
                           >
