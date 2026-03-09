@@ -22,10 +22,12 @@ export const LoginPage = () => {
   const [clinicName, setClinicName] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Redirect if already logged in
-  if (isAuthenticated && user) {
-    navigate(`/tenant/${user.tenantSlug}/dashboard`, { replace: true });
-  }
+  // Redirect if already logged in (useEffect to avoid render-time side effects)
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      navigate(`/tenant/${user.tenantSlug}/dashboard`, { replace: true });
+    }
+  }, [isAuthenticated, user, navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
