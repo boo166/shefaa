@@ -464,7 +464,7 @@ export const PatientDetailPage = () => {
                     <td className="font-medium">{rx.medication}</td>
                     <td>{rx.dosage}</td>
                     <td>{rx.doctors?.full_name ?? "—"}</td>
-                    <td className="text-muted-foreground">{formatDate(rx.prescribed_date, locale)}</td>
+                    <td className="text-muted-foreground">{formatDate(rx.prescribed_date, locale, "date", calendarType)}</td>
                     <td>
                       <StatusBadge variant={rx.status === "active" ? "success" : "default"}>
                         {rx.status === "active" ? t("patients.active") : t("patients.inactive")}
