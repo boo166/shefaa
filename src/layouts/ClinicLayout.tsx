@@ -3,10 +3,11 @@ import { useAuth } from "@/core/auth/authStore";
 import { useI18n } from "@/core/i18n/i18nStore";
 import { LanguageSwitcher } from "@/shared/components/LanguageSwitcher";
 import { NotificationCenter } from "@/shared/components/NotificationCenter";
+import { GlobalSearch } from "@/shared/components/GlobalSearch";
 import {
   LayoutDashboard, Users, CalendarDays, Stethoscope,
   Receipt, Pill, FlaskConical, Shield, BarChart3,
-  Settings, LogOut, Menu, X, Search,
+  Settings, LogOut, Menu, X,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
