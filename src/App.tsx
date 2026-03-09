@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { LandingPage } from "./pages/LandingPage";
+import { AdminDashboardPage } from "./features/admin/AdminDashboardPage";
 import { LoginPage } from "./pages/LoginPage";
 import { SessionTimeout } from "./features/auth/SessionTimeout";
 import { ForgotPasswordPage } from "./pages/ForgotPasswordPage";
@@ -39,6 +40,14 @@ const App = () => (
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/tutorial" element={<TutorialPage />} />
           <Route path="/" element={<LandingPage />} />
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute requiredPermission="super_admin">
+                <AdminDashboardPage />
+              </ProtectedRoute>
+            }
+          />
 
           <Route
             path="/tenant/:clinicSlug"

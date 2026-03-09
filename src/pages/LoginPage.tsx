@@ -29,7 +29,11 @@ export const LoginPage = () => {
 
   useEffect(() => {
     if (isAuthenticated && user) {
-      navigate(`/tenant/${user.tenantSlug}/dashboard`, { replace: true });
+      if (user.role === "super_admin") {
+        navigate("/admin", { replace: true });
+      } else {
+        navigate(`/tenant/${user.tenantSlug}/dashboard`, { replace: true });
+      }
     }
   }, [isAuthenticated, user, navigate]);
 

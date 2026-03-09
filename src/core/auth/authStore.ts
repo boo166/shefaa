@@ -3,7 +3,7 @@ import { persist } from "zustand/middleware";
 import { supabase } from "@/integrations/supabase/client";
 import type { User as SupaUser } from "@supabase/supabase-js";
 
-export type Role = "clinic_admin" | "doctor" | "receptionist" | "nurse" | "accountant";
+export type Role = "super_admin" | "clinic_admin" | "doctor" | "receptionist" | "nurse" | "accountant";
 
 export type Permission =
   | "manage_clinic" | "manage_users" | "view_dashboard"
@@ -11,9 +11,18 @@ export type Permission =
   | "manage_appointments" | "view_appointments"
   | "manage_medical_records" | "view_medical_records"
   | "manage_billing" | "view_billing"
-  | "manage_pharmacy" | "manage_laboratory" | "view_reports";
+  | "manage_pharmacy" | "manage_laboratory" | "view_reports"
+  | "super_admin";
 
 export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
+  super_admin: [
+    "super_admin",
+    "manage_clinic", "manage_users", "view_dashboard",
+    "manage_patients", "view_patients", "manage_appointments", "view_appointments",
+    "manage_medical_records", "view_medical_records",
+    "manage_billing", "view_billing",
+    "manage_pharmacy", "manage_laboratory", "view_reports",
+  ],
   clinic_admin: [
     "manage_clinic", "manage_users", "view_dashboard",
     "manage_patients", "view_patients", "manage_appointments", "view_appointments",
