@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { ClinicNameField } from "@/features/auth/ClinicNameField";
+import { PasswordStrength } from "@/features/auth/PasswordStrength";
 
 type AuthMode = "login" | "signup";
 type SlugStatus = "idle" | "checking" | "available" | "taken" | "invalid";
