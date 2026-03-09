@@ -13,27 +13,65 @@ function slugify(value: string) {
     .replace(/(^-|-$)/g, "");
 }
 
+const SUFFIXES = ["clinic", "health", "med", "care", "plus"];
+
+async function findAvailableSlugs(
+  adminClient: ReturnType<typeof createClient>,
+  baseSlug: string,
+): Promise<string[]> {
+  // Generate candidates: base-2, base-3, base-clinic, base-health, etc.
+  const candidates: string[] = [];
+  for (const suffix of SUFFIXES) {
+    candidates.push(`${baseSlug}-${suffix}`);
+  }
+  for (let i = 2; i <= 4; i++) {
+    candidates.push(`${baseSlug}-${i}`);
+  }
+
+  // Batch check all candidates
+  const { data: existing } = await adminClient
+    .from("tenants")
+    .select("slug")
+    .in("slug", candidates);
+
+  const takenSet = new Set((existing ?? []).map((r: { slug: string }) => r.slug));
+  return candidates.filter((c) => !takenSet.has(c)).slice(0, 4);
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { clinicName } = await req.json();
+    const body = await req.json();
+    const clinicName = body.clinicName;
+    const customSlug = body.customSlug; // optional: user-provided custom slug
 
-    if (!clinicName || typeof clinicName !== "string" || clinicName.trim().length < 2) {
+    const slugToCheck = customSlug
+      ? slugify(String(customSlug).trim())
+      : clinicName
+        ? slugify(String(clinicName).trim())
+        : "";
+
+    if (!slugToCheck) {
       return new Response(
-        JSON.stringify({ error: "Clinic name must be at least 2 characters" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        JSON.stringify({
+          available: false,
+          slug: "",
+          error: "Clinic name produces an invalid URL. Use letters or numbers.",
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
-    const slug = slugify(clinicName.trim());
-
-    if (!slug) {
+    if (
+      !customSlug &&
+      (!clinicName || typeof clinicName !== "string" || clinicName.trim().length < 2)
+    ) {
       return new Response(
-        JSON.stringify({ available: false, slug: "", error: "Clinic name produces an invalid URL. Use letters or numbers." }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        JSON.stringify({ error: "Clinic name must be at least 2 characters" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -45,11 +83,21 @@ Deno.serve(async (req) => {
     const { data } = await adminClient
       .from("tenants")
       .select("id")
-      .eq("slug", slug)
+      .eq("slug", slugToCheck)
       .maybeSingle();
 
+    if (data) {
+      // Slug is taken — generate suggestions
+      const baseSlug = customSlug ? slugToCheck : slugify(String(clinicName).trim());
+      const suggestions = await findAvailableSlugs(adminClient, baseSlug);
+      return new Response(
+        JSON.stringify({ available: false, slug: slugToCheck, suggestions }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
     return new Response(
-      JSON.stringify({ available: !data, slug }),
+      JSON.stringify({ available: true, slug: slugToCheck, suggestions: [] }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (err) {

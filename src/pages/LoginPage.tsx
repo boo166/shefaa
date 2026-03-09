@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth, Role } from "@/core/auth/authStore";
 import { useI18n } from "@/core/i18n/i18nStore";
@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { ClinicNameField } from "@/features/auth/ClinicNameField";
 
 type AuthMode = "login" | "signup";
 type SlugStatus = "idle" | "checking" | "available" | "taken" | "invalid";
@@ -24,8 +24,7 @@ export const LoginPage = () => {
   const [clinicName, setClinicName] = useState("");
   const [loading, setLoading] = useState(false);
   const [slugStatus, setSlugStatus] = useState<SlugStatus>("idle");
-  const [slugPreview, setSlugPreview] = useState("");
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [resolvedSlug, setResolvedSlug] = useState("");
 
   useEffect(() => {
     if (isAuthenticated && user) {
@@ -33,57 +32,10 @@ export const LoginPage = () => {
     }
   }, [isAuthenticated, user, navigate]);
 
-  const checkSlug = useCallback(async (name: string) => {
-    if (name.trim().length < 2) {
-      setSlugStatus("idle");
-      setSlugPreview("");
-      return;
-    }
-
-    setSlugStatus("checking");
-
-    try {
-      const { data, error } = await supabase.functions.invoke("check-slug", {
-        body: { clinicName: name.trim() },
-      });
-
-      if (error) {
-        setSlugStatus("idle");
-        return;
-      }
-
-      if (data?.error || !data?.slug) {
-        setSlugStatus("invalid");
-        setSlugPreview("");
-      } else if (data.available) {
-        setSlugStatus("available");
-        setSlugPreview(data.slug);
-      } else {
-        setSlugStatus("taken");
-        setSlugPreview(data.slug);
-      }
-    } catch {
-      setSlugStatus("idle");
-    }
-  }, []);
-
-  const handleClinicNameChange = (value: string) => {
-    setClinicName(value);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (value.trim().length < 2) {
-      setSlugStatus("idle");
-      setSlugPreview("");
-      return;
-    }
-    debounceRef.current = setTimeout(() => checkSlug(value), 500);
+  const handleSlugStatusChange = (status: SlugStatus, slug: string) => {
+    setSlugStatus(status);
+    setResolvedSlug(slug);
   };
-
-  // Cleanup debounce on unmount
-  useEffect(() => {
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -148,52 +100,17 @@ export const LoginPage = () => {
     navigate("/tenant/demo-clinic/dashboard");
   };
 
-  const slugIndicator = () => {
-    if (mode !== "signup" || clinicName.trim().length < 2) return null;
-
-    switch (slugStatus) {
-      case "checking":
-        return (
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            {t("auth.slugChecking")}
-          </div>
-        );
-      case "available":
-        return (
-          <div className="flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400 mt-1">
-            <CheckCircle2 className="h-3.5 w-3.5" />
-            {t("auth.slugAvailable")}
-            {slugPreview && <span className="text-muted-foreground">({slugPreview})</span>}
-          </div>
-        );
-      case "taken":
-        return (
-          <div className="flex items-center gap-1.5 text-xs text-destructive mt-1">
-            <XCircle className="h-3.5 w-3.5" />
-            {t("auth.slugTaken")}
-          </div>
-        );
-      case "invalid":
-        return (
-          <div className="flex items-center gap-1.5 text-xs text-destructive mt-1">
-            <XCircle className="h-3.5 w-3.5" />
-            {t("auth.slugInvalid")}
-          </div>
-        );
-      default:
-        return null;
-    }
-  };
-
-  const isSignupDisabled = loading || slugStatus === "taken" || slugStatus === "invalid" || slugStatus === "checking";
+  const isSignupDisabled =
+    loading || slugStatus === "taken" || slugStatus === "invalid" || slugStatus === "checking";
 
   return (
     <div className="min-h-screen flex">
       {/* Left panel */}
       <div className="hidden lg:flex lg:w-1/2 bg-primary relative items-center justify-center">
         <div className="text-primary-foreground text-center px-12">
-          <div className="h-16 w-16 rounded-2xl bg-primary-foreground/20 flex items-center justify-center text-3xl font-bold mx-auto mb-6">M</div>
+          <div className="h-16 w-16 rounded-2xl bg-primary-foreground/20 flex items-center justify-center text-3xl font-bold mx-auto mb-6">
+            M
+          </div>
           <h2 className="text-3xl font-bold mb-4">MedFlow</h2>
           <p className="text-primary-foreground/80 text-lg">{t("auth.heroSubtitle")}</p>
           <div className="mt-12 grid grid-cols-2 gap-4 text-sm text-primary-foreground/70">
@@ -226,33 +143,37 @@ export const LoginPage = () => {
               <>
                 <div className="space-y-2">
                   <Label>{t("auth.fullName")}</Label>
-                  <Input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Dr. John Smith" />
-                </div>
-                <div className="space-y-2">
-                  <Label>{t("auth.clinicName")}</Label>
                   <Input
-                    value={clinicName}
-                    onChange={(e) => handleClinicNameChange(e.target.value)}
-                    placeholder="My Clinic"
-                    className={
-                      slugStatus === "available"
-                        ? "border-green-500 focus-visible:ring-green-500/30"
-                        : slugStatus === "taken" || slugStatus === "invalid"
-                          ? "border-destructive focus-visible:ring-destructive/30"
-                          : ""
-                    }
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    placeholder="Dr. John Smith"
                   />
-                  {slugIndicator()}
                 </div>
+                <ClinicNameField
+                  clinicName={clinicName}
+                  onClinicNameChange={setClinicName}
+                  onSlugStatusChange={handleSlugStatusChange}
+                  t={t}
+                />
               </>
             )}
             <div className="space-y-2">
               <Label>{t("auth.emailLabel")}</Label>
-              <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
+              <Input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+              />
             </div>
             <div className="space-y-2">
               <Label>{t("auth.passwordLabel")}</Label>
-              <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
+              <Input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+              />
             </div>
             <Button type="submit" className="w-full" disabled={mode === "signup" ? isSignupDisabled : loading}>
               {loading ? t("common.loading") : mode === "login" ? t("auth.login") : t("auth.createAccount")}
