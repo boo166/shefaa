@@ -12,38 +12,38 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Verify caller is authenticated
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Missing authorization" }), {
+    if (!authHeader?.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const anonKey = Deno.env.get("SUPABASE_PUBLISHABLE_KEY")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    // Client with caller's JWT to verify identity
-    const callerClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_PUBLISHABLE_KEY")!, {
+    const callerClient = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: authHeader } },
     });
 
-    const { data: { user: caller } } = await callerClient.auth.getUser();
-    if (!caller) {
-      return new Response(JSON.stringify({ error: "Invalid token" }), {
+    const token = authHeader.replace("Bearer ", "");
+    const { data: claimsData, error: claimsError } = await callerClient.auth.getClaims(token);
+    if (claimsError || !claimsData?.claims?.sub) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Verify caller is clinic_admin
+    const callerId = claimsData.claims.sub;
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
     const { data: roleData } = await adminClient
       .from("user_roles")
       .select("role")
-      .eq("user_id", caller.id)
+      .eq("user_id", callerId)
       .single();
 
     if (!roleData || roleData.role !== "clinic_admin") {
@@ -53,11 +53,10 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Get caller's tenant
     const { data: callerProfile } = await adminClient
       .from("profiles")
       .select("tenant_id")
-      .eq("user_id", caller.id)
+      .eq("user_id", callerId)
       .single();
 
     if (!callerProfile) {
@@ -76,6 +75,7 @@ Deno.serve(async (req) => {
       });
     }
 
+    const normalizedEmail = String(email).trim().toLowerCase();
     const validRoles = ["clinic_admin", "doctor", "receptionist", "nurse", "accountant"];
     if (!validRoles.includes(role)) {
       return new Response(JSON.stringify({ error: "Invalid role" }), {
@@ -84,39 +84,55 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Create user with service role (won't affect caller's session)
+    const inviteCode = crypto.randomUUID();
+
+    const { error: inviteErr } = await adminClient.from("user_invites").insert({
+      tenant_id: callerProfile.tenant_id,
+      email: normalizedEmail,
+      role,
+      invite_code: inviteCode,
+      invited_by_user_id: callerId,
+    });
+
+    if (inviteErr) {
+      return new Response(JSON.stringify({ error: inviteErr.message }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const { data: newUser, error: createErr } = await adminClient.auth.admin.createUser({
-      email,
+      email: normalizedEmail,
       password,
       email_confirm: false,
       user_metadata: {
         full_name,
         tenant_id: callerProfile.tenant_id,
-        invited_by_admin: "true",
+        invite_code: inviteCode,
       },
     });
 
     if (createErr) {
+      await adminClient
+        .from("user_invites")
+        .delete()
+        .eq("tenant_id", callerProfile.tenant_id)
+        .eq("email", normalizedEmail)
+        .eq("invite_code", inviteCode)
+        .is("consumed_at", null);
+
       return new Response(JSON.stringify({ error: createErr.message }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Update role if not the default 'doctor'
-    if (role !== "doctor" && newUser.user) {
-      await adminClient
-        .from("user_roles")
-        .update({ role })
-        .eq("user_id", newUser.user.id);
-    }
-
-    return new Response(
-      JSON.stringify({ success: true, user_id: newUser.user?.id }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return new Response(JSON.stringify({ success: true, user_id: newUser.user?.id }), {
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), {
+    return new Response(JSON.stringify({ error: err instanceof Error ? err.message : "Internal server error" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
