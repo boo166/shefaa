@@ -216,12 +216,3 @@ export const DoctorsPage = () => {
     </div>
   );
 };
-        confirmLabel={t("common.remove")}
-        variant="danger"
-        loading={deleting}
-        onConfirm={handleDelete}
-        onCancel={() => setDeleteId(null)}
-      />
-    </div>
-  );
-};
