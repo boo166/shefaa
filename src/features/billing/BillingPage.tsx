@@ -29,7 +29,7 @@ const DEMO_INVOICES = [
 const statusVariant = { paid: "success", pending: "warning", overdue: "destructive" } as const;
 
 export const BillingPage = () => {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const isDemo = user?.tenantId === "demo";
