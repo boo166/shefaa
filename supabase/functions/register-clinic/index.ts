@@ -13,9 +13,48 @@ function slugify(value: string) {
     .replace(/(^-|-$)/g, "");
 }
 
+// --- In-memory sliding-window rate limiter ---
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX = 5; // stricter for signup
+
+const ipHits = new Map<string, number[]>();
+
+function isRateLimited(ip: string): boolean {
+  const now = Date.now();
+  const hits = ipHits.get(ip) ?? [];
+  const recent = hits.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
+  if (recent.length >= RATE_LIMIT_MAX) {
+    ipHits.set(ip, recent);
+    return true;
+  }
+  recent.push(now);
+  ipHits.set(ip, recent);
+  return false;
+}
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, hits] of ipHits) {
+    const recent = hits.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
+    if (recent.length === 0) ipHits.delete(ip);
+    else ipHits.set(ip, recent);
+  }
+}, 5 * 60_000);
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
+  }
+
+  const clientIp =
+    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+    req.headers.get("cf-connecting-ip") ?? "unknown";
+
+  if (isRateLimited(clientIp)) {
+    return new Response(
+      JSON.stringify({ error: "Too many requests. Please try again later." }),
+      { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": "30" } },
+    );
   }
 
   try {
@@ -75,6 +114,16 @@ Deno.serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    // Audit log
+    await adminClient.rpc("log_audit_event", {
+      _tenant_id: tenant.id,
+      _user_id: "00000000-0000-0000-0000-000000000000",
+      _action: "clinic_created",
+      _entity_type: "tenant",
+      _entity_id: tenant.id,
+      _details: { clinic_name: clinicName, owner_email: normalizedEmail },
+    });
 
     return new Response(JSON.stringify({ success: true }), {
       status: 200,

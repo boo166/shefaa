@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { ClinicNameField } from "@/features/auth/ClinicNameField";
+import { PasswordStrength } from "@/features/auth/PasswordStrength";
 
 type AuthMode = "login" | "signup";
 type SlugStatus = "idle" | "checking" | "available" | "taken" | "invalid";
@@ -174,6 +175,7 @@ export const LoginPage = () => {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
               />
+              {mode === "signup" && <PasswordStrength password={password} t={t} />}
             </div>
             <Button type="submit" className="w-full" disabled={mode === "signup" ? isSignupDisabled : loading}>
               {loading ? t("common.loading") : mode === "login" ? t("auth.login") : t("auth.createAccount")}

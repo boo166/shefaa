@@ -6,9 +6,48 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// --- In-memory sliding-window rate limiter ---
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX = 10;
+
+const ipHits = new Map<string, number[]>();
+
+function isRateLimited(ip: string): boolean {
+  const now = Date.now();
+  const hits = ipHits.get(ip) ?? [];
+  const recent = hits.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
+  if (recent.length >= RATE_LIMIT_MAX) {
+    ipHits.set(ip, recent);
+    return true;
+  }
+  recent.push(now);
+  ipHits.set(ip, recent);
+  return false;
+}
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, hits] of ipHits) {
+    const recent = hits.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
+    if (recent.length === 0) ipHits.delete(ip);
+    else ipHits.set(ip, recent);
+  }
+}, 5 * 60_000);
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
+  }
+
+  const clientIp =
+    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+    req.headers.get("cf-connecting-ip") ?? "unknown";
+
+  if (isRateLimited(clientIp)) {
+    return new Response(
+      JSON.stringify({ error: "Too many requests. Please try again later." }),
+      { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": "15" } },
+    );
   }
 
   try {
@@ -125,6 +164,16 @@ Deno.serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    // Audit log
+    await adminClient.rpc("log_audit_event", {
+      _tenant_id: callerProfile.tenant_id,
+      _user_id: callerId,
+      _action: "staff_invited",
+      _entity_type: "user_invite",
+      _entity_id: newUser.user?.id ?? null,
+      _details: { email: normalizedEmail, role, invited_by: callerId },
+    });
 
     return new Response(JSON.stringify({ success: true, user_id: newUser.user?.id }), {
       status: 200,
