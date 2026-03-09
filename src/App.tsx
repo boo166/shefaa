@@ -30,6 +30,7 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
+      <SessionTimeout />
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
