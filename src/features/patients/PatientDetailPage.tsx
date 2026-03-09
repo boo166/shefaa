@@ -14,7 +14,7 @@ import { formatDate, formatCurrency } from "@/shared/utils/formatDate";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
-type Tab = "overview" | "history" | "prescriptions" | "notes" | "lab_orders" | "invoices" | "documents";
+type Tab = "overview" | "history" | "prescriptions" | "notes" | "lab_orders" | "invoices" | "appointments" | "documents";
 
 const DEMO_PATIENT = {
   id: "PT-001", full_name: "Mohammed Al-Rashid", date_of_birth: "1985-03-15", gender: "male",
