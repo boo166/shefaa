@@ -5,6 +5,7 @@ import { LanguageSwitcher } from "@/shared/components/LanguageSwitcher";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { PermissionGuard } from "@/core/auth/PermissionGuard";
 import { cn } from "@/lib/utils";
 import { Building, Users, Bell, Palette, Loader2, UserPlus, Shield, Eye, EyeOff } from "lucide-react";
@@ -14,6 +15,7 @@ import { useSupabaseTable } from "@/hooks/useSupabaseQuery";
 import { Tables } from "@/integrations/supabase/types";
 import { AddUserModal } from "./AddUserModal";
 import { useQueryClient } from "@tanstack/react-query";
+import { useDarkMode } from "@/hooks/useDarkMode";
 
 type Tab = "general" | "users" | "notifications" | "appearance" | "security";
 
