@@ -85,7 +85,10 @@ export const DashboardPage = () => {
                   <td className="text-muted-foreground">{apt.time}</td>
                   <td>
                     <StatusBadge variant={statusVariant[apt.status] ?? "default"}>
-                      {apt.status.replace("_", " ")}
+                      {apt.status === "completed" ? t("appointments.completed")
+                        : apt.status === "in_progress" ? t("appointments.inProgress")
+                        : apt.status === "cancelled" ? t("appointments.cancelled")
+                        : t("appointments.scheduled")}
                     </StatusBadge>
                   </td>
                 </tr>

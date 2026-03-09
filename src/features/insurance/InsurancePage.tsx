@@ -122,7 +122,11 @@ export const InsurancePage = () => {
         columns={columns} data={filtered} keyExtractor={(c) => c.id} searchable isLoading={!isDemo && isLoading}
         filterSlot={
           <StatusFilter
-            options={[{ value: "approved", label: "Approved" }, { value: "pending", label: "Pending" }, { value: "rejected", label: "Rejected" }]}
+            options={[
+              { value: "approved", label: t("insurance.approved") },
+              { value: "pending", label: t("billing.pending") },
+              { value: "rejected", label: t("insurance.rejected") },
+            ]}
             selected={statusFilter}
             onChange={setStatusFilter}
           />
