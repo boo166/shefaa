@@ -6,14 +6,14 @@ import { Button } from "@/components/ui/button";
 import {
   ArrowLeft, FileText, Pill, Activity, Stethoscope,
   Calendar, Phone, Mail, Droplets, User, Loader2,
+  FlaskConical, Receipt,
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Tables } from "@/integrations/supabase/types";
 
-type Tab = "overview" | "history" | "prescriptions" | "notes" | "documents";
+type Tab = "overview" | "history" | "prescriptions" | "notes" | "lab_orders" | "invoices" | "documents";
 
 const DEMO_PATIENT = {
   id: "PT-001", full_name: "Mohammed Al-Rashid", date_of_birth: "1985-03-15", gender: "male",
@@ -31,6 +31,25 @@ const DEMO_PRESCRIPTIONS = [
   { id: "RX-002", medication: "Metformin 500mg", dosage: "1 tablet twice daily", prescribed_date: "2026-02-10", doctors: { full_name: "Dr. Sarah Ahmed" }, status: "active" },
 ];
 
+const DEMO_LAB_ORDERS = [
+  { id: "LB-001", test_name: "Complete Blood Count (CBC)", doctors: { full_name: "Dr. Sarah Ahmed" }, order_date: "2026-03-05", status: "completed", result: "Normal ranges. WBC 6.5, RBC 4.8, HGB 14.2." },
+  { id: "LB-002", test_name: "HbA1c", doctors: { full_name: "Dr. Sarah Ahmed" }, order_date: "2026-02-10", status: "completed", result: "6.8% — Controlled." },
+  { id: "LB-003", test_name: "Lipid Panel", doctors: { full_name: "Dr. Sarah Ahmed" }, order_date: "2026-03-08", status: "processing", result: null },
+];
+
+const DEMO_INVOICES = [
+  { id: "INV-001", invoice_code: "INV-001", service: "Cardiology Consultation", amount: 350, invoice_date: "2026-03-08", status: "paid" },
+  { id: "INV-002", invoice_code: "INV-002", service: "Lab Work — CBC & HbA1c", amount: 180, invoice_date: "2026-02-10", status: "paid" },
+  { id: "INV-003", invoice_code: "INV-003", service: "Follow-up Visit", amount: 120, invoice_date: "2026-03-06", status: "pending" },
+];
+
+const labStatusVariant: Record<string, "default" | "warning" | "success"> = {
+  pending: "default", processing: "warning", completed: "success",
+};
+const invoiceStatusVariant: Record<string, "success" | "warning" | "destructive"> = {
+  paid: "success", pending: "warning", overdue: "destructive",
+};
+
 export const PatientDetailPage = () => {
   const { t } = useI18n();
   const { clinicSlug, patientId } = useParams();
@@ -44,6 +63,8 @@ export const PatientDetailPage = () => {
     { key: "history", icon: Activity, label: t("patients.medicalHistory") },
     { key: "prescriptions", icon: Pill, label: t("patients.prescriptions") },
     { key: "notes", icon: FileText, label: t("patients.clinicalNotes") },
+    { key: "lab_orders", icon: FlaskConical, label: t("common.laboratory") },
+    { key: "invoices", icon: Receipt, label: t("common.billing") },
     { key: "documents", icon: FileText, label: t("patients.documents") },
   ];
 
@@ -88,6 +109,42 @@ export const PatientDetailPage = () => {
     enabled: !!patientId,
   });
 
+  const { data: labOrders = [] } = useQuery({
+    queryKey: ["lab_orders", patientId],
+    queryFn: async () => {
+      if (isDemo) return DEMO_LAB_ORDERS as any[];
+      const { data, error } = await supabase
+        .from("lab_orders")
+        .select("*, doctors(full_name)")
+        .eq("patient_id", patientId ?? "")
+        .order("order_date", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!patientId,
+  });
+
+  const { data: invoices = [] } = useQuery({
+    queryKey: ["patient_invoices", patientId],
+    queryFn: async () => {
+      if (isDemo) return DEMO_INVOICES as any[];
+      const { data, error } = await supabase
+        .from("invoices")
+        .select("*")
+        .eq("patient_id", patientId ?? "")
+        .order("invoice_date", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!patientId,
+  });
+
+  const getLabStatusLabel = (s: string) =>
+    s === "pending" ? t("billing.pending") : s === "processing" ? t("laboratory.processing") : t("appointments.completed");
+
+  const getInvoiceStatusLabel = (s: string) =>
+    s === "paid" ? t("billing.paid") : s === "overdue" ? t("billing.overdue") : t("billing.pending");
+
   if (loadingPatient) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -106,6 +163,9 @@ export const PatientDetailPage = () => {
       </div>
     );
   }
+
+  const totalBilled = invoices.reduce((s: number, i: any) => s + Number(i.amount), 0);
+  const totalPaid = invoices.filter((i: any) => i.status === "paid").reduce((s: number, i: any) => s + Number(i.amount), 0);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -165,48 +225,76 @@ export const PatientDetailPage = () => {
         ))}
       </div>
 
-      {/* Tab Content */}
+      {/* ── OVERVIEW ── */}
       {activeTab === "overview" && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-card rounded-lg border p-5">
-            <h3 className="font-semibold mb-4">{t("patients.recentDiagnoses")}</h3>
-            {medicalRecords.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-6">{t("patients.noMedicalRecordsYet")}</p>
-            ) : (
-              <div className="space-y-3">
-                {medicalRecords.slice(0, 3).map((h: any, i: number) => (
-                  <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
-                    <div className="h-2 w-2 rounded-full bg-primary mt-2 shrink-0" />
-                    <div>
-                      <p className="text-sm font-medium">{h.diagnosis ?? t("patients.noDiagnosis")}</p>
-                      <p className="text-xs text-muted-foreground">{h.record_date} · {h.doctors?.full_name ?? "—"}</p>
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="bg-card rounded-lg border p-5">
+              <h3 className="font-semibold mb-4">{t("patients.recentDiagnoses")}</h3>
+              {medicalRecords.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-6">{t("patients.noMedicalRecordsYet")}</p>
+              ) : (
+                <div className="space-y-3">
+                  {medicalRecords.slice(0, 3).map((h: any, i: number) => (
+                    <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
+                      <div className="h-2 w-2 rounded-full bg-primary mt-2 shrink-0" />
+                      <div>
+                        <p className="text-sm font-medium">{h.diagnosis ?? t("patients.noDiagnosis")}</p>
+                        <p className="text-xs text-muted-foreground">{h.record_date} · {h.doctors?.full_name ?? "—"}</p>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="bg-card rounded-lg border p-5">
+              <h3 className="font-semibold mb-4">{t("patients.activePrescriptions")}</h3>
+              {prescriptions.filter((p: any) => p.status === "active").length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-6">{t("patients.noActivePrescriptions")}</p>
+              ) : (
+                <div className="space-y-3">
+                  {prescriptions.filter((p: any) => p.status === "active").map((rx: any) => (
+                    <div key={rx.id} className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
+                      <Pill className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-sm font-medium">{rx.medication}</p>
+                        <p className="text-xs text-muted-foreground">{rx.dosage}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
-          <div className="bg-card rounded-lg border p-5">
-            <h3 className="font-semibold mb-4">{t("patients.activePrescriptions")}</h3>
-            {prescriptions.filter((p: any) => p.status === "active").length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-6">{t("patients.noActivePrescriptions")}</p>
-            ) : (
-              <div className="space-y-3">
-                {prescriptions.filter((p: any) => p.status === "active").map((rx: any) => (
-                  <div key={rx.id} className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
-                    <Pill className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-                    <div>
-                      <p className="text-sm font-medium">{rx.medication}</p>
-                      <p className="text-xs text-muted-foreground">{rx.dosage}</p>
-                    </div>
-                  </div>
-                ))}
+
+          {/* Quick summary: lab + billing */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="stat-card">
+              <div className="flex items-center gap-2 mb-1">
+                <FlaskConical className="h-4 w-4 text-muted-foreground" />
+                <span className="text-xs text-muted-foreground">{t("patients.labOrdersCount")}</span>
               </div>
-            )}
+              <p className="text-2xl font-bold text-foreground">{labOrders.length}</p>
+            </div>
+            <div className="stat-card">
+              <div className="flex items-center gap-2 mb-1">
+                <Receipt className="h-4 w-4 text-muted-foreground" />
+                <span className="text-xs text-muted-foreground">{t("patients.totalBilled")}</span>
+              </div>
+              <p className="text-2xl font-bold text-foreground">${totalBilled.toLocaleString()}</p>
+            </div>
+            <div className="stat-card">
+              <div className="flex items-center gap-2 mb-1">
+                <Receipt className="h-4 w-4 text-success" />
+                <span className="text-xs text-muted-foreground">{t("patients.totalPaid")}</span>
+              </div>
+              <p className="text-2xl font-bold text-success">${totalPaid.toLocaleString()}</p>
+            </div>
           </div>
         </div>
       )}
 
+      {/* ── MEDICAL HISTORY ── */}
       {activeTab === "history" && (
         <div className="bg-card rounded-lg border overflow-hidden">
           {medicalRecords.length === 0 ? (
@@ -234,6 +322,7 @@ export const PatientDetailPage = () => {
         </div>
       )}
 
+      {/* ── PRESCRIPTIONS ── */}
       {activeTab === "prescriptions" && (
         <div className="bg-card rounded-lg border overflow-hidden">
           {prescriptions.length === 0 ? (
@@ -267,6 +356,7 @@ export const PatientDetailPage = () => {
         </div>
       )}
 
+      {/* ── CLINICAL NOTES ── */}
       {activeTab === "notes" && (
         <div className="space-y-4">
           {medicalRecords.length === 0 ? (
@@ -288,6 +378,120 @@ export const PatientDetailPage = () => {
         </div>
       )}
 
+      {/* ── LAB ORDERS ── */}
+      {activeTab === "lab_orders" && (
+        <div className="space-y-4">
+          {/* summary strip */}
+          <div className="grid grid-cols-3 gap-4">
+            {[
+              { label: t("laboratory.pendingOrders"), count: labOrders.filter((l: any) => l.status === "pending").length, variant: "default" },
+              { label: t("laboratory.processing"), count: labOrders.filter((l: any) => l.status === "processing").length, variant: "warning" },
+              { label: t("appointments.completed"), count: labOrders.filter((l: any) => l.status === "completed").length, variant: "success" },
+            ].map((s, i) => (
+              <div key={i} className="stat-card text-center">
+                <p className="text-2xl font-bold">{s.count}</p>
+                <p className="text-xs text-muted-foreground mt-1">{s.label}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="bg-card rounded-lg border overflow-hidden">
+            {labOrders.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground flex flex-col items-center gap-3">
+                <FlaskConical className="h-10 w-10 opacity-30" />
+                {t("patients.noLabOrders")}
+              </div>
+            ) : (
+              <table className="data-table">
+                <thead><tr className="bg-muted/50">
+                  <th>{t("laboratory.test")}</th>
+                  <th>{t("laboratory.orderedBy")}</th>
+                  <th>{t("common.date")}</th>
+                  <th>{t("common.status")}</th>
+                  <th>{t("common.result")}</th>
+                </tr></thead>
+                <tbody>
+                  {labOrders.map((l: any) => (
+                    <tr key={l.id} className="hover:bg-muted/30 transition-colors">
+                      <td className="font-medium">{l.test_name}</td>
+                      <td>{l.doctors?.full_name ?? "—"}</td>
+                      <td className="text-muted-foreground whitespace-nowrap">{l.order_date}</td>
+                      <td>
+                        <StatusBadge variant={labStatusVariant[l.status] ?? "default"}>
+                          {getLabStatusLabel(l.status)}
+                        </StatusBadge>
+                      </td>
+                      <td className="text-sm max-w-xs">
+                        {l.result
+                          ? <span>{l.result}</span>
+                          : <span className="text-muted-foreground">—</span>
+                        }
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── INVOICES ── */}
+      {activeTab === "invoices" && (
+        <div className="space-y-4">
+          {/* billing summary strip */}
+          <div className="grid grid-cols-3 gap-4">
+            <div className="stat-card text-center">
+              <p className="text-2xl font-bold">{invoices.length}</p>
+              <p className="text-xs text-muted-foreground mt-1">{t("billing.invoicesThisMonth")}</p>
+            </div>
+            <div className="stat-card text-center">
+              <p className="text-2xl font-bold">${totalBilled.toLocaleString()}</p>
+              <p className="text-xs text-muted-foreground mt-1">{t("patients.totalBilled")}</p>
+            </div>
+            <div className="stat-card text-center">
+              <p className="text-2xl font-bold text-success">${totalPaid.toLocaleString()}</p>
+              <p className="text-xs text-muted-foreground mt-1">{t("billing.paid")}</p>
+            </div>
+          </div>
+
+          <div className="bg-card rounded-lg border overflow-hidden">
+            {invoices.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground flex flex-col items-center gap-3">
+                <Receipt className="h-10 w-10 opacity-30" />
+                {t("patients.noInvoices")}
+              </div>
+            ) : (
+              <table className="data-table">
+                <thead><tr className="bg-muted/50">
+                  <th>{t("billing.invoiceNumber")}</th>
+                  <th>{t("common.service")}</th>
+                  <th>{t("common.amount")}</th>
+                  <th>{t("common.date")}</th>
+                  <th>{t("common.status")}</th>
+                </tr></thead>
+                <tbody>
+                  {invoices.map((inv: any) => (
+                    <tr key={inv.id} className="hover:bg-muted/30 transition-colors">
+                      <td className="font-medium">{inv.invoice_code}</td>
+                      <td>{inv.service}</td>
+                      <td className="font-semibold">${Number(inv.amount).toLocaleString()}</td>
+                      <td className="text-muted-foreground whitespace-nowrap">{inv.invoice_date}</td>
+                      <td>
+                        <StatusBadge variant={invoiceStatusVariant[inv.status] ?? "default"}>
+                          {getInvoiceStatusLabel(inv.status)}
+                        </StatusBadge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── DOCUMENTS ── */}
       {activeTab === "documents" && (
         <div className="bg-card rounded-lg border p-8 text-center">
           <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-3" />

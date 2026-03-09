@@ -141,6 +141,11 @@ export const en = {
     noMedicalHistoryFound: "No medical history found",
     noPrescriptionsFound: "No prescriptions found",
     noClinicalNotesFound: "No clinical notes found",
+    noLabOrders: "No lab orders for this patient",
+    noInvoices: "No invoices for this patient",
+    labOrdersCount: "Lab Orders",
+    totalBilled: "Total Billed",
+    totalPaid: "Total Paid",
   },
   appointments: {
     title: "Appointments",

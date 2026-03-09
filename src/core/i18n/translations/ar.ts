@@ -141,6 +141,11 @@ export const ar = {
     noMedicalHistoryFound: "لا يوجد تاريخ طبي",
     noPrescriptionsFound: "لا توجد وصفات",
     noClinicalNotesFound: "لا توجد ملاحظات سريرية",
+    noLabOrders: "لا توجد طلبات مختبر لهذا المريض",
+    noInvoices: "لا توجد فواتير لهذا المريض",
+    labOrdersCount: "طلبات المختبر",
+    totalBilled: "إجمالي المُفوتر",
+    totalPaid: "إجمالي المدفوع",
   },
   appointments: {
     title: "المواعيد",
