@@ -68,6 +68,7 @@ export const SettingsPage = () => {
         </div>
 
         <div className="flex-1 bg-card rounded-lg border p-6 max-w-2xl">
+          {activeTab === "profile" && <ProfileTab />}
           {activeTab === "general" && <GeneralTab />}
           {activeTab === "users" && (
             <UsersTab
