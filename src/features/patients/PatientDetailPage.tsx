@@ -537,7 +537,7 @@ export const PatientDetailPage = () => {
                     <tr key={l.id} className="hover:bg-muted/30 transition-colors">
                       <td className="font-medium">{l.test_name}</td>
                       <td>{l.doctors?.full_name ?? "—"}</td>
-                      <td className="text-muted-foreground whitespace-nowrap">{formatDate(l.order_date, locale)}</td>
+                      <td className="text-muted-foreground whitespace-nowrap">{formatDate(l.order_date, locale, "date", calendarType)}</td>
                       <td>
                         <StatusBadge variant={labStatusVariant[l.status] ?? "default"}>
                           {getLabStatusLabel(l.status)}
