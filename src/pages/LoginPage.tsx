@@ -54,7 +54,7 @@ export const LoginPage = () => {
     }
     setLoading(true);
 
-    // Create tenant via secure function
+    // Create tenant via secure function (passes owner email for verification)
     const slug = clinicName
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
@@ -62,18 +62,18 @@ export const LoginPage = () => {
     const { data: tenantId, error: tenantErr } = await supabase.rpc("create_tenant_and_signup", {
       _name: clinicName,
       _slug: slug,
+      _owner_email: email,
     });
 
-    // ABORT signup if tenant creation failed — don't create orphan users
+    // ABORT signup if tenant creation failed
     if (tenantErr || !tenantId) {
       toast({ title: t("auth.signupFailed"), description: tenantErr?.message ?? "Failed to create clinic", variant: "destructive" });
       setLoading(false);
       return;
     }
 
-    // Sign up with tenant_id in metadata (role is NOT passed — trigger defaults to 'doctor',
-    // then admin_set_user_role RPC upgrades to clinic_admin after profile exists)
-    const { data: signupData, error: signupErr } = await supabase.auth.signUp({
+    // Sign up — handle_new_user trigger will match pending_owner_email and assign clinic_admin
+    const { error: signupErr } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -88,13 +88,6 @@ export const LoginPage = () => {
     if (signupErr) {
       toast({ title: t("auth.signupFailed"), description: signupErr.message, variant: "destructive" });
     } else {
-      // Upgrade role to clinic_admin for the clinic owner via secure RPC
-      if (signupData?.user) {
-        await supabase.rpc("admin_set_user_role", {
-          _target_user_id: signupData.user.id,
-          _role: "clinic_admin" as const,
-        });
-      }
       toast({ title: t("auth.checkEmail"), description: t("auth.confirmationSent") });
     }
     setLoading(false);

@@ -49,32 +49,19 @@ export const AddUserModal = ({ open, onClose, onSuccess }: AddUserModalProps) =>
 
     setLoading(true);
 
-    // Sign up new user with metadata (role is NOT trusted from metadata)
-    const { data, error } = await supabase.auth.signUp({
-      email: form.email,
-      password: form.password,
-      options: {
-        data: {
-          full_name: form.full_name,
-          tenant_id: user?.tenantId,
-        },
-        emailRedirectTo: window.location.origin,
+    // Use secure edge function instead of client-side signUp (avoids signing out admin)
+    const { data, error } = await supabase.functions.invoke("invite-staff", {
+      body: {
+        email: form.email,
+        password: form.password,
+        full_name: form.full_name,
+        role: form.role,
       },
     });
 
-    if (error) {
-      toast({ title: t("common.error"), description: error.message, variant: "destructive" });
-    } else if (data.user) {
-      // Use secure RPC to assign role (server-side admin check)
-      if (form.role !== "doctor") {
-        const { error: roleErr } = await supabase.rpc("admin_set_user_role", {
-          _target_user_id: data.user.id,
-          _role: form.role as "clinic_admin" | "doctor" | "receptionist" | "nurse" | "accountant",
-        });
-        if (roleErr) {
-          toast({ title: t("common.error"), description: roleErr.message, variant: "destructive" });
-        }
-      }
+    if (error || data?.error) {
+      toast({ title: t("common.error"), description: error?.message || data?.error, variant: "destructive" });
+    } else {
       toast({
         title: t("settings.addUser"),
         description: t("auth.confirmationSent"),
