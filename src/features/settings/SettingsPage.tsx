@@ -13,8 +13,9 @@ import { SecurityTab } from "./tabs/SecurityTab";
 import { NotificationsTab } from "./tabs/NotificationsTab";
 import { AppearanceTab } from "./tabs/AppearanceTab";
 import { AuditLogTab } from "./tabs/AuditLogTab";
+import { ProfileTab } from "./tabs/ProfileTab";
 
-type Tab = "general" | "users" | "notifications" | "appearance" | "security" | "audit";
+type Tab = "profile" | "general" | "users" | "notifications" | "appearance" | "security" | "audit";
 
 export const SettingsPage = () => {
   const { t } = useI18n();
