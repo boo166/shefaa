@@ -165,6 +165,16 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Audit log
+    await adminClient.rpc("log_audit_event", {
+      _tenant_id: callerProfile.tenant_id,
+      _user_id: callerId,
+      _action: "staff_invited",
+      _entity_type: "user_invite",
+      _entity_id: newUser.user?.id ?? null,
+      _details: { email: normalizedEmail, role, invited_by: callerId },
+    });
+
     return new Response(JSON.stringify({ success: true, user_id: newUser.user?.id }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

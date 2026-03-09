@@ -115,6 +115,16 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Audit log
+    await adminClient.rpc("log_audit_event", {
+      _tenant_id: tenant.id,
+      _user_id: "00000000-0000-0000-0000-000000000000",
+      _action: "clinic_created",
+      _entity_type: "tenant",
+      _entity_id: tenant.id,
+      _details: { clinic_name: clinicName, owner_email: normalizedEmail },
+    });
+
     return new Response(JSON.stringify({ success: true }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
