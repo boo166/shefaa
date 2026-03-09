@@ -334,6 +334,21 @@ export const ar = {
 
     loginFailed: "فشل تسجيل الدخول",
     signupFailed: "فشل إنشاء الحساب",
+    passwordStrength: "قوة كلمة المرور",
+    strength: {
+      veryWeak: "ضعيفة جداً",
+      weak: "ضعيفة",
+      fair: "مقبولة",
+      good: "جيدة",
+      strong: "قوية",
+    },
+    pwRule: {
+      minLength: "٨ أحرف على الأقل",
+      uppercase: "حرف كبير واحد",
+      lowercase: "حرف صغير واحد",
+      number: "رقم واحد",
+      special: "رمز خاص واحد",
+    },
     heroSubtitle: "منصة إدارة الرعاية الصحية للمؤسسات",
     featureMultiTenant: "بنية متعددة العيادات",
     featureRbac: "أمان الصلاحيات (RBAC)",

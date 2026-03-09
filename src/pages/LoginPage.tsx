@@ -175,6 +175,7 @@ export const LoginPage = () => {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
               />
+              {mode === "signup" && <PasswordStrength password={password} t={t} />}
             </div>
             <Button type="submit" className="w-full" disabled={mode === "signup" ? isSignupDisabled : loading}>
               {loading ? t("common.loading") : mode === "login" ? t("auth.login") : t("auth.createAccount")}
