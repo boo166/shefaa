@@ -315,6 +315,12 @@ export const en = {
     auditLog: "Audit Log",
     auditLogDesc: "Track important actions across your clinic.",
     noAuditLogs: "No audit events recorded yet.",
+    profile: "Profile",
+    uploadAvatar: "Upload Photo",
+    avatarHint: "JPG, PNG or WebP. Max 2 MB.",
+    avatarUpdated: "Profile photo updated",
+    avatarRemoved: "Profile photo removed",
+    avatarTooLarge: "Image must be under 2 MB",
   },
   auth: {
     login: "Sign In",

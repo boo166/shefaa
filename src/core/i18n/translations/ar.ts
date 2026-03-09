@@ -313,6 +313,12 @@ export const ar = {
     auditLog: "سجل الأحداث",
     auditLogDesc: "تتبع الإجراءات المهمة في عيادتك.",
     noAuditLogs: "لا توجد أحداث مسجلة بعد.",
+    profile: "الملف الشخصي",
+    uploadAvatar: "رفع صورة",
+    avatarHint: "JPG أو PNG أو WebP. الحد الأقصى ٢ ميغابايت.",
+    avatarUpdated: "تم تحديث صورة الملف الشخصي",
+    avatarRemoved: "تم إزالة صورة الملف الشخصي",
+    avatarTooLarge: "يجب أن تكون الصورة أقل من ٢ ميغابايت",
   },
   auth: {
     login: "تسجيل الدخول",
