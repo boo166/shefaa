@@ -12,6 +12,7 @@ import { UsersTab } from "./tabs/UsersTab";
 import { SecurityTab } from "./tabs/SecurityTab";
 import { NotificationsTab } from "./tabs/NotificationsTab";
 import { AppearanceTab } from "./tabs/AppearanceTab";
+import { AuditLogTab } from "./tabs/AuditLogTab";
 
 type Tab = "general" | "users" | "notifications" | "appearance" | "security";
 
