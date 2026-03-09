@@ -28,7 +28,7 @@ const DEMO_CLAIMS = [
 const statusVariant: Record<string, "success" | "warning" | "destructive"> = { approved: "success", pending: "warning", rejected: "destructive" };
 
 export const InsurancePage = () => {
-  const { t, locale } = useI18n();
+  const { t, locale, calendarType } = useI18n();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const isDemo = user?.tenantId === "demo";

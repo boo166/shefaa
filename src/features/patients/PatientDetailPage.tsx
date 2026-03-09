@@ -63,7 +63,7 @@ const apptStatusVariant: Record<string, "default" | "warning" | "success" | "des
 };
 
 export const PatientDetailPage = () => {
-  const { t, locale } = useI18n();
+  const { t, locale, calendarType } = useI18n();
   const { clinicSlug, patientId } = useParams();
   const { user } = useAuth();
   const navigate = useNavigate();
