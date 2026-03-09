@@ -451,7 +451,7 @@ export const PatientDetailPage = () => {
               <p className="text-xs text-muted-foreground mt-1">{t("patients.totalBilled")}</p>
             </div>
             <div className="stat-card text-center">
-              <p className="text-2xl font-bold text-success">${totalPaid.toLocaleString()}</p>
+              <p className="text-2xl font-bold text-success">{formatCurrency(totalPaid, locale)}</p>
               <p className="text-xs text-muted-foreground mt-1">{t("billing.paid")}</p>
             </div>
           </div>
