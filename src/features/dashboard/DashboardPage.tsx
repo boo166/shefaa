@@ -5,6 +5,7 @@ import { Users, CalendarDays, Stethoscope, DollarSign } from "lucide-react";
 import { useSupabaseTable } from "@/hooks/useSupabaseQuery";
 import { useAuth } from "@/core/auth/authStore";
 import { Tables } from "@/integrations/supabase/types";
+import { formatDate, formatCurrency } from "@/shared/utils/formatDate";
 
 type Appointment = Tables<"appointments"> & {
   patients?: { full_name: string } | null;
