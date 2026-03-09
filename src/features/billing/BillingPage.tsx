@@ -15,6 +15,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Tables } from "@/integrations/supabase/types";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { formatDate, formatCurrency } from "@/shared/utils/formatDate";
 
 type Invoice = Tables<"invoices"> & { patients?: { full_name: string } | null };
 
