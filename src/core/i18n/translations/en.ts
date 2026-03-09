@@ -88,6 +88,7 @@ export const en = {
     compactView: "Compact View",
     comingSoon: "Coming soon",
     print: "Print",
+    selected: "selected",
   },
 
   roles: {
@@ -153,6 +154,13 @@ export const en = {
     labOrdersCount: "Lab Orders",
     totalBilled: "Total Billed",
     totalPaid: "Total Paid",
+    importPatients: "Import Patients",
+    importDescription: "Upload a CSV file to bulk import patients. Required column: full_name. Optional: date_of_birth, gender, blood_type, phone, email, address, insurance_provider.",
+    downloadTemplate: "Download Template",
+    selectCSVFile: "Select CSV file",
+    clickToSelectFile: "Click to select a file",
+    import: "Import",
+    importCSV: "Import CSV",
   },
   appointments: {
     title: "Appointments",

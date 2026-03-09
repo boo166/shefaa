@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.check-slug]
 verify_jwt = false
+
+[functions.appointment-reminders]
+verify_jwt = false

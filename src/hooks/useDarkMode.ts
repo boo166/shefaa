@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/core/auth/authStore";
 
 const STORAGE_KEY = "medflow-theme";
 
@@ -41,8 +43,38 @@ export function setStoredTheme(theme: ThemeMode) {
   applyTheme(theme);
 }
 
+// Persist dark mode preference to DB
+async function saveThemeToDb(userId: string, dark: boolean) {
+  await supabase
+    .from("user_preferences" as any)
+    .upsert({ user_id: userId, dark_mode: dark }, { onConflict: "user_id" });
+}
+
+// Load dark mode preference from DB
+async function loadThemeFromDb(userId: string): Promise<ThemeMode | null> {
+  const { data } = await supabase
+    .from("user_preferences" as any)
+    .select("dark_mode")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (data) return (data as any).dark_mode ? "dark" : "light";
+  return null;
+}
+
 export function useDarkMode() {
   const [enabled, setEnabledState] = useState<boolean>(() => getStoredTheme() === "dark");
+  const { user } = useAuth();
+
+  // Load preference from DB on mount (if logged in)
+  useEffect(() => {
+    if (!user?.id) return;
+    loadThemeFromDb(user.id).then((dbTheme) => {
+      if (dbTheme !== null) {
+        setEnabledState(dbTheme === "dark");
+        setStoredTheme(dbTheme);
+      }
+    });
+  }, [user?.id]);
 
   // Keep DOM + localStorage in sync
   useEffect(() => {
@@ -59,8 +91,21 @@ export function useDarkMode() {
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
-  const setEnabled = useCallback((next: boolean) => setEnabledState(!!next), []);
-  const toggle = useCallback(() => setEnabledState((v) => !v), []);
+  const setEnabled = useCallback(
+    (next: boolean) => {
+      setEnabledState(!!next);
+      if (user?.id) saveThemeToDb(user.id, !!next);
+    },
+    [user?.id]
+  );
+
+  const toggle = useCallback(() => {
+    setEnabledState((v) => {
+      const next = !v;
+      if (user?.id) saveThemeToDb(user.id, next);
+      return next;
+    });
+  }, [user?.id]);
 
   return useMemo(() => ({ enabled, setEnabled, toggle }), [enabled, setEnabled, toggle]);
 }

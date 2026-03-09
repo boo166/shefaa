@@ -6,14 +6,17 @@ import { StatusBadge } from "@/shared/components/StatusBadge";
 import { StatusFilter } from "@/shared/components/StatusFilter";
 import { Button } from "@/components/ui/button";
 import { PermissionGuard } from "@/core/auth/PermissionGuard";
-import { UserPlus, Eye } from "lucide-react";
+import { UserPlus, Eye, Trash2, Upload } from "lucide-react";
 import { AddPatientModal } from "./AddPatientModal";
+import { ImportPatientsModal } from "./ImportPatientsModal";
 import { useSupabaseTable } from "@/hooks/useSupabaseQuery";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { useAuth } from "@/core/auth/authStore";
 import { Tables } from "@/integrations/supabase/types";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
 
 type Patient = Tables<"patients">;
 
@@ -28,11 +31,13 @@ export const PatientsPage = () => {
   const { t } = useI18n();
   const navigate = useNavigate();
   const { clinicSlug } = useParams();
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
   const queryClient = useQueryClient();
   const [showAdd, setShowAdd] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const isDemo = user?.tenantId === "demo";
+  const canManage = hasPermission("manage_patients");
 
   useRealtimeSubscription(["patients"]);
 
@@ -42,6 +47,20 @@ export const PatientsPage = () => {
 
   const patients = isDemo ? DEMO_PATIENTS as unknown as Patient[] : livePatients;
   const filtered = useMemo(() => statusFilter ? patients.filter((p) => p.status === statusFilter) : patients, [patients, statusFilter]);
+
+  const handleBulkDelete = async (selectedIds: string[]) => {
+    if (isDemo) {
+      toast({ title: t("common.demoMode"), variant: "destructive" });
+      return;
+    }
+    const { error } = await supabase.from("patients").delete().in("id", selectedIds);
+    if (error) {
+      toast({ title: t("common.error"), description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: `${selectedIds.length} patients deleted` });
+      queryClient.invalidateQueries({ queryKey: ["patients"] });
+    }
+  };
 
   const columns: Column<Patient>[] = [
     { key: "patient_code", header: t("patients.patientId"), searchable: true },
@@ -75,9 +94,16 @@ export const PatientsPage = () => {
     <div className="space-y-6 animate-fade-in">
       <div className="page-header">
         <h1 className="page-title">{t("patients.title")}</h1>
-        <PermissionGuard permission="manage_patients">
-          <Button onClick={() => setShowAdd(true)}><UserPlus className="h-4 w-4" />{t("patients.addPatient")}</Button>
-        </PermissionGuard>
+        <div className="flex items-center gap-2">
+          <PermissionGuard permission="manage_patients">
+            <Button variant="outline" onClick={() => setShowImport(true)}>
+              <Upload className="h-4 w-4" /> {t("patients.importCSV")}
+            </Button>
+            <Button onClick={() => setShowAdd(true)}>
+              <UserPlus className="h-4 w-4" />{t("patients.addPatient")}
+            </Button>
+          </PermissionGuard>
+        </div>
       </div>
 
       <DataTable
@@ -88,6 +114,15 @@ export const PatientsPage = () => {
         searchable
         isLoading={!isDemo && isLoading}
         exportFileName="patients"
+        pdfExport={{ title: "Patient List", subtitle: `Generated on ${new Date().toLocaleDateString()}` }}
+        bulkActions={canManage && !isDemo ? [
+          {
+            label: t("common.delete"),
+            icon: <Trash2 className="h-4 w-4 me-1" />,
+            variant: "destructive",
+            action: handleBulkDelete,
+          },
+        ] : undefined}
         filterSlot={
           <StatusFilter
             options={[{ value: "active", label: t("patients.active") }, { value: "inactive", label: t("patients.inactive") }]}
@@ -98,6 +133,11 @@ export const PatientsPage = () => {
       />
 
       <AddPatientModal open={showAdd} onClose={() => setShowAdd(false)} onSuccess={() => queryClient.invalidateQueries({ queryKey: ["patients"] })} />
+      <ImportPatientsModal
+        open={showImport}
+        onClose={() => setShowImport(false)}
+        onSuccess={() => queryClient.invalidateQueries({ queryKey: ["patients"] })}
+      />
     </div>
   );
 };

@@ -16,6 +16,7 @@ import { Tables } from "@/integrations/supabase/types";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { formatDate, formatCurrency } from "@/shared/utils/formatDate";
+import { generatePDF } from "@/shared/utils/pdfGenerator";
 
 type Invoice = Tables<"invoices"> & { patients?: { full_name: string } | null };
 
@@ -112,7 +113,16 @@ export const BillingPage = () => {
       </div>
 
       <DataTable
-        columns={columns} data={filtered} keyExtractor={(inv) => inv.id} searchable isLoading={!isDemo && isLoading} exportFileName="invoices"
+        columns={columns}
+        data={filtered}
+        keyExtractor={(inv) => inv.id}
+        searchable
+        isLoading={!isDemo && isLoading}
+        exportFileName="invoices"
+        pdfExport={{
+          title: t("billing.title"),
+          subtitle: `${t("billing.totalRevenue")}: ${formatCurrency(totalRevenue, locale)} · ${t("billing.collectionRate")}: ${displayData.length ? Math.round((displayData.filter((i) => i.status === "paid").length / displayData.length) * 100) : 0}%`
+        }}
         filterSlot={
           <StatusFilter
             options={[
