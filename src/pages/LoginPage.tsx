@@ -54,7 +54,7 @@ export const LoginPage = () => {
     }
     setLoading(true);
 
-    // Secure backend signup (atomic tenant + owner creation with rollback)
+    // Secure backend signup: atomic clinic + owner account
     const { data, error } = await supabase.functions.invoke("register-clinic", {
       body: {
         clinicName,

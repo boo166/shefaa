@@ -19,9 +19,10 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const adminClient = createClient(supabaseUrl, serviceRoleKey);
+    const adminClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
 
     const { clinicName, fullName, email, password } = await req.json();
 
@@ -37,7 +38,11 @@ Deno.serve(async (req) => {
 
     const { data: tenant, error: tenantErr } = await adminClient
       .from("tenants")
-      .insert({ name: clinicName, slug, pending_owner_email: normalizedEmail })
+      .insert({
+        name: clinicName,
+        slug,
+        pending_owner_email: normalizedEmail,
+      })
       .select("id")
       .single();
 
@@ -48,7 +53,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { error: createUserErr } = await adminClient.auth.admin.createUser({
+    const { error: createErr } = await adminClient.auth.admin.createUser({
       email: normalizedEmail,
       password,
       email_confirm: false,
@@ -58,9 +63,9 @@ Deno.serve(async (req) => {
       },
     });
 
-    if (createUserErr) {
+    if (createErr) {
       await adminClient.from("tenants").delete().eq("id", tenant.id);
-      return new Response(JSON.stringify({ error: createUserErr.message }), {
+      return new Response(JSON.stringify({ error: createErr.message }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

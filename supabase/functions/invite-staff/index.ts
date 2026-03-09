@@ -67,7 +67,6 @@ Deno.serve(async (req) => {
     }
 
     const { email, password, full_name, role } = await req.json();
-
     if (!email || !password || !full_name || !role) {
       return new Response(JSON.stringify({ error: "Missing required fields" }), {
         status: 400,
