@@ -56,9 +56,9 @@ export const DoctorsPage = () => {
     setDeleting(true);
     const { error } = await supabase.from("doctors").delete().eq("id", deleteId);
     if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: t("common.error"), description: error.message, variant: "destructive" });
     } else {
-      toast({ title: "Doctor removed" });
+      toast({ title: t("doctors.doctorRemoved") });
       queryClient.invalidateQueries({ queryKey: ["doctors"] });
     }
     setDeleting(false);
@@ -69,11 +69,18 @@ export const DoctorsPage = () => {
     if (isDemo) return;
     const { error } = await supabase.from("doctors").update({ status: newStatus }).eq("id", id);
     if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: t("common.error"), description: error.message, variant: "destructive" });
     } else {
       queryClient.invalidateQueries({ queryKey: ["doctors"] });
     }
     setOpenMenu(null);
+  };
+
+  const getDoctorStatusLabel = (status: string) => {
+    if (status === "available") return t("doctors.available");
+    if (status === "busy") return t("doctors.busy");
+    if (status === "on_leave") return t("doctors.onLeave");
+    return status;
   };
 
   return (
@@ -104,8 +111,8 @@ export const DoctorsPage = () => {
       ) : filtered.length === 0 ? (
         <EmptyState
           icon={UserPlus}
-          title="No doctors found"
-          description="Add your first doctor to get started"
+          title={t("doctors.noDoctorsFound")}
+          description={t("doctors.addFirstDoctor")}
           actionLabel={t("doctors.addDoctor")}
           onAction={() => setShowAddModal(true)}
         />
@@ -125,7 +132,7 @@ export const DoctorsPage = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   <StatusBadge variant={statusVariant[doc.status] ?? "default"}>
-                    {doc.status.replace("_", " ")}
+                    {getDoctorStatusLabel(doc.status)}
                   </StatusBadge>
                   <PermissionGuard permission="manage_users">
                     <div className="relative">
@@ -142,14 +149,14 @@ export const DoctorsPage = () => {
                             onClick={() => handleStatusChange(doc.id, doc.status === "available" ? "busy" : "available")}
                           >
                             <Pencil className="h-3.5 w-3.5" />
-                            Toggle Status
+                            {t("doctors.toggleStatus")}
                           </button>
                           <button
                             className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-destructive text-start"
                             onClick={() => { setDeleteId(doc.id); setOpenMenu(null); }}
                           >
                             <Trash2 className="h-3.5 w-3.5" />
-                            Remove
+                            {t("common.remove")}
                           </button>
                         </div>
                       )}
@@ -180,9 +187,9 @@ export const DoctorsPage = () => {
 
       <ConfirmDialog
         open={!!deleteId}
-        title="Remove Doctor"
-        message="Are you sure you want to remove this doctor? This action cannot be undone."
-        confirmLabel="Remove"
+        title={t("doctors.removeDoctorTitle")}
+        message={t("doctors.removeDoctorMessage")}
+        confirmLabel={t("common.remove")}
         variant="danger"
         loading={deleting}
         onConfirm={handleDelete}
