@@ -10,8 +10,10 @@ import { SessionTimeout } from "./features/auth/SessionTimeout";
 import { ForgotPasswordPage } from "./pages/ForgotPasswordPage";
 import { ResetPasswordPage } from "./pages/ResetPasswordPage";
 import { TutorialPage } from "./pages/TutorialPage";
+import { PricingPage } from "./pages/PricingPage";
 import { ClinicLayout } from "./layouts/ClinicLayout";
 import { ProtectedRoute } from "./core/auth/ProtectedRoute";
+import { SubscriptionProvider } from "./core/subscription/SubscriptionContext";
 import { DashboardPage } from "./features/dashboard/DashboardPage";
 import { PatientsPage } from "./features/patients/PatientsPage";
 import { PatientDetailPage } from "./features/patients/PatientDetailPage";
@@ -33,47 +35,50 @@ const App = () => (
       <Toaster />
       <Sonner />
       <SessionTimeout />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-          <Route path="/reset-password" element={<ResetPasswordPage />} />
-          <Route path="/tutorial" element={<TutorialPage />} />
-          <Route path="/" element={<LandingPage />} />
-          <Route
-            path="/admin"
-            element={
-              <ProtectedRoute requiredPermission="super_admin">
-                <AdminDashboardPage />
-              </ProtectedRoute>
-            }
-          />
+      <SubscriptionProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
+            <Route path="/tutorial" element={<TutorialPage />} />
+            <Route path="/pricing" element={<PricingPage />} />
+            <Route path="/" element={<LandingPage />} />
+            <Route
+              path="/admin"
+              element={
+                <ProtectedRoute requiredPermission="super_admin">
+                  <AdminDashboardPage />
+                </ProtectedRoute>
+              }
+            />
 
-          <Route
-            path="/tenant/:clinicSlug"
-            element={
-              <ProtectedRoute>
-                <ClinicLayout />
-              </ProtectedRoute>
-            }
-          >
-            <Route index element={<Navigate to="dashboard" replace />} />
-            <Route path="dashboard" element={<DashboardPage />} />
-            <Route path="patients" element={<PatientsPage />} />
-            <Route path="patients/:patientId" element={<PatientDetailPage />} />
-            <Route path="appointments" element={<AppointmentsPage />} />
-            <Route path="doctors" element={<DoctorsPage />} />
-            <Route path="billing" element={<BillingPage />} />
-            <Route path="pharmacy" element={<PharmacyPage />} />
-            <Route path="laboratory" element={<LaboratoryPage />} />
-            <Route path="insurance" element={<InsurancePage />} />
-            <Route path="reports" element={<ReportsPage />} />
-            <Route path="settings" element={<SettingsPage />} />
-          </Route>
+            <Route
+              path="/tenant/:clinicSlug"
+              element={
+                <ProtectedRoute>
+                  <ClinicLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route index element={<Navigate to="dashboard" replace />} />
+              <Route path="dashboard" element={<DashboardPage />} />
+              <Route path="patients" element={<PatientsPage />} />
+              <Route path="patients/:patientId" element={<PatientDetailPage />} />
+              <Route path="appointments" element={<AppointmentsPage />} />
+              <Route path="doctors" element={<DoctorsPage />} />
+              <Route path="billing" element={<BillingPage />} />
+              <Route path="pharmacy" element={<PharmacyPage />} />
+              <Route path="laboratory" element={<LaboratoryPage />} />
+              <Route path="insurance" element={<InsurancePage />} />
+              <Route path="reports" element={<ReportsPage />} />
+              <Route path="settings" element={<SettingsPage />} />
+            </Route>
 
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </SubscriptionProvider>
     </TooltipProvider>
   </QueryClientProvider>
 );

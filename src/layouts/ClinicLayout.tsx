@@ -4,6 +4,8 @@ import { useI18n } from "@/core/i18n/i18nStore";
 import { LanguageSwitcher } from "@/shared/components/LanguageSwitcher";
 import { NotificationCenter } from "@/shared/components/NotificationCenter";
 import { GlobalSearch } from "@/shared/components/GlobalSearch";
+import { PaywallModal } from "@/core/subscription/PaywallModal";
+import { UpgradeBanner } from "@/core/subscription/UpgradeBanner";
 import {
   LayoutDashboard, Users, CalendarDays, Stethoscope,
   Receipt, Pill, FlaskConical, Shield, BarChart3,
@@ -41,6 +43,9 @@ export const ClinicLayout = () => {
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
+      {/* Paywall modal - blocks everything if expired */}
+      <PaywallModal />
+
       {/* Sidebar */}
       <aside
         className={cn(
@@ -92,6 +97,9 @@ export const ClinicLayout = () => {
 
       {/* Main */}
       <div className="flex-1 flex flex-col min-w-0">
+        {/* Upgrade banner */}
+        <UpgradeBanner />
+
         {/* Topbar */}
         <header className="h-16 border-b bg-card flex items-center justify-between px-4 lg:px-6">
           <div className="flex items-center gap-3">
