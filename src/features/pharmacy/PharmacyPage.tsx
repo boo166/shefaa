@@ -151,9 +151,9 @@ export const PharmacyPage = () => {
 
       <ConfirmDialog
         open={!!deleteId}
-        title="Remove Medication"
-        message="Are you sure you want to remove this medication from inventory?"
-        confirmLabel="Remove"
+        title={t("pharmacy.removeMedicationTitle")}
+        message={t("pharmacy.removeMedicationMessage")}
+        confirmLabel={t("common.remove")}
         variant="danger"
         loading={deleting}
         onConfirm={handleDelete}
