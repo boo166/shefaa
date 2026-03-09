@@ -491,7 +491,7 @@ export const PatientDetailPage = () => {
                     <StatusBadge variant="info">{note.record_type?.replace("_", " ") ?? "Note"}</StatusBadge>
                     <span className="text-sm text-muted-foreground ms-3">{note.doctors?.full_name}</span>
                   </div>
-                  <span className="text-sm text-muted-foreground">{formatDate(note.record_date, locale)}</span>
+                  <span className="text-sm text-muted-foreground">{formatDate(note.record_date, locale, "date", calendarType)}</span>
                 </div>
                 <p className="text-sm leading-relaxed">{note.notes}</p>
               </div>
