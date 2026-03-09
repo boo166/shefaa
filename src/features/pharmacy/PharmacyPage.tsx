@@ -132,7 +132,11 @@ export const PharmacyPage = () => {
         columns={columns} data={filtered} keyExtractor={(m) => m.id} searchable isLoading={!isDemo && isLoading}
         filterSlot={
           <StatusFilter
-            options={[{ value: "in_stock", label: "In Stock" }, { value: "low_stock", label: "Low Stock" }, { value: "out_of_stock", label: "Out of Stock" }]}
+            options={[
+              { value: "in_stock", label: t("pharmacy.inStock") },
+              { value: "low_stock", label: t("pharmacy.lowStock") },
+              { value: "out_of_stock", label: t("pharmacy.outOfStock") },
+            ]}
             selected={statusFilter}
             onChange={setStatusFilter}
           />
