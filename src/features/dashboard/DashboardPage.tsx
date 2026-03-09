@@ -39,7 +39,7 @@ export const DashboardPage = () => {
   const totalPatients = isDemo ? "1,284" : String(patients.length);
   const todayAppointments = isDemo ? "24" : String(appointments.length);
   const activeDoctors = isDemo ? "18" : String(doctors.filter((d) => d.status === "available").length);
-  const revenue = isDemo ? "$48,250" : `$${invoices.filter((i) => i.status === "paid").reduce((s, i) => s + Number(i.amount), 0).toLocaleString()}`;
+  const revenue = isDemo ? formatCurrency(48250, locale) : formatCurrency(invoices.filter((i) => i.status === "paid").reduce((s, i) => s + Number(i.amount), 0), locale);
 
   const recentList = isDemo
     ? DEMO_APPOINTMENTS
