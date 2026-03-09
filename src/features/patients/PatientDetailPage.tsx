@@ -7,12 +7,14 @@ import {
   ArrowLeft, FileText, Pill, Activity, Stethoscope,
   Calendar, Phone, Mail, Droplets, User, Loader2,
   FlaskConical, Receipt, CalendarDays, Clock, CheckCircle2, XCircle,
+  Printer,
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { formatDate, formatCurrency } from "@/shared/utils/formatDate";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { PatientDocuments } from "./PatientDocuments";
 
 type Tab = "overview" | "history" | "prescriptions" | "notes" | "lab_orders" | "invoices" | "appointments" | "documents";
 
@@ -446,7 +448,25 @@ export const PatientDetailPage = () => {
 
       {/* ── PRESCRIPTIONS ── */}
       {activeTab === "prescriptions" && (
-        <div className="bg-card rounded-lg border overflow-hidden">
+        <div className="space-y-4">
+          {prescriptions.length > 0 && (
+            <div className="flex justify-end">
+              <Button variant="outline" size="sm" onClick={() => {
+                const printWin = window.open("", "_blank");
+                if (!printWin) return;
+                const rows = prescriptions.map((rx: any) =>
+                  `<tr><td style="padding:8px;border:1px solid #ddd">${rx.medication}</td><td style="padding:8px;border:1px solid #ddd">${rx.dosage}</td><td style="padding:8px;border:1px solid #ddd">${rx.doctors?.full_name ?? "—"}</td><td style="padding:8px;border:1px solid #ddd">${formatDate(rx.prescribed_date, locale, "date", calendarType)}</td><td style="padding:8px;border:1px solid #ddd">${rx.status}</td></tr>`
+                ).join("");
+                printWin.document.write(`<html><head><title>Prescriptions — ${patient.full_name}</title><style>body{font-family:system-ui;padding:20px}table{width:100%;border-collapse:collapse}th{padding:8px;border:1px solid #ddd;background:#f5f5f5;text-align:start}</style></head><body><h2>${patient.full_name} — ${t("patients.prescriptions")}</h2><table><tr><th>${t("pharmacy.medication")}</th><th>Dosage</th><th>${t("appointments.doctor")}</th><th>${t("common.date")}</th><th>${t("common.status")}</th></tr>${rows}</table></body></html>`);
+                printWin.document.close();
+                printWin.print();
+              }}>
+                <Printer className="h-4 w-4" />
+                {t("common.print")}
+              </Button>
+            </div>
+          )}
+          <div className="bg-card rounded-lg border overflow-hidden">
           {prescriptions.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">{t("patients.noPrescriptionsFound")}</div>
           ) : (
@@ -475,6 +495,7 @@ export const PatientDetailPage = () => {
               </tbody>
             </table>
           )}
+          </div>
         </div>
       )}
 
@@ -615,11 +636,7 @@ export const PatientDetailPage = () => {
 
       {/* ── DOCUMENTS ── */}
       {activeTab === "documents" && (
-        <div className="bg-card rounded-lg border p-8 text-center">
-          <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
-          <p className="text-muted-foreground">{t("patients.noDocuments")}</p>
-          <Button variant="outline" className="mt-4">{t("patients.uploadDocument")}</Button>
-        </div>
+        <PatientDocuments patientId={patientId ?? ""} isDemo={isDemo} />
       )}
     </div>
   );

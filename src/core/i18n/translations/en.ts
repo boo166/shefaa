@@ -87,6 +87,7 @@ export const en = {
     toggleTheme: "Toggle the app theme",
     compactView: "Compact View",
     comingSoon: "Coming soon",
+    print: "Print",
   },
 
   roles: {
@@ -201,6 +202,11 @@ export const en = {
     noDoctorsFound: "No doctors found",
     addFirstDoctor: "Add your first doctor to get started",
     toggleStatus: "Toggle Status",
+    schedule: "Schedule",
+    manageSchedule: "Manage Schedule",
+    workingHours: "Working Hours",
+    scheduleUpdated: "Schedule updated",
+    noScheduleSet: "No schedule set",
   },
   billing: {
     title: "Billing",

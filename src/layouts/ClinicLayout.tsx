@@ -3,10 +3,11 @@ import { useAuth } from "@/core/auth/authStore";
 import { useI18n } from "@/core/i18n/i18nStore";
 import { LanguageSwitcher } from "@/shared/components/LanguageSwitcher";
 import { NotificationCenter } from "@/shared/components/NotificationCenter";
+import { GlobalSearch } from "@/shared/components/GlobalSearch";
 import {
   LayoutDashboard, Users, CalendarDays, Stethoscope,
   Receipt, Pill, FlaskConical, Shield, BarChart3,
-  Settings, LogOut, Menu, X, Search,
+  Settings, LogOut, Menu, X,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -97,14 +98,7 @@ export const ClinicLayout = () => {
             <button onClick={() => setSidebarOpen(!sidebarOpen)} className="lg:hidden p-1.5 rounded-md hover:bg-muted">
               {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </button>
-            <div className="hidden sm:flex items-center gap-2 bg-muted rounded-md px-3 py-1.5">
-              <Search className="h-4 w-4 text-muted-foreground" />
-              <input
-                type="text"
-                placeholder={t("common.search")}
-                className="bg-transparent text-sm outline-none w-48 placeholder:text-muted-foreground"
-              />
-            </div>
+            <GlobalSearch />
           </div>
           <div className="flex items-center gap-2">
             <LanguageSwitcher />

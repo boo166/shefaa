@@ -3,12 +3,13 @@ import { useI18n } from "@/core/i18n/i18nStore";
 import { StatusBadge } from "@/shared/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { PermissionGuard } from "@/core/auth/PermissionGuard";
-import { UserPlus, Star, Search, MoreVertical, Pencil, Trash2 } from "lucide-react";
+import { UserPlus, Star, Search, MoreVertical, Pencil, Trash2, CalendarClock } from "lucide-react";
 import { useSupabaseTable } from "@/hooks/useSupabaseQuery";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { useAuth } from "@/core/auth/authStore";
 import { Tables } from "@/integrations/supabase/types";
 import { AddDoctorModal } from "./AddDoctorModal";
+import { DoctorScheduleModal } from "./DoctorScheduleModal";
 import { ConfirmDialog } from "@/shared/components/ConfirmDialog";
 import { EmptyState } from "@/shared/components/EmptyState";
 import { useQueryClient } from "@tanstack/react-query";
@@ -37,6 +38,7 @@ export const DoctorsPage = () => {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
+  const [scheduleDoctor, setScheduleDoctor] = useState<{ id: string; name: string } | null>(null);
 
   useRealtimeSubscription(["doctors"]);
 
@@ -152,6 +154,13 @@ export const DoctorsPage = () => {
                             {t("doctors.toggleStatus")}
                           </button>
                           <button
+                            className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-start"
+                            onClick={() => { setScheduleDoctor({ id: doc.id, name: doc.full_name }); setOpenMenu(null); }}
+                          >
+                            <CalendarClock className="h-3.5 w-3.5" />
+                            {t("doctors.schedule")}
+                          </button>
+                          <button
                             className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-destructive text-start"
                             onClick={() => { setDeleteId(doc.id); setOpenMenu(null); }}
                           >
@@ -195,6 +204,15 @@ export const DoctorsPage = () => {
         onConfirm={handleDelete}
         onCancel={() => setDeleteId(null)}
       />
+
+      {scheduleDoctor && (
+        <DoctorScheduleModal
+          open={!!scheduleDoctor}
+          onClose={() => setScheduleDoctor(null)}
+          doctorId={scheduleDoctor.id}
+          doctorName={scheduleDoctor.name}
+        />
+      )}
     </div>
   );
 };

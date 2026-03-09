@@ -8,8 +8,9 @@ import {
 } from "recharts";
 import { useSupabaseTable } from "@/hooks/useSupabaseQuery";
 import { Tables } from "@/integrations/supabase/types";
-import { TrendingUp, Users, CalendarDays, DollarSign } from "lucide-react";
+import { TrendingUp, Users, CalendarDays, DollarSign, Download, Printer } from "lucide-react";
 import { StatCard } from "@/shared/components/StatCard";
+import { Button } from "@/components/ui/button";
 
 const COLORS = [
   "hsl(174, 62%, 34%)", "hsl(210, 80%, 52%)", "hsl(152, 60%, 40%)",
@@ -115,10 +116,40 @@ export const ReportsPage = () => {
     { key: "doctors", label: t("reports.doctorPerformance") },
   ];
 
+  const exportReportCsv = () => {
+    let csv = "";
+    if (activeTab === "revenue") {
+      csv = "Month,Revenue,Pending/Overdue\n" + revenueData.map((r) => `${r.month},${r.revenue},${r.expenses}`).join("\n");
+    } else if (activeTab === "patients") {
+      csv = "Month,Patients\n" + patientGrowth.map((p) => `${p.month},${p.patients}`).join("\n");
+    } else if (activeTab === "appointments") {
+      csv = "Type,Count\n" + appointmentTypes.map((a) => `${a.name},${a.value}`).join("\n");
+    } else if (activeTab === "doctors") {
+      csv = "Doctor,Appointments,Completion Rate,Rating\n" + doctorPerformance.map((d) => `${d.name},${d.appointments},${d.completedRate},${d.rating}`).join("\n");
+    }
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `report-${activeTab}-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handlePrint = () => window.print();
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="page-header">
         <h1 className="page-title">{t("reports.title")}</h1>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={exportReportCsv}>
+            <Download className="h-4 w-4" /> CSV
+          </Button>
+          <Button variant="outline" size="sm" onClick={handlePrint}>
+            <Printer className="h-4 w-4" /> {t("common.print")}
+          </Button>
+        </div>
       </div>
 
       {/* Summary stats */}

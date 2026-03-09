@@ -87,6 +87,7 @@ export const ar = {
     toggleTheme: "تبديل مظهر التطبيق",
     compactView: "عرض مضغوط",
     comingSoon: "قريباً",
+    print: "طباعة",
   },
 
   roles: {
@@ -200,6 +201,11 @@ export const ar = {
     noDoctorsFound: "لا يوجد أطباء",
     addFirstDoctor: "أضف أول طبيب للبدء",
     toggleStatus: "تبديل الحالة",
+    schedule: "الجدول الزمني",
+    manageSchedule: "إدارة الجدول",
+    workingHours: "ساعات العمل",
+    scheduleUpdated: "تم تحديث الجدول",
+    noScheduleSet: "لم يتم تعيين جدول",
   },
   billing: {
     title: "الفواتير",
