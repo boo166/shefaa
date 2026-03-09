@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { formatDate, formatCurrency } from "@/shared/utils/formatDate";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -51,7 +52,7 @@ const invoiceStatusVariant: Record<string, "success" | "warning" | "destructive"
 };
 
 export const PatientDetailPage = () => {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { clinicSlug, patientId } = useParams();
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -182,7 +183,7 @@ export const PatientDetailPage = () => {
             </StatusBadge>
           </div>
           <p className="text-sm text-muted-foreground capitalize">
-            {patient.gender ? t(`patients.${patient.gender}`) : ""} · {patient.date_of_birth ? `${t("patients.dateOfBirth")}: ${patient.date_of_birth}` : ""}
+            {patient.gender ? t(`patients.${patient.gender}`) : ""} · {patient.date_of_birth ? `${t("patients.dateOfBirth")}: ${formatDate(patient.date_of_birth, locale)}` : ""}
           </p>
         </div>
         <Button variant="outline" onClick={() => navigate(`/tenant/${clinicSlug}/appointments`)}>
@@ -240,7 +241,7 @@ export const PatientDetailPage = () => {
                       <div className="h-2 w-2 rounded-full bg-primary mt-2 shrink-0" />
                       <div>
                         <p className="text-sm font-medium">{h.diagnosis ?? t("patients.noDiagnosis")}</p>
-                        <p className="text-xs text-muted-foreground">{h.record_date} · {h.doctors?.full_name ?? "—"}</p>
+                        <p className="text-xs text-muted-foreground">{formatDate(h.record_date, locale)} · {h.doctors?.full_name ?? "—"}</p>
                       </div>
                     </div>
                   ))}
@@ -281,14 +282,14 @@ export const PatientDetailPage = () => {
                 <Receipt className="h-4 w-4 text-muted-foreground" />
                 <span className="text-xs text-muted-foreground">{t("patients.totalBilled")}</span>
               </div>
-              <p className="text-2xl font-bold text-foreground">${totalBilled.toLocaleString()}</p>
+              <p className="text-2xl font-bold text-foreground">{formatCurrency(totalBilled, locale)}</p>
             </div>
             <div className="stat-card">
               <div className="flex items-center gap-2 mb-1">
                 <Receipt className="h-4 w-4 text-success" />
                 <span className="text-xs text-muted-foreground">{t("patients.totalPaid")}</span>
               </div>
-              <p className="text-2xl font-bold text-success">${totalPaid.toLocaleString()}</p>
+              <p className="text-2xl font-bold text-success">{formatCurrency(totalPaid, locale)}</p>
             </div>
           </div>
         </div>
@@ -310,7 +311,7 @@ export const PatientDetailPage = () => {
               <tbody>
                 {medicalRecords.map((h: any, i: number) => (
                   <tr key={i} className="hover:bg-muted/30 transition-colors">
-                    <td className="text-muted-foreground whitespace-nowrap">{h.record_date}</td>
+                    <td className="text-muted-foreground whitespace-nowrap">{formatDate(h.record_date, locale)}</td>
                     <td className="font-medium">{h.diagnosis ?? "—"}</td>
                     <td>{h.doctors?.full_name ?? "—"}</td>
                     <td className="text-sm text-muted-foreground max-w-xs truncate">{h.notes}</td>
@@ -342,7 +343,7 @@ export const PatientDetailPage = () => {
                     <td className="font-medium">{rx.medication}</td>
                     <td>{rx.dosage}</td>
                     <td>{rx.doctors?.full_name ?? "—"}</td>
-                    <td className="text-muted-foreground">{rx.prescribed_date}</td>
+                    <td className="text-muted-foreground">{formatDate(rx.prescribed_date, locale)}</td>
                     <td>
                       <StatusBadge variant={rx.status === "active" ? "success" : "default"}>
                         {rx.status === "active" ? t("patients.active") : t("patients.inactive")}
@@ -369,7 +370,7 @@ export const PatientDetailPage = () => {
                     <StatusBadge variant="info">{note.record_type?.replace("_", " ") ?? "Note"}</StatusBadge>
                     <span className="text-sm text-muted-foreground ms-3">{note.doctors?.full_name}</span>
                   </div>
-                  <span className="text-sm text-muted-foreground">{note.record_date}</span>
+                  <span className="text-sm text-muted-foreground">{formatDate(note.record_date, locale)}</span>
                 </div>
                 <p className="text-sm leading-relaxed">{note.notes}</p>
               </div>
@@ -415,7 +416,7 @@ export const PatientDetailPage = () => {
                     <tr key={l.id} className="hover:bg-muted/30 transition-colors">
                       <td className="font-medium">{l.test_name}</td>
                       <td>{l.doctors?.full_name ?? "—"}</td>
-                      <td className="text-muted-foreground whitespace-nowrap">{l.order_date}</td>
+                      <td className="text-muted-foreground whitespace-nowrap">{formatDate(l.order_date, locale)}</td>
                       <td>
                         <StatusBadge variant={labStatusVariant[l.status] ?? "default"}>
                           {getLabStatusLabel(l.status)}
@@ -446,11 +447,11 @@ export const PatientDetailPage = () => {
               <p className="text-xs text-muted-foreground mt-1">{t("billing.invoicesThisMonth")}</p>
             </div>
             <div className="stat-card text-center">
-              <p className="text-2xl font-bold">${totalBilled.toLocaleString()}</p>
+              <p className="text-2xl font-bold">{formatCurrency(totalBilled, locale)}</p>
               <p className="text-xs text-muted-foreground mt-1">{t("patients.totalBilled")}</p>
             </div>
             <div className="stat-card text-center">
-              <p className="text-2xl font-bold text-success">${totalPaid.toLocaleString()}</p>
+              <p className="text-2xl font-bold text-success">{formatCurrency(totalPaid, locale)}</p>
               <p className="text-xs text-muted-foreground mt-1">{t("billing.paid")}</p>
             </div>
           </div>
@@ -475,8 +476,8 @@ export const PatientDetailPage = () => {
                     <tr key={inv.id} className="hover:bg-muted/30 transition-colors">
                       <td className="font-medium">{inv.invoice_code}</td>
                       <td>{inv.service}</td>
-                      <td className="font-semibold">${Number(inv.amount).toLocaleString()}</td>
-                      <td className="text-muted-foreground whitespace-nowrap">{inv.invoice_date}</td>
+                      <td className="font-semibold">{formatCurrency(Number(inv.amount), locale)}</td>
+                      <td className="text-muted-foreground whitespace-nowrap">{formatDate(inv.invoice_date, locale)}</td>
                       <td>
                         <StatusBadge variant={invoiceStatusVariant[inv.status] ?? "default"}>
                           {getInvoiceStatusLabel(inv.status)}

@@ -15,6 +15,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Tables } from "@/integrations/supabase/types";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { formatDate, formatCurrency } from "@/shared/utils/formatDate";
 
 type Invoice = Tables<"invoices"> & { patients?: { full_name: string } | null };
 
@@ -28,7 +29,7 @@ const DEMO_INVOICES = [
 const statusVariant = { paid: "success", pending: "warning", overdue: "destructive" } as const;
 
 export const BillingPage = () => {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const isDemo = user?.tenantId === "demo";
@@ -76,8 +77,8 @@ export const BillingPage = () => {
     { key: "invoice_code", header: t("billing.invoiceNumber"), searchable: true, render: (inv) => <span className="font-medium">{inv.invoice_code}</span> },
     { key: "patient_name", header: t("appointments.patient"), searchable: true },
     { key: "service", header: t("common.service"), searchable: true },
-    { key: "amount", header: t("common.amount"), render: (inv) => <span className="font-semibold">${inv.amount}</span> },
-    { key: "invoice_date", header: t("common.date") },
+    { key: "amount", header: t("common.amount"), render: (inv) => <span className="font-semibold">{formatCurrency(inv.amount, locale)}</span> },
+    { key: "invoice_date", header: t("common.date"), render: (inv) => formatDate(inv.invoice_date, locale) },
     { key: "status", header: t("common.status"), render: (inv) => <StatusBadge variant={(statusVariant as any)[inv.status] ?? "default"}>{getStatusLabel(inv.status)}</StatusBadge> },
     {
       key: "actions",
@@ -104,8 +105,8 @@ export const BillingPage = () => {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard title={t("billing.totalRevenue")} value={`$${totalRevenue.toLocaleString()}`} icon={DollarSign} />
-        <StatCard title={t("billing.pendingPayments")} value={`$${pendingAmount.toLocaleString()}`} icon={CreditCard} />
+        <StatCard title={t("billing.totalRevenue")} value={formatCurrency(totalRevenue, locale)} icon={DollarSign} />
+        <StatCard title={t("billing.pendingPayments")} value={formatCurrency(pendingAmount, locale)} icon={CreditCard} />
         <StatCard title={t("billing.invoicesThisMonth")} value={String(displayData.length)} icon={FileText} />
         <StatCard title={t("billing.collectionRate")} value={displayData.length ? `${Math.round((displayData.filter((i) => i.status === "paid").length / displayData.length) * 100)}%` : "—"} icon={TrendingUp} />
       </div>

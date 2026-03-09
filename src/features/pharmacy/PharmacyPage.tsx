@@ -15,6 +15,7 @@ import { ConfirmDialog } from "@/shared/components/ConfirmDialog";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { formatCurrency } from "@/shared/utils/formatDate";
 
 type Medication = Tables<"medications">;
 
@@ -29,7 +30,7 @@ const DEMO_MEDS = [
 const statusVariant: Record<string, "success" | "warning" | "destructive"> = { in_stock: "success", low_stock: "warning", out_of_stock: "destructive" };
 
 export const PharmacyPage = () => {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const isDemo = user?.tenantId === "demo";
@@ -102,7 +103,7 @@ export const PharmacyPage = () => {
         </div>
       )
     },
-    { key: "price", header: t("common.price"), render: (m) => `$${m.price.toFixed(2)}` },
+    { key: "price", header: t("common.price"), render: (m) => formatCurrency(m.price, locale) },
     { key: "status", header: t("common.status"), render: (m) => <StatusBadge variant={statusVariant[m.status] ?? "default"}>{getMedStatusLabel(m.status)}</StatusBadge> },
     {
       key: "actions",
@@ -125,7 +126,7 @@ export const PharmacyPage = () => {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatCard title={t("pharmacy.totalMedications")} value={String(meds.length)} icon={Pill} />
         <StatCard title={t("pharmacy.lowStockItems")} value={String(meds.filter((m) => m.status === "low_stock").length)} icon={AlertTriangle} />
-        <StatCard title={t("pharmacy.inventoryValue")} value={`$${meds.reduce((s, m) => s + m.price * m.stock, 0).toLocaleString()}`} icon={Package} />
+        <StatCard title={t("pharmacy.inventoryValue")} value={formatCurrency(meds.reduce((s, m) => s + m.price * m.stock, 0), locale)} icon={Package} />
       </div>
 
       <DataTable

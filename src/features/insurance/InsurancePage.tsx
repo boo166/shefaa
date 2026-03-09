@@ -14,6 +14,7 @@ import { NewClaimModal } from "./NewClaimModal";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { formatDate, formatCurrency } from "@/shared/utils/formatDate";
 
 type Claim = Tables<"insurance_claims"> & { patients?: { full_name: string } | null };
 
@@ -27,7 +28,7 @@ const DEMO_CLAIMS = [
 const statusVariant: Record<string, "success" | "warning" | "destructive"> = { approved: "success", pending: "warning", rejected: "destructive" };
 
 export const InsurancePage = () => {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const isDemo = user?.tenantId === "demo";
@@ -78,8 +79,8 @@ export const InsurancePage = () => {
     { key: "patient_name", header: t("appointments.patient"), searchable: true },
     { key: "provider", header: t("common.provider"), searchable: true },
     { key: "service", header: t("common.service"), searchable: true },
-    { key: "amount", header: t("common.amount"), render: (c) => `$${c.amount}` },
-    { key: "claim_date", header: t("common.date") },
+    { key: "amount", header: t("common.amount"), render: (c) => formatCurrency(c.amount, locale) },
+    { key: "claim_date", header: t("common.date"), render: (c) => formatDate(c.claim_date, locale) },
     { key: "status", header: t("common.status"), render: (c) => <StatusBadge variant={statusVariant[c.status] ?? "default"}>{getClaimStatusLabel(c.status)}</StatusBadge> },
     {
       key: "actions",
