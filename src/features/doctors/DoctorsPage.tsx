@@ -38,6 +38,7 @@ export const DoctorsPage = () => {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
+  const [scheduleDoctor, setScheduleDoctor] = useState<{ id: string; name: string } | null>(null);
 
   useRealtimeSubscription(["doctors"]);
 
