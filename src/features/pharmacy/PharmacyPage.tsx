@@ -30,7 +30,7 @@ const DEMO_MEDS = [
 const statusVariant: Record<string, "success" | "warning" | "destructive"> = { in_stock: "success", low_stock: "warning", out_of_stock: "destructive" };
 
 export const PharmacyPage = () => {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const isDemo = user?.tenantId === "demo";
