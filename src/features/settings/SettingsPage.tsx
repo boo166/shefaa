@@ -1,72 +1,27 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useI18n } from "@/core/i18n/i18nStore";
 import { useAuth } from "@/core/auth/authStore";
-import { LanguageSwitcher } from "@/shared/components/LanguageSwitcher";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PermissionGuard } from "@/core/auth/PermissionGuard";
 import { cn } from "@/lib/utils";
-import { Building, Users, Bell, Palette, Loader2, UserPlus, Shield, Eye, EyeOff } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
-import { toast } from "@/hooks/use-toast";
-import { useSupabaseTable } from "@/hooks/useSupabaseQuery";
-import { Tables } from "@/integrations/supabase/types";
+import { Building, Users, Bell, Palette, Shield } from "lucide-react";
 import { AddUserModal } from "./AddUserModal";
 import { useQueryClient } from "@tanstack/react-query";
-import { useDarkMode } from "@/hooks/useDarkMode";
+import { useSupabaseTable } from "@/hooks/useSupabaseQuery";
+import { Tables } from "@/integrations/supabase/types";
+import { GeneralTab } from "./tabs/GeneralTab";
+import { UsersTab } from "./tabs/UsersTab";
+import { SecurityTab } from "./tabs/SecurityTab";
+import { NotificationsTab } from "./tabs/NotificationsTab";
+import { AppearanceTab } from "./tabs/AppearanceTab";
 
 type Tab = "general" | "users" | "notifications" | "appearance" | "security";
 
 export const SettingsPage = () => {
-  const { t, calendarType, setCalendarType } = useI18n();
-  const { user, logout } = useAuth();
-  const { enabled: darkMode, setEnabled: setDarkMode } = useDarkMode();
+  const { t } = useI18n();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const isDemo = user?.tenantId === "demo";
   const [activeTab, setActiveTab] = useState<Tab>("general");
-  const [saving, setSaving] = useState(false);
   const [showAddUser, setShowAddUser] = useState(false);
-
-  // Clinic info form
-  const [clinicName, setClinicName] = useState(user?.tenantName ?? "");
-  const [clinicPhone, setClinicPhone] = useState("");
-  const [clinicEmail, setClinicEmail] = useState("");
-  const [clinicAddress, setClinicAddress] = useState("");
-
-  // Password change
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [showPasswords, setShowPasswords] = useState(false);
-  const [changingPassword, setChangingPassword] = useState(false);
-
-  // Notification settings
-  const [notifSettings, setNotifSettings] = useState({
-    appointmentReminders: true,
-    labResultsReady: true,
-    billingAlerts: true,
-    systemUpdates: false,
-  });
-
-  // Load tenant data
-  useEffect(() => {
-    if (isDemo || !user?.tenantId) return;
-    supabase
-      .from("tenants")
-      .select("*")
-      .eq("id", user.tenantId)
-      .single()
-      .then(({ data }) => {
-        if (data) {
-          setClinicName(data.name);
-          setClinicPhone(data.phone ?? "");
-          setClinicEmail(data.email ?? "");
-          setClinicAddress(data.address ?? "");
-        }
-      });
-  }, [user?.tenantId, isDemo]);
 
   const { data: profiles = [], refetch: refetchProfiles } = useSupabaseTable<
     Tables<"profiles"> & { user_roles?: { role: string }[] }
@@ -74,59 +29,6 @@ export const SettingsPage = () => {
     select: "*, user_roles(role)",
     enabled: !isDemo,
   });
-
-  const handleSaveGeneral = async () => {
-    if (isDemo) {
-      toast({
-        title: t("common.demoMode"),
-        description: t("common.demoModeNoSave"),
-        variant: "destructive",
-      });
-      return;
-    }
-    setSaving(true);
-    const { error } = await supabase
-      .from("tenants")
-      .update({
-        name: clinicName,
-        phone: clinicPhone || null,
-        email: clinicEmail || null,
-        address: clinicAddress || null,
-      })
-      .eq("id", user?.tenantId ?? "");
-
-    if (error) {
-      toast({ title: t("common.error"), description: error.message, variant: "destructive" });
-    } else {
-      toast({ title: t("common.saved") });
-    }
-    setSaving(false);
-  };
-
-  const handleChangePassword = async () => {
-    if (isDemo) {
-      toast({ title: t("common.demoMode"), variant: "destructive" });
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      toast({ title: t("common.passwordsDontMatch"), variant: "destructive" });
-      return;
-    }
-    if (newPassword.length < 6) {
-      toast({ title: t("common.passwordMinLength"), variant: "destructive" });
-      return;
-    }
-    setChangingPassword(true);
-    const { error } = await supabase.auth.updateUser({ password: newPassword });
-    if (error) {
-      toast({ title: t("common.error"), description: error.message, variant: "destructive" });
-    } else {
-      toast({ title: t("auth.passwordUpdated"), description: t("auth.passwordUpdatedDesc") });
-      setNewPassword("");
-      setConfirmPassword("");
-    }
-    setChangingPassword(false);
-  };
 
   const tabs: { key: Tab; icon: any; label: string }[] = [
     { key: "general", icon: Building, label: t("settings.general") },
@@ -150,7 +52,9 @@ export const SettingsPage = () => {
               onClick={() => setActiveTab(tab.key)}
               className={cn(
                 "flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-medium transition-colors whitespace-nowrap",
-                activeTab === tab.key ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted",
+                activeTab === tab.key
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:bg-muted",
               )}
             >
               <tab.icon className="h-4 w-4" />
@@ -160,197 +64,17 @@ export const SettingsPage = () => {
         </div>
 
         <div className="flex-1 bg-card rounded-lg border p-6 max-w-2xl">
-          {activeTab === "general" && (
-            <div className="space-y-6">
-              <h3 className="font-semibold text-lg">{t("settings.clinicInfo")}</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>{t("settings.clinicName")}</Label>
-                  <Input value={clinicName} onChange={(e) => setClinicName(e.target.value)} />
-                </div>
-                <div className="space-y-2">
-                  <Label>{t("settings.slug")}</Label>
-                  <Input defaultValue={user?.tenantSlug ?? ""} disabled />
-                </div>
-                <div className="space-y-2">
-                  <Label>{t("common.phone")}</Label>
-                  <Input value={clinicPhone} onChange={(e) => setClinicPhone(e.target.value)} />
-                </div>
-                <div className="space-y-2">
-                  <Label>{t("common.email")}</Label>
-                  <Input value={clinicEmail} onChange={(e) => setClinicEmail(e.target.value)} />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>{t("settings.address")}</Label>
-                <Input value={clinicAddress} onChange={(e) => setClinicAddress(e.target.value)} />
-              </div>
-              <div className="flex items-center gap-4">
-                <Label>{t("common.language")}</Label>
-                <LanguageSwitcher />
-              </div>
-
-              <div className="flex items-center gap-4">
-                <Label>{t("settings.calendarSystem")}</Label>
-                <Select value={calendarType} onValueChange={(v) => setCalendarType(v as any)}>
-                  <SelectTrigger className="w-[220px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="gregorian">{t("settings.calendarGregorian")}</SelectItem>
-                    <SelectItem value="hijri">{t("settings.calendarHijri")}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <Button onClick={handleSaveGeneral} disabled={saving}>
-                {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-                {t("common.save")}
-              </Button>
-            </div>
-          )}
-
+          {activeTab === "general" && <GeneralTab />}
           {activeTab === "users" && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-semibold text-lg">{t("settings.usersRoles")}</h3>
-                  <p className="text-sm text-muted-foreground">{t("settings.manageStaff")}</p>
-                </div>
-                <PermissionGuard permission="manage_users">
-                  <Button onClick={() => setShowAddUser(true)} size="sm">
-                    <UserPlus className="h-4 w-4" /> {t("settings.addUser")}
-                  </Button>
-                </PermissionGuard>
-              </div>
-              <PermissionGuard
-                permission="manage_users"
-                fallback={<p className="text-muted-foreground">{t("settings.noPermission")}</p>}
-              >
-                <div className="space-y-3">
-                  {isDemo ? (
-                    ["Dr. Sarah Ahmed - Admin", "Dr. John Smith - Doctor", "Emily Davis - Receptionist"].map((u, i) => (
-                      <div key={i} className="flex items-center justify-between p-3 rounded-lg border">
-                        <span className="text-sm">{u}</span>
-                        <Button variant="outline" size="sm">
-                          {t("common.edit")}
-                        </Button>
-                      </div>
-                    ))
-                  ) : profiles.length > 0 ? (
-                    profiles.map((p) => (
-                      <div key={p.id} className="flex items-center justify-between p-3 rounded-lg border">
-                        <div className="flex items-center gap-3">
-                          <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-medium text-primary">
-                            {p.full_name.charAt(0)}
-                          </div>
-                          <div>
-                            <span className="text-sm font-medium">{p.full_name}</span>
-                            <span className="text-xs text-muted-foreground ml-2 capitalize bg-muted px-2 py-0.5 rounded">
-                              {(p as any).user_roles?.[0]?.role?.replace("_", " ") ?? "—"}
-                            </span>
-                          </div>
-                        </div>
-                        <Button variant="outline" size="sm">
-                          {t("common.edit")}
-                        </Button>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-muted-foreground text-sm py-4 text-center">{t("common.noUsersFound")}</p>
-                  )}
-                </div>
-              </PermissionGuard>
-            </div>
+            <UsersTab
+              profiles={profiles}
+              isDemo={isDemo}
+              onAddUser={() => setShowAddUser(true)}
+            />
           )}
-
-          {activeTab === "security" && (
-            <div className="space-y-6">
-              <h3 className="font-semibold text-lg">{t("settings.changePassword")}</h3>
-              <div className="space-y-4 max-w-sm">
-                <div className="space-y-2">
-                  <Label>{t("settings.newPassword")}</Label>
-                  <div className="relative">
-                    <Input
-                      type={showPasswords ? "text" : "password"}
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      placeholder={t("common.mustBeAtLeast6")}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPasswords(!showPasswords)}
-                      className="absolute end-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-                    >
-                      {showPasswords ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>{t("settings.confirmPassword")}</Label>
-                  <Input
-                    type={showPasswords ? "text" : "password"}
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder={t("settings.confirmPassword")}
-                  />
-                </div>
-                <Button onClick={handleChangePassword} disabled={changingPassword || !newPassword}>
-                  {changingPassword && <Loader2 className="h-4 w-4 animate-spin" />}
-                  {t("settings.updatePassword")}
-                </Button>
-              </div>
-
-              <div className="border-t pt-6">
-                <h4 className="font-medium text-sm text-destructive mb-2">{t("common.dangerZone")}</h4>
-                <Button variant="outline" className="text-destructive border-destructive/50" onClick={logout}>
-                  {t("common.signOut")}
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {activeTab === "notifications" && (
-            <div className="space-y-4">
-              <h3 className="font-semibold text-lg">{t("settings.notifPreferences")}</h3>
-              {[
-                { key: "appointmentReminders", label: t("settings.appointmentReminders") },
-                { key: "labResultsReady", label: t("settings.labResultsReady") },
-                { key: "billingAlerts", label: t("settings.billingAlerts") },
-                { key: "systemUpdates", label: t("settings.systemUpdates") },
-              ].map((pref) => (
-                <div key={pref.key} className="flex items-center justify-between p-3 rounded-lg border">
-                  <span className="text-sm">{pref.label}</span>
-                  <input
-                    type="checkbox"
-                    checked={(notifSettings as any)[pref.key]}
-                    onChange={(e) => setNotifSettings({ ...notifSettings, [pref.key]: e.target.checked })}
-                    className="h-4 w-4 rounded border-input accent-primary"
-                  />
-                </div>
-              ))}
-              <Button onClick={() => toast({ title: t("common.preferencesSaved") })}>{t("common.save")}</Button>
-            </div>
-          )}
-
-          {activeTab === "appearance" && (
-            <div className="space-y-4">
-              <h3 className="font-semibold text-lg">{t("settings.appearance")}</h3>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between p-3 rounded-lg border">
-                  <div>
-                    <p className="text-sm font-medium">{t("common.darkMode")}</p>
-                    <p className="text-xs text-muted-foreground">{t("common.toggleTheme")}</p>
-                  </div>
-                  <Switch checked={darkMode} onCheckedChange={setDarkMode} />
-                </div>
-                <div className="flex items-center justify-between p-3 rounded-lg border">
-                  <span className="text-sm">{t("common.compactView")}</span>
-                  <span className="text-xs text-muted-foreground">{t("common.comingSoon")}</span>
-                </div>
-              </div>
-            </div>
-          )}
+          {activeTab === "security" && <SecurityTab />}
+          {activeTab === "notifications" && <NotificationsTab />}
+          {activeTab === "appearance" && <AppearanceTab />}
         </div>
       </div>
 
