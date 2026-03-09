@@ -88,6 +88,7 @@ export const en = {
     compactView: "Compact View",
     comingSoon: "Coming soon",
     print: "Print",
+    selected: "selected",
   },
 
   roles: {

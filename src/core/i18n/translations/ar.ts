@@ -88,6 +88,7 @@ export const ar = {
     compactView: "عرض مضغوط",
     comingSoon: "قريباً",
     print: "طباعة",
+    selected: "محدد",
   },
 
   roles: {
