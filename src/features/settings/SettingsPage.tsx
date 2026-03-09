@@ -5,6 +5,7 @@ import { LanguageSwitcher } from "@/shared/components/LanguageSwitcher";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { PermissionGuard } from "@/core/auth/PermissionGuard";
 import { cn } from "@/lib/utils";
 import { Building, Users, Bell, Palette, Loader2, UserPlus, Shield, Eye, EyeOff } from "lucide-react";
@@ -14,12 +15,14 @@ import { useSupabaseTable } from "@/hooks/useSupabaseQuery";
 import { Tables } from "@/integrations/supabase/types";
 import { AddUserModal } from "./AddUserModal";
 import { useQueryClient } from "@tanstack/react-query";
+import { useDarkMode } from "@/hooks/useDarkMode";
 
 type Tab = "general" | "users" | "notifications" | "appearance" | "security";
 
 export const SettingsPage = () => {
   const { t } = useI18n();
   const { user, logout } = useAuth();
+  const { enabled: darkMode, setEnabled: setDarkMode } = useDarkMode();
   const queryClient = useQueryClient();
   const isDemo = user?.tenantId === "demo";
   const [activeTab, setActiveTab] = useState<Tab>("general");
@@ -50,33 +53,47 @@ export const SettingsPage = () => {
   // Load tenant data
   useEffect(() => {
     if (isDemo || !user?.tenantId) return;
-    supabase.from("tenants").select("*").eq("id", user.tenantId).single().then(({ data }) => {
-      if (data) {
-        setClinicName(data.name);
-        setClinicPhone(data.phone ?? "");
-        setClinicEmail(data.email ?? "");
-        setClinicAddress(data.address ?? "");
-      }
-    });
+    supabase
+      .from("tenants")
+      .select("*")
+      .eq("id", user.tenantId)
+      .single()
+      .then(({ data }) => {
+        if (data) {
+          setClinicName(data.name);
+          setClinicPhone(data.phone ?? "");
+          setClinicEmail(data.email ?? "");
+          setClinicAddress(data.address ?? "");
+        }
+      });
   }, [user?.tenantId, isDemo]);
 
-  const { data: profiles = [], refetch: refetchProfiles } = useSupabaseTable<Tables<"profiles"> & { user_roles?: { role: string }[] }>("profiles" as any, {
+  const { data: profiles = [], refetch: refetchProfiles } = useSupabaseTable<
+    Tables<"profiles"> & { user_roles?: { role: string }[] }
+  >("profiles" as any, {
     select: "*, user_roles(role)",
     enabled: !isDemo,
   });
 
   const handleSaveGeneral = async () => {
     if (isDemo) {
-      toast({ title: "Demo mode", description: "Settings cannot be saved in demo mode.", variant: "destructive" });
+      toast({
+        title: "Demo mode",
+        description: "Settings cannot be saved in demo mode.",
+        variant: "destructive",
+      });
       return;
     }
     setSaving(true);
-    const { error } = await supabase.from("tenants").update({
-      name: clinicName,
-      phone: clinicPhone || null,
-      email: clinicEmail || null,
-      address: clinicAddress || null,
-    }).eq("id", user?.tenantId ?? "");
+    const { error } = await supabase
+      .from("tenants")
+      .update({
+        name: clinicName,
+        phone: clinicPhone || null,
+        email: clinicEmail || null,
+        address: clinicAddress || null,
+      })
+      .eq("id", user?.tenantId ?? "");
 
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -129,12 +146,16 @@ export const SettingsPage = () => {
       <div className="flex flex-col lg:flex-row gap-6">
         <div className="lg:w-56 flex lg:flex-col gap-1 overflow-x-auto">
           {tabs.map((tab) => (
-            <button key={tab.key} onClick={() => setActiveTab(tab.key)}
-              className={cn("flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-medium transition-colors whitespace-nowrap",
-                activeTab === tab.key ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted"
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-medium transition-colors whitespace-nowrap",
+                activeTab === tab.key ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted",
               )}
             >
-              <tab.icon className="h-4 w-4" />{tab.label}
+              <tab.icon className="h-4 w-4" />
+              {tab.label}
             </button>
           ))}
         </div>
@@ -189,13 +210,18 @@ export const SettingsPage = () => {
                   </Button>
                 </PermissionGuard>
               </div>
-              <PermissionGuard permission="manage_users" fallback={<p className="text-muted-foreground">{t("settings.noPermission")}</p>}>
+              <PermissionGuard
+                permission="manage_users"
+                fallback={<p className="text-muted-foreground">{t("settings.noPermission")}</p>}
+              >
                 <div className="space-y-3">
                   {isDemo ? (
                     ["Dr. Sarah Ahmed - Admin", "Dr. John Smith - Doctor", "Emily Davis - Receptionist"].map((u, i) => (
                       <div key={i} className="flex items-center justify-between p-3 rounded-lg border">
                         <span className="text-sm">{u}</span>
-                        <Button variant="outline" size="sm">{t("common.edit")}</Button>
+                        <Button variant="outline" size="sm">
+                          {t("common.edit")}
+                        </Button>
                       </div>
                     ))
                   ) : profiles.length > 0 ? (
@@ -212,7 +238,9 @@ export const SettingsPage = () => {
                             </span>
                           </div>
                         </div>
-                        <Button variant="outline" size="sm">{t("common.edit")}</Button>
+                        <Button variant="outline" size="sm">
+                          {t("common.edit")}
+                        </Button>
                       </div>
                     ))
                   ) : (
@@ -297,8 +325,11 @@ export const SettingsPage = () => {
               <h3 className="font-semibold text-lg">{t("settings.appearance")}</h3>
               <div className="space-y-3">
                 <div className="flex items-center justify-between p-3 rounded-lg border">
-                  <span className="text-sm">Dark Mode</span>
-                  <span className="text-xs text-muted-foreground">Coming soon</span>
+                  <div>
+                    <p className="text-sm font-medium">Dark Mode</p>
+                    <p className="text-xs text-muted-foreground">Toggle the app theme</p>
+                  </div>
+                  <Switch checked={darkMode} onCheckedChange={setDarkMode} />
                 </div>
                 <div className="flex items-center justify-between p-3 rounded-lg border">
                   <span className="text-sm">Compact View</span>
