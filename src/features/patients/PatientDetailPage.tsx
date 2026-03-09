@@ -72,6 +72,7 @@ export const PatientDetailPage = () => {
 
   const tabs: { key: Tab; icon: any; label: string }[] = [
     { key: "overview", icon: User, label: t("patients.overview") },
+    { key: "appointments", icon: CalendarDays, label: t("common.appointments") },
     { key: "history", icon: Activity, label: t("patients.medicalHistory") },
     { key: "prescriptions", icon: Pill, label: t("patients.prescriptions") },
     { key: "notes", icon: FileText, label: t("patients.clinicalNotes") },
