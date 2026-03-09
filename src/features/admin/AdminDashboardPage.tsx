@@ -16,6 +16,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { formatDate, formatCurrency } from "@/shared/utils/formatDate";
+import { fetchProfilesWithRoles } from "@/shared/data/profiles";
 
 type AdminTab = "overview" | "clinics" | "users" | "subscriptions";
 
@@ -40,11 +41,7 @@ export const AdminDashboardPage = () => {
   // Fetch all profiles with roles
   const { data: profiles = [], isLoading: loadingProfiles } = useQuery({
     queryKey: ["admin-profiles"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("profiles").select("*, user_roles(role)").order("created_at", { ascending: false });
-      if (error) throw error;
-      return data ?? [];
-    },
+    queryFn: () => fetchProfilesWithRoles(),
   });
 
   // Fetch all subscriptions

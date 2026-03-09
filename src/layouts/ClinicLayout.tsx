@@ -1,11 +1,12 @@
 import { NavLink, Outlet, useParams, useNavigate } from "react-router-dom";
-import { useAuth } from "@/core/auth/authStore";
+import { useAuth, type Permission } from "@/core/auth/authStore";
 import { useI18n } from "@/core/i18n/i18nStore";
 import { LanguageSwitcher } from "@/shared/components/LanguageSwitcher";
 import { NotificationCenter } from "@/shared/components/NotificationCenter";
 import { GlobalSearch } from "@/shared/components/GlobalSearch";
 import { PaywallModal } from "@/core/subscription/PaywallModal";
 import { UpgradeBanner } from "@/core/subscription/UpgradeBanner";
+import { useFeatureAccess, type Feature } from "@/core/subscription/useFeatureAccess";
 import {
   LayoutDashboard, Users, CalendarDays, Stethoscope,
   Receipt, Pill, FlaskConical, Shield, BarChart3,
@@ -14,22 +15,31 @@ import {
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 
-const navItems = [
+interface NavItem {
+  path: string;
+  icon: typeof LayoutDashboard;
+  labelKey: string;
+  permission: Permission;
+  feature?: Feature;
+}
+
+const navItems: NavItem[] = [
   { path: "dashboard", icon: LayoutDashboard, labelKey: "common.dashboard", permission: "view_dashboard" },
   { path: "patients", icon: Users, labelKey: "common.patients", permission: "view_patients" },
-  { path: "appointments", icon: CalendarDays, labelKey: "common.appointments", permission: "view_appointments" },
+  { path: "appointments", icon: CalendarDays, labelKey: "common.appointments", permission: "view_appointments", feature: "appointments" },
   { path: "doctors", icon: Stethoscope, labelKey: "common.doctors", permission: "view_dashboard" },
-  { path: "billing", icon: Receipt, labelKey: "common.billing", permission: "view_billing" },
-  { path: "pharmacy", icon: Pill, labelKey: "common.pharmacy", permission: "manage_pharmacy" },
-  { path: "laboratory", icon: FlaskConical, labelKey: "common.laboratory", permission: "manage_laboratory" },
-  { path: "insurance", icon: Shield, labelKey: "common.insurance", permission: "view_billing" },
-  { path: "reports", icon: BarChart3, labelKey: "common.reports", permission: "view_reports" },
+  { path: "billing", icon: Receipt, labelKey: "common.billing", permission: "view_billing", feature: "billing" },
+  { path: "pharmacy", icon: Pill, labelKey: "common.pharmacy", permission: "manage_pharmacy", feature: "pharmacy" },
+  { path: "laboratory", icon: FlaskConical, labelKey: "common.laboratory", permission: "manage_laboratory", feature: "laboratory" },
+  { path: "insurance", icon: Shield, labelKey: "common.insurance", permission: "view_billing", feature: "insurance" },
+  { path: "reports", icon: BarChart3, labelKey: "common.reports", permission: "view_reports", feature: "reports" },
   { path: "settings", icon: Settings, labelKey: "common.settings", permission: "manage_clinic" },
 ] as const;
 
 export const ClinicLayout = () => {
   const { clinicSlug } = useParams();
   const { user, logout, hasPermission } = useAuth();
+  const { hasFeature } = useFeatureAccess();
   const { t } = useI18n();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -39,7 +49,7 @@ export const ClinicLayout = () => {
     navigate("/login");
   };
 
-  const visibleNav = navItems.filter((item) => hasPermission(item.permission as any));
+  const visibleNav = navItems.filter((item) => hasPermission(item.permission) && (!item.feature || hasFeature(item.feature)));
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">

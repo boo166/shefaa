@@ -105,8 +105,8 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { email, password, full_name, role } = await req.json();
-    if (!email || !password || !full_name || !role) {
+    const { email, full_name, role } = await req.json();
+    if (!email || !full_name || !role) {
       return new Response(JSON.stringify({ error: "Missing required fields" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -139,16 +139,20 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { data: newUser, error: createErr } = await adminClient.auth.admin.createUser({
-      email: normalizedEmail,
-      password,
-      email_confirm: false,
-      user_metadata: {
-        full_name,
-        tenant_id: callerProfile.tenant_id,
-        invite_code: inviteCode,
+    const origin = req.headers.get("origin");
+    const redirectTo = origin ? `${origin}/login` : undefined;
+
+    const { data: inviteUserData, error: createErr } = await adminClient.auth.admin.inviteUserByEmail(
+      normalizedEmail,
+      {
+        data: {
+          full_name,
+          tenant_id: callerProfile.tenant_id,
+          invite_code: inviteCode,
+        },
+        redirectTo,
       },
-    });
+    );
 
     if (createErr) {
       await adminClient
@@ -171,11 +175,11 @@ Deno.serve(async (req) => {
       _user_id: callerId,
       _action: "staff_invited",
       _entity_type: "user_invite",
-      _entity_id: newUser.user?.id ?? null,
+      _entity_id: inviteUserData.user?.id ?? null,
       _details: { email: normalizedEmail, role, invited_by: callerId },
     });
 
-    return new Response(JSON.stringify({ success: true, user_id: newUser.user?.id }), {
+    return new Response(JSON.stringify({ success: true, user_id: inviteUserData.user?.id }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

@@ -13,6 +13,10 @@ function slugify(value: string) {
     .replace(/(^-|-$)/g, "");
 }
 
+function isValidSlug(value: string) {
+  return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value);
+}
+
 // --- In-memory sliding-window rate limiter ---
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX = 5; // stricter for signup
@@ -63,7 +67,7 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    const { clinicName, fullName, email, password } = await req.json();
+    const { clinicName, fullName, email, password, slug: requestedSlug } = await req.json();
     if (!clinicName || !fullName || !email || !password) {
       return new Response(JSON.stringify({ error: "Missing required fields" }), {
         status: 400,
@@ -72,7 +76,14 @@ Deno.serve(async (req) => {
     }
 
     const normalizedEmail = String(email).trim().toLowerCase();
-    const slug = slugify(String(clinicName));
+    const slugInput = requestedSlug ? String(requestedSlug).trim() : String(clinicName);
+    const slug = slugify(slugInput);
+    if (!slug || !isValidSlug(slug)) {
+      return new Response(JSON.stringify({ error: "Invalid clinic URL slug" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     const { data: tenant, error: tenantErr } = await adminClient
       .from("tenants")
@@ -86,12 +97,31 @@ Deno.serve(async (req) => {
       // Check for duplicate slug constraint violation
       if (tenantErr?.message?.includes("slug") || tenantErr?.code === "23505") {
         errorMessage = "A clinic with this name already exists. Please choose a different name.";
-      } else if (tenantErr?.code === "23505") {
-        // General duplicate key constraint
-        errorMessage = "This clinic already exists. Please use a different name.";
       }
       
       return new Response(JSON.stringify({ error: errorMessage }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const { error: subErr } = await adminClient
+      .from("subscriptions")
+      .upsert(
+        {
+          tenant_id: tenant.id,
+          plan: "free",
+          status: "active",
+          amount: 0,
+          currency: "EGP",
+          billing_cycle: "monthly",
+        },
+        { onConflict: "tenant_id", ignoreDuplicates: true },
+      );
+
+    if (subErr) {
+      await adminClient.from("tenants").delete().eq("id", tenant.id);
+      return new Response(JSON.stringify({ error: "Failed to initialize subscription" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -125,7 +155,7 @@ Deno.serve(async (req) => {
       _details: { clinic_name: clinicName, owner_email: normalizedEmail },
     });
 
-    return new Response(JSON.stringify({ success: true }), {
+    return new Response(JSON.stringify({ success: true, tenant_id: tenant.id, slug }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

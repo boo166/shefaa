@@ -1,6 +1,6 @@
 import { useSubscription, PlanType } from "./SubscriptionContext";
 
-type Feature =
+export type Feature =
   | "appointments"
   | "billing"
   | "reports"

@@ -175,7 +175,11 @@ supabase.auth.onAuthStateChange(async (event, session) => {
   if (event === "SIGNED_IN" && session?.user) {
     setLoading(true);
     await loadUserProfile(session.user, (partial) => {
-      if (partial.user) setUser(partial.user, partial.supabaseUser);
+      if (partial.user) {
+        setUser(partial.user, partial.supabaseUser);
+      } else {
+        setUser(null);
+      }
     });
     setLoading(false);
   } else if (event === "SIGNED_OUT") {

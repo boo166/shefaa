@@ -1,7 +1,7 @@
 project_id = "sspayyqutfdjusqcaqwy"
 
 [functions.invite-staff]
-verify_jwt = false
+verify_jwt = true
 
 [functions.register-clinic]
 verify_jwt = false

@@ -4,9 +4,7 @@ import { useAuth } from "@/core/auth/authStore";
 import { cn } from "@/lib/utils";
 import { Building, Users, Bell, Palette, Shield, ScrollText, User } from "lucide-react";
 import { AddUserModal } from "./AddUserModal";
-import { useQueryClient } from "@tanstack/react-query";
-import { useSupabaseTable } from "@/hooks/useSupabaseQuery";
-import { Tables } from "@/integrations/supabase/types";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { GeneralTab } from "./tabs/GeneralTab";
 import { UsersTab } from "./tabs/UsersTab";
 import { SecurityTab } from "./tabs/SecurityTab";
@@ -14,6 +12,7 @@ import { NotificationsTab } from "./tabs/NotificationsTab";
 import { AppearanceTab } from "./tabs/AppearanceTab";
 import { AuditLogTab } from "./tabs/AuditLogTab";
 import { ProfileTab } from "./tabs/ProfileTab";
+import { fetchProfilesWithRoles } from "@/shared/data/profiles";
 
 type Tab = "profile" | "general" | "users" | "notifications" | "appearance" | "security" | "audit";
 
@@ -25,11 +24,11 @@ export const SettingsPage = () => {
   const [activeTab, setActiveTab] = useState<Tab>("profile");
   const [showAddUser, setShowAddUser] = useState(false);
 
-  const { data: profiles = [], refetch: refetchProfiles } = useSupabaseTable<
-    Tables<"profiles"> & { user_roles?: { role: string }[] }
-  >("profiles" as any, {
-    select: "*, user_roles(role)",
-    enabled: !isDemo,
+  const profilesQueryKey = ["profiles-with-roles", user?.tenantId];
+  const { data: profiles = [], refetch: refetchProfiles } = useQuery({
+    queryKey: profilesQueryKey,
+    enabled: !isDemo && !!user?.tenantId,
+    queryFn: () => fetchProfilesWithRoles({ tenantId: user?.tenantId }),
   });
 
   const tabs: { key: Tab; icon: any; label: string }[] = [
@@ -88,7 +87,7 @@ export const SettingsPage = () => {
         open={showAddUser}
         onClose={() => setShowAddUser(false)}
         onSuccess={() => {
-          queryClient.invalidateQueries({ queryKey: ["profiles"] });
+          queryClient.invalidateQueries({ queryKey: profilesQueryKey });
           refetchProfiles();
         }}
       />

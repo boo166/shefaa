@@ -1,5 +1,5 @@
 import { jsPDF } from "jspdf";
-import "jspdf-autotable";
+import autoTable from "jspdf-autotable";
 
 interface TableColumn {
   header: string;
@@ -32,7 +32,7 @@ export function generatePDF(options: PdfOptions) {
   }
 
   // Table
-  (doc as any).autoTable({
+  autoTable(doc, {
     startY: subtitle ? 35 : 28,
     head: [columns.map((c) => c.header)],
     body: data.map((row) => columns.map((c) => row[c.dataKey] ?? "")),
@@ -49,7 +49,7 @@ export function generatePDF(options: PdfOptions) {
   });
 
   // Footer
-  const pageCount = (doc as any).internal.getNumberOfPages();
+  const pageCount = doc.getNumberOfPages();
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
     doc.setFontSize(9);
@@ -303,7 +303,7 @@ export async function generatePatientReportPDF(data: PatientReportData) {
   // ── Medical History ──
   if (medicalRecords.length > 0) {
     addSectionTitle(l.medicalHistory);
-    (doc as any).autoTable({
+    const table = autoTable(doc, {
       startY: y,
       head: [[l.date, l.type, l.diagnosis, l.doctor, l.notes]],
       body: medicalRecords.map((r) => [
@@ -318,13 +318,13 @@ export async function generatePatientReportPDF(data: PatientReportData) {
       styles: { fontSize: 8, cellPadding: 2 },
       margin: { left: 14, right: 14 },
     });
-    y = (doc as any).lastAutoTable.finalY + 4;
+    y = table.finalY + 4;
   }
 
   // ── Prescriptions ──
   if (prescriptions.length > 0) {
     addSectionTitle(l.prescriptions);
-    (doc as any).autoTable({
+    const table = autoTable(doc, {
       startY: y,
       head: [[l.medication, l.dosage, l.date, l.doctor, l.status]],
       body: prescriptions.map((rx) => [
@@ -339,13 +339,13 @@ export async function generatePatientReportPDF(data: PatientReportData) {
       styles: { fontSize: 8, cellPadding: 2 },
       margin: { left: 14, right: 14 },
     });
-    y = (doc as any).lastAutoTable.finalY + 4;
+    y = table.finalY + 4;
   }
 
   // ── Lab Orders ──
   if (labOrders.length > 0) {
     addSectionTitle(l.labOrders);
-    (doc as any).autoTable({
+    const table = autoTable(doc, {
       startY: y,
       head: [[l.test, l.date, l.doctor, l.status, l.result]],
       body: labOrders.map((lo) => [
@@ -360,13 +360,13 @@ export async function generatePatientReportPDF(data: PatientReportData) {
       styles: { fontSize: 8, cellPadding: 2 },
       margin: { left: 14, right: 14 },
     });
-    y = (doc as any).lastAutoTable.finalY + 4;
+    y = table.finalY + 4;
   }
 
   // ── Invoices ──
   if (invoices.length > 0) {
     addSectionTitle(l.billing);
-    (doc as any).autoTable({
+    autoTable(doc, {
       startY: y,
       head: [[l.invoice, l.service, l.amount, l.date, l.status]],
       body: invoices.map((inv) => [
@@ -384,7 +384,7 @@ export async function generatePatientReportPDF(data: PatientReportData) {
   }
 
   // ── Page numbers ──
-  const pageCount = (doc as any).internal.getNumberOfPages();
+  const pageCount = doc.getNumberOfPages();
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
     doc.setFontSize(8);
