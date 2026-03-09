@@ -241,7 +241,7 @@ export const PatientDetailPage = () => {
                       <div className="h-2 w-2 rounded-full bg-primary mt-2 shrink-0" />
                       <div>
                         <p className="text-sm font-medium">{h.diagnosis ?? t("patients.noDiagnosis")}</p>
-                        <p className="text-xs text-muted-foreground">{h.record_date} · {h.doctors?.full_name ?? "—"}</p>
+                        <p className="text-xs text-muted-foreground">{formatDate(h.record_date, locale)} · {h.doctors?.full_name ?? "—"}</p>
                       </div>
                     </div>
                   ))}
