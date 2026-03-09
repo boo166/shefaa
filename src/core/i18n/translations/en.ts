@@ -163,6 +163,9 @@ export const en = {
     appointmentCreated: "Appointment created",
     appointmentRescheduled: "Appointment rescheduled",
     appointmentStatusUpdated: "Appointment status updated",
+    more: "more",
+    dragToRescheduleHint:
+      "Drag-to-reschedule is only available for users with appointment management access.",
   },
   doctors: {
     title: "Doctors",

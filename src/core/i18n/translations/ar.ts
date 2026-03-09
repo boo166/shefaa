@@ -163,6 +163,9 @@ export const ar = {
     appointmentCreated: "تم إنشاء الموعد",
     appointmentRescheduled: "تم إعادة جدولة الموعد",
     appointmentStatusUpdated: "تم تحديث حالة الموعد",
+    more: "أخرى",
+    dragToRescheduleHint:
+      "ميزة السحب لإعادة الجدولة متاحة فقط للمستخدمين الذين لديهم صلاحية إدارة المواعيد.",
   },
   doctors: {
     title: "الأطباء",
