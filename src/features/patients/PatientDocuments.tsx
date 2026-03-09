@@ -2,6 +2,7 @@ import { useState, useRef } from "react";
 import { useI18n } from "@/core/i18n/i18nStore";
 import { useAuth } from "@/core/auth/authStore";
 import { supabase } from "@/integrations/supabase/client";
+import { Tables } from "@/integrations/supabase/types";
 import { toast } from "@/hooks/use-toast";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -24,6 +25,8 @@ const FILE_ICONS: Record<string, typeof FileText> = {
 
 const MAX_SIZE = 10 * 1024 * 1024; // 10MB
 
+type PatientDocument = Tables<"patient_documents">;
+
 export const PatientDocuments = ({ patientId, isDemo }: Props) => {
   const { t, locale, calendarType } = useI18n();
   const { user } = useAuth();
@@ -37,7 +40,7 @@ export const PatientDocuments = ({ patientId, isDemo }: Props) => {
     queryKey: ["patient_documents", patientId],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("patient_documents" as any)
+        .from("patient_documents")
         .select("*")
         .eq("patient_id", patientId)
         .order("created_at", { ascending: false });
@@ -60,37 +63,41 @@ export const PatientDocuments = ({ patientId, isDemo }: Props) => {
     const ext = file.name.split(".").pop();
     const path = `${user.tenantId}/${patientId}/${Date.now()}.${ext}`;
 
-    const { error: uploadErr } = await supabase.storage
-      .from("patient-documents")
-      .upload(path, file);
+    try {
+      const { error: uploadErr } = await supabase.storage
+        .from("patient-documents")
+        .upload(path, file);
 
-    if (uploadErr) {
-      toast({ title: t("common.error"), description: uploadErr.message, variant: "destructive" });
-      setUploading(false);
-      return;
-    }
+      if (uploadErr) {
+        toast({ title: t("common.error"), description: uploadErr.message, variant: "destructive" });
+        return;
+      }
 
-    const { error: insertErr } = await supabase.from("patient_documents" as any).insert({
-      patient_id: patientId,
-      tenant_id: user.tenantId,
-      file_name: file.name,
-      file_path: path,
-      file_size: file.size,
-      file_type: file.type,
-      uploaded_by: user.id,
-    });
+      const { error: insertErr } = await supabase.from("patient_documents").insert({
+        patient_id: patientId,
+        tenant_id: user.tenantId,
+        file_name: file.name,
+        file_path: path,
+        file_size: file.size,
+        file_type: file.type || "application/octet-stream",
+        uploaded_by: user.id,
+      });
 
-    if (insertErr) {
-      toast({ title: t("common.error"), description: insertErr.message, variant: "destructive" });
-    } else {
+      if (insertErr) {
+        await supabase.storage.from("patient-documents").remove([path]);
+        toast({ title: t("common.error"), description: insertErr.message, variant: "destructive" });
+        return;
+      }
+
       toast({ title: t("common.saved") });
       queryClient.invalidateQueries({ queryKey: ["patient_documents", patientId] });
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
     }
-    setUploading(false);
-    if (fileRef.current) fileRef.current.value = "";
   };
 
-  const handleDownload = async (doc: any) => {
+  const handleDownload = async (doc: PatientDocument) => {
     const { data, error } = await supabase.storage
       .from("patient-documents")
       .download(doc.file_path);
@@ -109,13 +116,37 @@ export const PatientDocuments = ({ patientId, isDemo }: Props) => {
   const handleDelete = async () => {
     if (!deleteId) return;
     setDeleting(true);
-    const doc = documents.find((d: any) => d.id === deleteId);
-    if (doc) {
-      await supabase.storage.from("patient-documents").remove([(doc as any).file_path]);
-      await supabase.from("patient_documents" as any).delete().eq("id", deleteId);
-      queryClient.invalidateQueries({ queryKey: ["patient_documents", patientId] });
-      toast({ title: t("common.saved") });
+
+    const { data: deletedDoc, error: deleteDbErr } = await supabase
+      .from("patient_documents")
+      .delete()
+      .eq("id", deleteId)
+      .select("file_path")
+      .single();
+
+    if (deleteDbErr) {
+      toast({ title: t("common.error"), description: deleteDbErr.message, variant: "destructive" });
+      setDeleting(false);
+      return;
     }
+
+    if (deletedDoc?.file_path) {
+      const { error: storageErr } = await supabase
+        .storage
+        .from("patient-documents")
+        .remove([deletedDoc.file_path]);
+
+      if (storageErr) {
+        toast({
+          title: t("common.error"),
+          description: `Document record deleted, but file cleanup failed: ${storageErr.message}`,
+          variant: "destructive",
+        });
+      }
+    }
+
+    queryClient.invalidateQueries({ queryKey: ["patient_documents", patientId] });
+    toast({ title: t("common.saved") });
     setDeleting(false);
     setDeleteId(null);
   };
@@ -176,7 +207,7 @@ export const PatientDocuments = ({ patientId, isDemo }: Props) => {
               </tr>
             </thead>
             <tbody>
-              {documents.map((doc: any) => {
+              {documents.map((doc: PatientDocument) => {
                 const Icon = FILE_ICONS[doc.file_type] || File;
                 return (
                   <tr key={doc.id} className="hover:bg-muted/30 transition-colors">

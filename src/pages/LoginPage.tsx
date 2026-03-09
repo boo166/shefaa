@@ -72,10 +72,18 @@ export const LoginPage = () => {
       });
       return;
     }
+    if (slugStatus !== "available" || !resolvedSlug) {
+      toast({
+        title: t("auth.signupFailed"),
+        description: t("auth.slugInvalid"),
+        variant: "destructive",
+      });
+      return;
+    }
     setLoading(true);
 
     const { data, error } = await supabase.functions.invoke("register-clinic", {
-      body: { clinicName, fullName, email, password },
+      body: { clinicName, fullName, email, password, slug: resolvedSlug },
     });
 
     if (error || data?.error) {

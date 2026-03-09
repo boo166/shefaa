@@ -19,4 +19,17 @@ export default defineConfig(({ mode }) => ({
     },
     dedupe: ["react", "react-dom"],
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          react: ["react", "react-dom", "react-router-dom"],
+          data: ["@supabase/supabase-js", "@tanstack/react-query", "zustand"],
+          charts: ["recharts"],
+          pdf: ["jspdf", "jspdf-autotable", "html2canvas", "dompurify"],
+        },
+      },
+    },
+    chunkSizeWarningLimit: 800,
+  },
 }));

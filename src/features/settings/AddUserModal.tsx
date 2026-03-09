@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useI18n } from "@/core/i18n/i18nStore";
-import { useAuth } from "@/core/auth/authStore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,12 +23,10 @@ const ROLES = [
 
 export const AddUserModal = ({ open, onClose, onSuccess }: AddUserModalProps) => {
   const { t } = useI18n();
-  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     full_name: "",
     email: "",
-    password: "",
     role: "doctor",
   });
 
@@ -38,22 +35,17 @@ export const AddUserModal = ({ open, onClose, onSuccess }: AddUserModalProps) =>
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!form.full_name || !form.email || !form.password) {
+    if (!form.full_name || !form.email) {
       toast({ title: t("common.missingFields"), description: t("common.pleaseFillAllFields"), variant: "destructive" });
-      return;
-    }
-    if (form.password.length < 6) {
-      toast({ title: t("common.passwordMinLength"), variant: "destructive" });
       return;
     }
 
     setLoading(true);
 
-    // Use secure edge function instead of client-side signUp (avoids signing out admin)
+    // Secure invite flow: server issues invite + signup email with invite metadata.
     const { data, error } = await supabase.functions.invoke("invite-staff", {
       body: {
         email: form.email,
-        password: form.password,
         full_name: form.full_name,
         role: form.role,
       },
@@ -68,7 +60,7 @@ export const AddUserModal = ({ open, onClose, onSuccess }: AddUserModalProps) =>
       });
       onSuccess();
       onClose();
-      setForm({ full_name: "", email: "", password: "", role: "doctor" });
+      setForm({ full_name: "", email: "", role: "doctor" });
     }
     setLoading(false);
   };
@@ -90,10 +82,6 @@ export const AddUserModal = ({ open, onClose, onSuccess }: AddUserModalProps) =>
           <div className="space-y-2">
             <Label>{t("common.email")} *</Label>
             <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="john@clinic.com" />
-          </div>
-          <div className="space-y-2">
-            <Label>{t("auth.passwordLabel")} *</Label>
-            <Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="Min 6 characters" />
           </div>
           <div className="space-y-2">
             <Label>{t("settings.usersRoles")} *</Label>

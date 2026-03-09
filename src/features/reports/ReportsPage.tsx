@@ -56,15 +56,28 @@ export const ReportsPage = () => {
 
   const revenueData = useMemo(() => {
     if (isDemo) return DEMO_REVENUE;
-    const months: Record<string, { revenue: number; expenses: number }> = {};
+    const months: Record<string, { month: string; revenue: number; expenses: number; sortKey: number }> = {};
     invoices.forEach((inv) => {
       const d = new Date(inv.invoice_date);
-      const key = d.toLocaleString("en", { month: "short" });
-      if (!months[key]) months[key] = { revenue: 0, expenses: 0 };
+      if (Number.isNaN(d.getTime())) return;
+
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      if (!months[key]) {
+        months[key] = {
+          month: d.toLocaleString("en", { month: "short", year: "2-digit" }),
+          revenue: 0,
+          expenses: 0,
+          sortKey: new Date(d.getFullYear(), d.getMonth(), 1).getTime(),
+        };
+      }
+
       if (inv.status === "paid") months[key].revenue += Number(inv.amount);
       else months[key].expenses += Number(inv.amount);
     });
-    return Object.entries(months).map(([month, vals]) => ({ month, ...vals }));
+
+    return Object.values(months)
+      .sort((a, b) => a.sortKey - b.sortKey)
+      .map(({ sortKey, ...entry }) => entry);
   }, [invoices, isDemo]);
 
   const patientGrowth = useMemo(() => {
@@ -84,6 +97,29 @@ export const ReportsPage = () => {
     appointments.forEach((a) => { types[a.type] = (types[a.type] || 0) + 1; });
     return Object.entries(types).map(([name, value]) => ({ name: name.replace("_", " "), value }));
   }, [appointments, isDemo]);
+
+  const revenueByService = useMemo(() => {
+    if (isDemo) {
+      return [
+        { name: "Consultation", value: 38 },
+        { name: "Lab", value: 24 },
+        { name: "Pharmacy", value: 20 },
+        { name: "Procedures", value: 18 },
+      ];
+    }
+
+    const services: Record<string, number> = {};
+    invoices
+      .filter((i) => i.status === "paid")
+      .forEach((invoice) => {
+        const label = invoice.service || "Other";
+        services[label] = (services[label] || 0) + Number(invoice.amount);
+      });
+
+    return Object.entries(services)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
+  }, [invoices, isDemo]);
 
   const doctorPerformance = useMemo(() => {
     if (isDemo) return [
@@ -250,13 +286,13 @@ export const ReportsPage = () => {
             </ResponsiveContainer>
           </div>
           <div className="bg-card rounded-xl border p-6">
-            <h3 className="font-semibold mb-6">{t("reports.revenueByDepartment")}</h3>
+            <h3 className="font-semibold mb-6">{t("reports.revenueByDepartment") || "Revenue by Service"}</h3>
             <ResponsiveContainer width="100%" height={340}>
               <PieChart>
-                <Pie data={appointmentTypes} cx="50%" cy="50%" innerRadius={60} outerRadius={95} dataKey="value" paddingAngle={3}
+                <Pie data={revenueByService} cx="50%" cy="50%" innerRadius={60} outerRadius={95} dataKey="value" paddingAngle={3}
                   label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
                   labelLine={false}>
-                  {appointmentTypes.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                  {revenueByService.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                 </Pie>
                 <Tooltip />
               </PieChart>

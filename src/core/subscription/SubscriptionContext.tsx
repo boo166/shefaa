@@ -46,7 +46,13 @@ export const SubscriptionProvider = ({ children }: { children: ReactNode }) => {
         .eq("tenant_id", user.tenantId)
         .single();
 
-      if (error || !data) {
+      if (error) {
+        console.error("Failed to load subscription", error);
+        setState((prev) => ({ ...prev, isLoading: false }));
+        return;
+      }
+
+      if (!data) {
         setState({ ...defaultState, isLoading: false });
         return;
       }

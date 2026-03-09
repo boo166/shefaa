@@ -176,8 +176,11 @@ export const PricingPage = () => {
                     className="w-full"
                     variant={plan.popular ? "default" : "outline"}
                     onClick={() => {
-                      if (!isAuthenticated) navigate("/login");
-                      // TODO: integrate with payment
+                      if (!isAuthenticated) {
+                        navigate("/login");
+                        return;
+                      }
+                      window.location.href = `mailto:sales@medflow.app?subject=${encodeURIComponent(`Plan upgrade request: ${plan.name}`)}`;
                     }}
                   >
                     اشترك الآن

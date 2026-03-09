@@ -9,26 +9,36 @@ export function useRealtimeSubscription(tables: RealtimeTable[]) {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const tenantId = user?.tenantId;
+  const tablesKey = [...new Set(tables)].sort().join("|");
 
   useEffect(() => {
     if (!tenantId || tenantId === "demo") return;
 
+    const watchedTables = tablesKey.split("|").filter(Boolean) as RealtimeTable[];
+    if (watchedTables.length === 0) return;
+
     const channel = supabase
-      .channel("realtime-tables")
-      .on(
+      .channel(`realtime:${tenantId}:${tablesKey}`);
+
+    for (const table of watchedTables) {
+      channel.on(
         "postgres_changes",
-        { event: "*", schema: "public" },
-        (payload) => {
-          const table = payload.table as RealtimeTable;
-          if (tables.includes(table)) {
-            queryClient.invalidateQueries({ queryKey: [table, tenantId] });
-          }
-        }
-      )
-      .subscribe();
+        {
+          event: "*",
+          schema: "public",
+          table,
+          filter: `tenant_id=eq.${tenantId}`,
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: [table, tenantId] });
+        },
+      );
+    }
+
+    channel.subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [tenantId, tables, queryClient]);
+  }, [tenantId, tablesKey, queryClient]);
 }
