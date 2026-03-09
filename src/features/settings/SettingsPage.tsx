@@ -21,7 +21,7 @@ import { useDarkMode } from "@/hooks/useDarkMode";
 type Tab = "general" | "users" | "notifications" | "appearance" | "security";
 
 export const SettingsPage = () => {
-  const { t } = useI18n();
+  const { t, calendarType, setCalendarType } = useI18n();
   const { user, logout } = useAuth();
   const { enabled: darkMode, setEnabled: setDarkMode } = useDarkMode();
   const queryClient = useQueryClient();
