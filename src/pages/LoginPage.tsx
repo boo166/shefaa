@@ -54,42 +54,27 @@ export const LoginPage = () => {
     }
     setLoading(true);
 
-    // Create tenant via secure function (passes owner email for verification)
-    const slug = clinicName
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/(^-|-$)/g, "");
-    const { data: tenantId, error: tenantErr } = await supabase.rpc("create_tenant_and_signup", {
-      _name: clinicName,
-      _slug: slug,
-      _owner_email: email,
+    // Secure backend signup (atomic tenant + owner creation with rollback)
+    const { data, error } = await supabase.functions.invoke("register-clinic", {
+      body: {
+        clinicName,
+        fullName,
+        email,
+        password,
+      },
     });
 
-    // ABORT signup if tenant creation failed
-    if (tenantErr || !tenantId) {
-      toast({ title: t("auth.signupFailed"), description: tenantErr?.message ?? "Failed to create clinic", variant: "destructive" });
+    if (error || data?.error) {
+      toast({
+        title: t("auth.signupFailed"),
+        description: error?.message ?? data?.error ?? "Failed to create clinic",
+        variant: "destructive",
+      });
       setLoading(false);
       return;
     }
 
-    // Sign up — handle_new_user trigger will match pending_owner_email and assign clinic_admin
-    const { error: signupErr } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name: fullName,
-          tenant_id: tenantId,
-        },
-        emailRedirectTo: window.location.origin,
-      },
-    });
-
-    if (signupErr) {
-      toast({ title: t("auth.signupFailed"), description: signupErr.message, variant: "destructive" });
-    } else {
-      toast({ title: t("auth.checkEmail"), description: t("auth.confirmationSent") });
-    }
+    toast({ title: t("auth.checkEmail"), description: t("auth.confirmationSent") });
     setLoading(false);
   };
 
