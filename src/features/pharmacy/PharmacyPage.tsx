@@ -53,9 +53,9 @@ export const PharmacyPage = () => {
     setDeleting(true);
     const { error } = await supabase.from("medications").delete().eq("id", deleteId);
     if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: t("common.error"), description: error.message, variant: "destructive" });
     } else {
-      toast({ title: "Medication removed" });
+      toast({ title: t("pharmacy.medicationRemoved") });
       queryClient.invalidateQueries({ queryKey: ["medications"] });
     }
     setDeleting(false);
