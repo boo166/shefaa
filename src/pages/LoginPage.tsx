@@ -64,17 +64,22 @@ export const LoginPage = () => {
       _slug: slug,
     });
 
-    const tenantIdValue = tenantErr ? undefined : tenantId;
+    // ABORT signup if tenant creation failed — don't create orphan users
+    if (tenantErr || !tenantId) {
+      toast({ title: t("auth.signupFailed"), description: tenantErr?.message ?? "Failed to create clinic", variant: "destructive" });
+      setLoading(false);
+      return;
+    }
 
-    // Sign up with tenant_id in metadata
-    const { error: signupErr } = await supabase.auth.signUp({
+    // Sign up with tenant_id in metadata (role is NOT passed — trigger defaults to 'doctor',
+    // then admin_set_user_role RPC upgrades to clinic_admin after profile exists)
+    const { data: signupData, error: signupErr } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: {
           full_name: fullName,
-          tenant_id: tenantIdValue,
-          role: "clinic_admin",
+          tenant_id: tenantId,
         },
         emailRedirectTo: window.location.origin,
       },
@@ -83,6 +88,13 @@ export const LoginPage = () => {
     if (signupErr) {
       toast({ title: t("auth.signupFailed"), description: signupErr.message, variant: "destructive" });
     } else {
+      // Upgrade role to clinic_admin for the clinic owner via secure RPC
+      if (signupData?.user) {
+        await supabase.rpc("admin_set_user_role", {
+          _target_user_id: signupData.user.id,
+          _role: "clinic_admin" as const,
+        });
+      }
       toast({ title: t("auth.checkEmail"), description: t("auth.confirmationSent") });
     }
     setLoading(false);
