@@ -598,7 +598,7 @@ export const PatientDetailPage = () => {
                       <td className="font-medium">{inv.invoice_code}</td>
                       <td>{inv.service}</td>
                       <td className="font-semibold">{formatCurrency(Number(inv.amount), locale)}</td>
-                      <td className="text-muted-foreground whitespace-nowrap">{formatDate(inv.invoice_date, locale)}</td>
+                      <td className="text-muted-foreground whitespace-nowrap">{formatDate(inv.invoice_date, locale, "date", calendarType)}</td>
                       <td>
                         <StatusBadge variant={invoiceStatusVariant[inv.status] ?? "default"}>
                           {getInvoiceStatusLabel(inv.status)}

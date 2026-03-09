@@ -80,7 +80,7 @@ export const InsurancePage = () => {
     { key: "provider", header: t("common.provider"), searchable: true },
     { key: "service", header: t("common.service"), searchable: true },
     { key: "amount", header: t("common.amount"), render: (c) => formatCurrency(c.amount, locale) },
-    { key: "claim_date", header: t("common.date"), render: (c) => formatDate(c.claim_date, locale) },
+    { key: "claim_date", header: t("common.date"), render: (c) => formatDate(c.claim_date, locale, "date", calendarType) },
     { key: "status", header: t("common.status"), render: (c) => <StatusBadge variant={statusVariant[c.status] ?? "default"}>{getClaimStatusLabel(c.status)}</StatusBadge> },
     {
       key: "actions",

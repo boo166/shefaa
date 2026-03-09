@@ -47,7 +47,7 @@ export const DashboardPage = () => {
         id: a.id,
         patient: a.patients?.full_name ?? "—",
         doctor: a.doctors?.full_name ?? "—",
-        time: formatDate(a.appointment_date, locale, "time"),
+        time: formatDate(a.appointment_date, locale, "time", calendarType),
         status: a.status,
       }));
 

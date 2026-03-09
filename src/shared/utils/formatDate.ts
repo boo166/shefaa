@@ -1,25 +1,27 @@
-import type { Locale } from "@/core/i18n/i18nStore";
+import type { CalendarType, Locale } from "@/core/i18n/i18nStore";
 
 /**
- * Format a date string or Date object respecting locale.
- * - English ("en"): Gregorian calendar
- * - Arabic ("ar"): Hijri (Islamic) calendar with Arabic numerals
+ * Format a date string or Date object respecting locale and preferred calendar.
  *
- * @param raw   ISO string, "YYYY-MM-DD", "YYYY-MM-DD HH:mm", or Date
- * @param locale Current locale
- * @param opts  Optional: "date" (default), "datetime", "time", "short"
+ * @param raw           ISO string, "YYYY-MM-DD", "YYYY-MM-DD HH:mm", or Date
+ * @param locale        Current locale
+ * @param opts          Optional: "date" (default), "datetime", "time", "short"
+ * @param calendarType  Optional override: "gregorian" | "hijri" (defaults to locale-based behavior)
  */
 export function formatDate(
   raw: string | Date | null | undefined,
   locale: Locale,
   opts: "date" | "datetime" | "time" | "short" = "date",
+  calendarType?: CalendarType,
 ): string {
   if (!raw) return "—";
 
   const d = typeof raw === "string" ? parseDate(raw) : raw;
   if (Number.isNaN(d.getTime())) return "—";
 
-  const cal = locale === "ar" ? "islamic-umalqura" : "gregory";
+  // Backward compatible default: Arabic -> Hijri, English -> Gregorian
+  const calType: CalendarType = calendarType ?? (locale === "ar" ? "hijri" : "gregorian");
+  const cal = calType === "hijri" ? "islamic-umalqura" : "gregory";
   const loc = locale === "ar" ? "ar-SA" : "en-US";
 
   switch (opts) {

@@ -189,6 +189,20 @@ export const SettingsPage = () => {
                 <Label>{t("common.language")}</Label>
                 <LanguageSwitcher />
               </div>
+
+              <div className="flex items-center gap-4">
+                <Label>{t("settings.calendarSystem")}</Label>
+                <Select value={calendarType} onValueChange={(v) => setCalendarType(v as any)}>
+                  <SelectTrigger className="w-[220px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="gregorian">{t("settings.calendarGregorian")}</SelectItem>
+                    <SelectItem value="hijri">{t("settings.calendarHijri")}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
               <Button onClick={handleSaveGeneral} disabled={saving}>
                 {saving && <Loader2 className="h-4 w-4 animate-spin" />}
                 {t("common.save")}

@@ -270,14 +270,16 @@ export function AppointmentCalendar({ appointments, view, onViewChange, reschedu
                 )}
               >
                 <div className="flex items-center justify-between mb-2">
-                  <span className={cn("text-xs font-medium", isOutside && "text-muted-foreground")}>{day.getDate()}</span>
+                  <span className={cn("text-xs font-medium", isOutside && "text-muted-foreground")}>{dayNumber(day)}</span>
                   {dayAppointments.length > 0 && <span className="text-[10px] text-muted-foreground">{dayAppointments.length}</span>}
                 </div>
 
                 <div className="space-y-1">
                   {dayAppointments.slice(0, 3).map((a) => {
                     const dt = parseAppointmentDate(a.appointment_date);
-                    const time = Number.isNaN(dt.getTime()) ? "" : dt.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
+                    const time = Number.isNaN(dt.getTime())
+                      ? ""
+                      : dt.toLocaleTimeString(intlLocale, { hour: "2-digit", minute: "2-digit" });
                     return (
                       <div
                         key={a.id}

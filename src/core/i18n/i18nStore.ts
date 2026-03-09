@@ -4,6 +4,8 @@ import { en } from "./translations/en";
 import { ar } from "./translations/ar";
 
 export type Locale = "en" | "ar";
+export type CalendarType = "gregorian" | "hijri";
+
 type TranslationKeys = typeof en;
 
 const translations: Record<Locale, TranslationKeys> = { en, ar };
@@ -11,7 +13,9 @@ const translations: Record<Locale, TranslationKeys> = { en, ar };
 interface I18nState {
   locale: Locale;
   dir: "ltr" | "rtl";
+  calendarType: CalendarType;
   setLocale: (locale: Locale) => void;
+  setCalendarType: (calendarType: CalendarType) => void;
   t: (path: string) => string;
 }
 
@@ -20,11 +24,15 @@ export const useI18n = create<I18nState>()(
     (set, get) => ({
       locale: "en",
       dir: "ltr",
+      calendarType: "gregorian",
       setLocale: (locale: Locale) => {
         const dir = locale === "ar" ? "rtl" : "ltr";
         document.documentElement.setAttribute("dir", dir);
         document.documentElement.setAttribute("lang", locale);
         set({ locale, dir });
+      },
+      setCalendarType: (calendarType: CalendarType) => {
+        set({ calendarType });
       },
       t: (path: string) => {
         const { locale } = get();

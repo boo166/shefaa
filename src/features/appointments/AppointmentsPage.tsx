@@ -154,7 +154,7 @@ export const AppointmentsPage = () => {
     {
       key: "appointment_date",
       header: t("appointments.dateTime"),
-      render: (a) => formatDate(a.appointment_date, locale, "datetime"),
+      render: (a) => formatDate(a.appointment_date, locale, "datetime", calendarType),
     },
     {
       key: "type",
