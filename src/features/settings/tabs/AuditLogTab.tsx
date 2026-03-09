@@ -71,7 +71,7 @@ export const AuditLogTab = () => {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium">{formatAction(log.action)}</p>
                   <p className="text-xs text-muted-foreground">
-                    {log.entity_type} • {formatDate(log.created_at, locale, "full", calendarType)}
+                    {log.entity_type} • {formatDate(log.created_at, locale, "datetime", calendarType)}
                   </p>
                   {log.details && Object.keys(log.details).length > 0 && (
                     <div className="mt-1 text-xs text-muted-foreground font-mono bg-muted px-2 py-1 rounded truncate">
