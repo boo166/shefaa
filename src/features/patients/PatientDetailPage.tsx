@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import {
   ArrowLeft, FileText, Pill, Activity, Stethoscope,
   Calendar, Phone, Mail, Droplets, User, Loader2,
-  FlaskConical, Receipt,
+  FlaskConical, Receipt, CalendarDays, Clock, CheckCircle2, XCircle,
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -14,7 +14,7 @@ import { formatDate, formatCurrency } from "@/shared/utils/formatDate";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
-type Tab = "overview" | "history" | "prescriptions" | "notes" | "lab_orders" | "invoices" | "documents";
+type Tab = "overview" | "history" | "prescriptions" | "notes" | "lab_orders" | "invoices" | "appointments" | "documents";
 
 const DEMO_PATIENT = {
   id: "PT-001", full_name: "Mohammed Al-Rashid", date_of_birth: "1985-03-15", gender: "male",
@@ -44,11 +44,22 @@ const DEMO_INVOICES = [
   { id: "INV-003", invoice_code: "INV-003", service: "Follow-up Visit", amount: 120, invoice_date: "2026-03-06", status: "pending" },
 ];
 
+const DEMO_APPOINTMENTS = [
+  { id: "APT-001", appointment_date: "2026-03-15T10:00:00", type: "checkup", status: "scheduled", doctors: { full_name: "Dr. Sarah Ahmed" }, notes: "Regular blood pressure follow-up." },
+  { id: "APT-002", appointment_date: "2026-03-05T09:30:00", type: "consultation", status: "completed", doctors: { full_name: "Dr. Sarah Ahmed" }, notes: "Reviewed HbA1c results and adjusted medication." },
+  { id: "APT-003", appointment_date: "2026-02-10T11:00:00", type: "lab_review", status: "completed", doctors: { full_name: "Dr. Sarah Ahmed" }, notes: "Lab results reviewed. All within normal range." },
+  { id: "APT-004", appointment_date: "2026-01-20T14:00:00", type: "checkup", status: "completed", doctors: { full_name: "Dr. Sarah Ahmed" }, notes: "Routine checkup. No concerns." },
+  { id: "APT-005", appointment_date: "2026-03-22T10:30:00", type: "follow_up", status: "scheduled", doctors: { full_name: "Dr. Sarah Ahmed" }, notes: null },
+];
+
 const labStatusVariant: Record<string, "default" | "warning" | "success"> = {
   pending: "default", processing: "warning", completed: "success",
 };
 const invoiceStatusVariant: Record<string, "success" | "warning" | "destructive"> = {
   paid: "success", pending: "warning", overdue: "destructive",
+};
+const apptStatusVariant: Record<string, "default" | "warning" | "success" | "destructive"> = {
+  scheduled: "warning", completed: "success", cancelled: "destructive", in_progress: "default",
 };
 
 export const PatientDetailPage = () => {
@@ -61,6 +72,7 @@ export const PatientDetailPage = () => {
 
   const tabs: { key: Tab; icon: any; label: string }[] = [
     { key: "overview", icon: User, label: t("patients.overview") },
+    { key: "appointments", icon: CalendarDays, label: t("common.appointments") },
     { key: "history", icon: Activity, label: t("patients.medicalHistory") },
     { key: "prescriptions", icon: Pill, label: t("patients.prescriptions") },
     { key: "notes", icon: FileText, label: t("patients.clinicalNotes") },
@@ -119,6 +131,21 @@ export const PatientDetailPage = () => {
         .select("*, doctors(full_name)")
         .eq("patient_id", patientId ?? "")
         .order("order_date", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!patientId,
+  });
+
+  const { data: patientAppointments = [] } = useQuery({
+    queryKey: ["patient_appointments", patientId],
+    queryFn: async () => {
+      if (isDemo) return DEMO_APPOINTMENTS as any[];
+      const { data, error } = await supabase
+        .from("appointments")
+        .select("*, doctors(full_name)")
+        .eq("patient_id", patientId ?? "")
+        .order("appointment_date", { ascending: false });
       if (error) throw error;
       return data ?? [];
     },
@@ -294,6 +321,100 @@ export const PatientDetailPage = () => {
           </div>
         </div>
       )}
+
+      {/* ── APPOINTMENTS ── */}
+      {activeTab === "appointments" && (() => {
+        const now = new Date();
+        const upcoming = patientAppointments.filter((a: any) => new Date(a.appointment_date) >= now && a.status !== "cancelled");
+        const past = patientAppointments.filter((a: any) => new Date(a.appointment_date) < now || a.status === "completed" || a.status === "cancelled");
+
+        const getApptStatusLabel = (s: string) =>
+          s === "scheduled" ? t("appointments.scheduled") :
+          s === "completed" ? t("appointments.completed") :
+          s === "cancelled" ? t("appointments.cancelled") : s;
+
+        const AppointmentRow = ({ a }: { a: any }) => (
+          <tr className="hover:bg-muted/30 transition-colors">
+            <td className="whitespace-nowrap text-muted-foreground">{formatDate(a.appointment_date, locale, "datetime")}</td>
+            <td className="font-medium capitalize">{a.type?.replace("_", " ") ?? "—"}</td>
+            <td>{a.doctors?.full_name ?? "—"}</td>
+            <td>
+              <StatusBadge variant={apptStatusVariant[a.status] ?? "default"}>
+                {getApptStatusLabel(a.status)}
+              </StatusBadge>
+            </td>
+            <td className="text-sm text-muted-foreground max-w-xs truncate">{a.notes ?? "—"}</td>
+          </tr>
+        );
+
+        return (
+          <div className="space-y-6">
+            {/* Summary strip */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              {[
+                { icon: CalendarDays, label: t("common.appointments"), count: patientAppointments.length, cls: "text-primary" },
+                { icon: Clock, label: t("appointments.scheduled"), count: patientAppointments.filter((a: any) => a.status === "scheduled").length, cls: "text-yellow-500" },
+                { icon: CheckCircle2, label: t("appointments.completed"), count: patientAppointments.filter((a: any) => a.status === "completed").length, cls: "text-success" },
+                { icon: XCircle, label: t("appointments.cancelled"), count: patientAppointments.filter((a: any) => a.status === "cancelled").length, cls: "text-destructive" },
+              ].map((s, i) => (
+                <div key={i} className="stat-card text-center">
+                  <s.icon className={`h-5 w-5 mx-auto mb-1 ${s.cls}`} />
+                  <p className="text-2xl font-bold">{s.count}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{s.label}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Upcoming */}
+            <div>
+              <h3 className="font-semibold mb-3 flex items-center gap-2">
+                <Clock className="h-4 w-4 text-yellow-500" />
+                {t("appointments.upcomingAppointments")} ({upcoming.length})
+              </h3>
+              <div className="bg-card rounded-lg border overflow-hidden">
+                {upcoming.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground text-sm">{t("appointments.noUpcomingAppointments")}</div>
+                ) : (
+                  <table className="data-table">
+                    <thead><tr className="bg-muted/50">
+                      <th>{t("common.date")}</th>
+                      <th>{t("appointments.type")}</th>
+                      <th>{t("appointments.doctor")}</th>
+                      <th>{t("common.status")}</th>
+                      <th>{t("appointments.notes")}</th>
+                    </tr></thead>
+                    <tbody>{upcoming.map((a: any) => <AppointmentRow key={a.id} a={a} />)}</tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+
+            {/* Past */}
+            <div>
+              <h3 className="font-semibold mb-3 flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
+                {t("appointments.pastAppointments")} ({past.length})
+              </h3>
+              <div className="bg-card rounded-lg border overflow-hidden">
+                {past.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground text-sm">{t("appointments.noPastAppointments")}</div>
+                ) : (
+                  <table className="data-table">
+                    <thead><tr className="bg-muted/50">
+                      <th>{t("common.date")}</th>
+                      <th>{t("appointments.type")}</th>
+                      <th>{t("appointments.doctor")}</th>
+                      <th>{t("common.status")}</th>
+                      <th>{t("appointments.notes")}</th>
+                    </tr></thead>
+                    <tbody>{past.map((a: any) => <AppointmentRow key={a.id} a={a} />)}</tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── MEDICAL HISTORY ── */}
       {activeTab === "history" && (

@@ -171,6 +171,10 @@ export const ar = {
     more: "أخرى",
     dragToRescheduleHint:
       "ميزة السحب لإعادة الجدولة متاحة فقط للمستخدمين الذين لديهم صلاحية إدارة المواعيد.",
+    upcomingAppointments: "المواعيد القادمة",
+    pastAppointments: "المواعيد السابقة",
+    noUpcomingAppointments: "لا توجد مواعيد قادمة",
+    noPastAppointments: "لا توجد مواعيد سابقة",
   },
   doctors: {
     title: "الأطباء",

@@ -171,6 +171,10 @@ export const en = {
     more: "more",
     dragToRescheduleHint:
       "Drag-to-reschedule is only available for users with appointment management access.",
+    upcomingAppointments: "Upcoming Appointments",
+    pastAppointments: "Past Appointments",
+    noUpcomingAppointments: "No upcoming appointments",
+    noPastAppointments: "No past appointments",
   },
   doctors: {
     title: "Doctors",
