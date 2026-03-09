@@ -6,13 +6,15 @@ import { StatusFilter } from "@/shared/components/StatusFilter";
 import { DataTable, Column } from "@/shared/components/DataTable";
 import { Button } from "@/components/ui/button";
 import { PermissionGuard } from "@/core/auth/PermissionGuard";
-import { DollarSign, CreditCard, FileText, TrendingUp, Plus } from "lucide-react";
+import { DollarSign, CreditCard, FileText, TrendingUp, Plus, CheckCircle } from "lucide-react";
 import { NewInvoiceModal } from "./NewInvoiceModal";
 import { useSupabaseTable } from "@/hooks/useSupabaseQuery";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { useAuth } from "@/core/auth/authStore";
 import { useQueryClient } from "@tanstack/react-query";
 import { Tables } from "@/integrations/supabase/types";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
 
 type Invoice = Tables<"invoices"> & { patients?: { full_name: string } | null };
 
@@ -52,6 +54,17 @@ export const BillingPage = () => {
   const totalRevenue = displayData.filter((i) => i.status === "paid").reduce((s, i) => s + i.amount, 0);
   const pendingAmount = displayData.filter((i) => i.status === "pending" || i.status === "overdue").reduce((s, i) => s + i.amount, 0);
 
+  const handleMarkPaid = async (id: string) => {
+    if (isDemo) return;
+    const { error } = await supabase.from("invoices").update({ status: "paid" }).eq("id", id);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Invoice marked as paid" });
+      queryClient.invalidateQueries({ queryKey: ["invoices"] });
+    }
+  };
+
   const columns: Column<typeof displayData[0]>[] = [
     { key: "invoice_code", header: t("billing.invoiceNumber"), searchable: true, render: (inv) => <span className="font-medium">{inv.invoice_code}</span> },
     { key: "patient_name", header: t("appointments.patient"), searchable: true },
@@ -59,6 +72,19 @@ export const BillingPage = () => {
     { key: "amount", header: t("common.amount"), render: (inv) => <span className="font-semibold">${inv.amount}</span> },
     { key: "invoice_date", header: t("common.date") },
     { key: "status", header: t("common.status"), render: (inv) => <StatusBadge variant={(statusVariant as any)[inv.status] ?? "default"}>{inv.status}</StatusBadge> },
+    {
+      key: "actions",
+      header: t("common.actions"),
+      render: (inv) => inv.status !== "paid" ? (
+        <button
+          onClick={() => handleMarkPaid(inv.id)}
+          className="p-1.5 rounded-md hover:bg-success/10 text-success"
+          title="Mark as Paid"
+        >
+          <CheckCircle className="h-4 w-4" />
+        </button>
+      ) : null,
+    },
   ];
 
   return (

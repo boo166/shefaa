@@ -7,26 +7,45 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionGuard } from "@/core/auth/PermissionGuard";
 import { cn } from "@/lib/utils";
-import { Building, Users, Bell, Palette, Loader2 } from "lucide-react";
+import { Building, Users, Bell, Palette, Loader2, UserPlus, Shield, Eye, EyeOff } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { useSupabaseTable } from "@/hooks/useSupabaseQuery";
 import { Tables } from "@/integrations/supabase/types";
+import { AddUserModal } from "./AddUserModal";
+import { useQueryClient } from "@tanstack/react-query";
 
-type Tab = "general" | "users" | "notifications" | "appearance";
+type Tab = "general" | "users" | "notifications" | "appearance" | "security";
 
 export const SettingsPage = () => {
   const { t } = useI18n();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+  const queryClient = useQueryClient();
   const isDemo = user?.tenantId === "demo";
   const [activeTab, setActiveTab] = useState<Tab>("general");
   const [saving, setSaving] = useState(false);
+  const [showAddUser, setShowAddUser] = useState(false);
 
   // Clinic info form
   const [clinicName, setClinicName] = useState(user?.tenantName ?? "");
   const [clinicPhone, setClinicPhone] = useState("");
   const [clinicEmail, setClinicEmail] = useState("");
   const [clinicAddress, setClinicAddress] = useState("");
+
+  // Password change
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPasswords, setShowPasswords] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
+
+  // Notification settings
+  const [notifSettings, setNotifSettings] = useState({
+    appointmentReminders: true,
+    labResultsReady: true,
+    billingAlerts: true,
+    systemUpdates: false,
+  });
 
   // Load tenant data
   useEffect(() => {
@@ -41,7 +60,7 @@ export const SettingsPage = () => {
     });
   }, [user?.tenantId, isDemo]);
 
-  const { data: profiles = [] } = useSupabaseTable<Tables<"profiles"> & { user_roles?: { role: string }[] }>("profiles" as any, {
+  const { data: profiles = [], refetch: refetchProfiles } = useSupabaseTable<Tables<"profiles"> & { user_roles?: { role: string }[] }>("profiles" as any, {
     select: "*, user_roles(role)",
     enabled: !isDemo,
   });
@@ -62,14 +81,41 @@ export const SettingsPage = () => {
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
-      toast({ title: t("common.save"), description: "Settings saved successfully" });
+      toast({ title: "Saved", description: "Settings saved successfully" });
     }
     setSaving(false);
+  };
+
+  const handleChangePassword = async () => {
+    if (isDemo) {
+      toast({ title: "Demo mode", variant: "destructive" });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast({ title: "Passwords don't match", variant: "destructive" });
+      return;
+    }
+    if (newPassword.length < 6) {
+      toast({ title: "Password must be at least 6 characters", variant: "destructive" });
+      return;
+    }
+    setChangingPassword(true);
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Password changed", description: "Your password has been updated." });
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    }
+    setChangingPassword(false);
   };
 
   const tabs: { key: Tab; icon: any; label: string }[] = [
     { key: "general", icon: Building, label: t("settings.general") },
     { key: "users", icon: Users, label: t("settings.usersRoles") },
+    { key: "security", icon: Shield, label: "Security" },
     { key: "notifications", icon: Bell, label: t("common.notifications") },
     { key: "appearance", icon: Palette, label: t("settings.appearance") },
   ];
@@ -132,8 +178,17 @@ export const SettingsPage = () => {
 
           {activeTab === "users" && (
             <div className="space-y-4">
-              <h3 className="font-semibold text-lg">{t("settings.usersRoles")}</h3>
-              <p className="text-sm text-muted-foreground">{t("settings.manageStaff")}</p>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-semibold text-lg">{t("settings.usersRoles")}</h3>
+                  <p className="text-sm text-muted-foreground">{t("settings.manageStaff")}</p>
+                </div>
+                <PermissionGuard permission="manage_users">
+                  <Button onClick={() => setShowAddUser(true)} size="sm">
+                    <UserPlus className="h-4 w-4" /> Add User
+                  </Button>
+                </PermissionGuard>
+              </div>
               <PermissionGuard permission="manage_users" fallback={<p className="text-muted-foreground">{t("settings.noPermission")}</p>}>
                 <div className="space-y-3">
                   {isDemo ? (
@@ -146,20 +201,71 @@ export const SettingsPage = () => {
                   ) : profiles.length > 0 ? (
                     profiles.map((p) => (
                       <div key={p.id} className="flex items-center justify-between p-3 rounded-lg border">
-                        <div>
-                          <span className="text-sm font-medium">{p.full_name}</span>
-                          <span className="text-xs text-muted-foreground ml-2 capitalize">
-                            {(p as any).user_roles?.[0]?.role?.replace("_", " ") ?? "—"}
-                          </span>
+                        <div className="flex items-center gap-3">
+                          <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-medium text-primary">
+                            {p.full_name.charAt(0)}
+                          </div>
+                          <div>
+                            <span className="text-sm font-medium">{p.full_name}</span>
+                            <span className="text-xs text-muted-foreground ml-2 capitalize bg-muted px-2 py-0.5 rounded">
+                              {(p as any).user_roles?.[0]?.role?.replace("_", " ") ?? "—"}
+                            </span>
+                          </div>
                         </div>
                         <Button variant="outline" size="sm">{t("common.edit")}</Button>
                       </div>
                     ))
                   ) : (
-                    <p className="text-muted-foreground text-sm">No users found</p>
+                    <p className="text-muted-foreground text-sm py-4 text-center">No users found</p>
                   )}
                 </div>
               </PermissionGuard>
+            </div>
+          )}
+
+          {activeTab === "security" && (
+            <div className="space-y-6">
+              <h3 className="font-semibold text-lg">Change Password</h3>
+              <div className="space-y-4 max-w-sm">
+                <div className="space-y-2">
+                  <Label>New Password</Label>
+                  <div className="relative">
+                    <Input
+                      type={showPasswords ? "text" : "password"}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Min 6 characters"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPasswords(!showPasswords)}
+                      className="absolute end-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                    >
+                      {showPasswords ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Confirm New Password</Label>
+                  <Input
+                    type={showPasswords ? "text" : "password"}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Repeat password"
+                  />
+                </div>
+                <Button onClick={handleChangePassword} disabled={changingPassword || !newPassword}>
+                  {changingPassword && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Update Password
+                </Button>
+              </div>
+
+              <div className="border-t pt-6">
+                <h4 className="font-medium text-sm text-destructive mb-2">Danger Zone</h4>
+                <Button variant="outline" className="text-destructive border-destructive/50" onClick={logout}>
+                  Sign Out
+                </Button>
+              </div>
             </div>
           )}
 
@@ -174,22 +280,44 @@ export const SettingsPage = () => {
               ].map((pref) => (
                 <div key={pref.key} className="flex items-center justify-between p-3 rounded-lg border">
                   <span className="text-sm">{pref.label}</span>
-                  <input type="checkbox" defaultChecked className="h-4 w-4 rounded border-input accent-primary" />
+                  <input
+                    type="checkbox"
+                    checked={(notifSettings as any)[pref.key]}
+                    onChange={(e) => setNotifSettings({ ...notifSettings, [pref.key]: e.target.checked })}
+                    className="h-4 w-4 rounded border-input accent-primary"
+                  />
                 </div>
               ))}
+              <Button onClick={() => toast({ title: "Preferences saved" })}>Save Preferences</Button>
             </div>
           )}
 
           {activeTab === "appearance" && (
             <div className="space-y-4">
               <h3 className="font-semibold text-lg">{t("settings.appearance")}</h3>
-              <div className="p-6 rounded-lg bg-muted/50 text-center text-muted-foreground">
-                {t("settings.themeCustomization")}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between p-3 rounded-lg border">
+                  <span className="text-sm">Dark Mode</span>
+                  <span className="text-xs text-muted-foreground">Coming soon</span>
+                </div>
+                <div className="flex items-center justify-between p-3 rounded-lg border">
+                  <span className="text-sm">Compact View</span>
+                  <span className="text-xs text-muted-foreground">Coming soon</span>
+                </div>
               </div>
             </div>
           )}
         </div>
       </div>
+
+      <AddUserModal
+        open={showAddUser}
+        onClose={() => setShowAddUser(false)}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ["profiles"] });
+          refetchProfiles();
+        }}
+      />
     </div>
   );
 };
