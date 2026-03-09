@@ -137,6 +137,7 @@ export const ar = {
     recentDiagnoses: "التشخيصات الأخيرة",
     activePrescriptions: "الوصفات النشطة",
     bookAppointment: "حجز موعد",
+    printReport: "طباعة التقرير",
     uploadDocument: "رفع مستند",
     noDocuments: "لم يتم رفع أي مستندات بعد",
     nameRequired: "الاسم مطلوب",

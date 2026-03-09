@@ -118,3 +118,176 @@ export function generatePrescriptionPDF(prescription: any, patient: { full_name:
 
   doc.save(`prescription-${prescription.id}.pdf`);
 }
+
+interface PatientReportData {
+  patient: {
+    full_name: string;
+    date_of_birth?: string | null;
+    gender?: string | null;
+    blood_type?: string | null;
+    phone?: string | null;
+    email?: string | null;
+    insurance_provider?: string | null;
+    status?: string;
+  };
+  medicalRecords: Array<{ record_date: string; diagnosis?: string | null; record_type: string; notes?: string | null; doctors?: { full_name: string } | null }>;
+  prescriptions: Array<{ medication: string; dosage: string; prescribed_date: string; status: string; doctors?: { full_name: string } | null }>;
+  labOrders: Array<{ test_name: string; order_date: string; status: string; result?: string | null; doctors?: { full_name: string } | null }>;
+  invoices: Array<{ invoice_code: string; service: string; amount: number; invoice_date: string; status: string }>;
+}
+
+export function generatePatientReportPDF(data: PatientReportData) {
+  const { patient, medicalRecords, prescriptions, labOrders, invoices } = data;
+  const doc = new jsPDF();
+  const primaryColor: [number, number, number] = [41, 128, 115];
+  const pageWidth = doc.internal.pageSize.getWidth();
+  let y = 14;
+
+  const addSectionTitle = (title: string) => {
+    if (y > 250) { doc.addPage(); y = 20; }
+    y += 6;
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(...primaryColor);
+    doc.text(title, 14, y);
+    y += 2;
+    doc.setDrawColor(...primaryColor);
+    doc.line(14, y, pageWidth - 14, y);
+    y += 6;
+    doc.setTextColor(0);
+  };
+
+  // ── Title ──
+  doc.setFontSize(22);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(...primaryColor);
+  doc.text("Patient Report", 14, y + 6);
+  y += 10;
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(100);
+  doc.text(`Generated on ${new Date().toLocaleDateString()}`, 14, y + 4);
+  y += 10;
+
+  // ── Patient Info ──
+  addSectionTitle("Patient Information");
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(50);
+  const info = [
+    ["Name", patient.full_name],
+    ["Date of Birth", patient.date_of_birth ? new Date(patient.date_of_birth + "T00:00:00").toLocaleDateString() : "—"],
+    ["Gender", patient.gender ?? "—"],
+    ["Blood Type", patient.blood_type ?? "—"],
+    ["Phone", patient.phone ?? "—"],
+    ["Email", patient.email ?? "—"],
+    ["Insurance", patient.insurance_provider ?? "—"],
+    ["Status", patient.status ?? "—"],
+  ];
+  info.forEach(([label, value]) => {
+    doc.setFont("helvetica", "bold");
+    doc.text(`${label}:`, 14, y);
+    doc.setFont("helvetica", "normal");
+    doc.text(value, 55, y);
+    y += 6;
+  });
+
+  // ── Medical History ──
+  if (medicalRecords.length > 0) {
+    addSectionTitle("Medical History");
+    (doc as any).autoTable({
+      startY: y,
+      head: [["Date", "Type", "Diagnosis", "Doctor", "Notes"]],
+      body: medicalRecords.map((r) => [
+        new Date(r.record_date + "T00:00:00").toLocaleDateString(),
+        r.record_type?.replace("_", " ") ?? "—",
+        r.diagnosis ?? "—",
+        r.doctors?.full_name ?? "—",
+        (r.notes ?? "—").substring(0, 60),
+      ]),
+      theme: "grid",
+      headStyles: { fillColor: primaryColor, textColor: 255, fontStyle: "bold" },
+      styles: { fontSize: 8, cellPadding: 2 },
+      margin: { left: 14, right: 14 },
+    });
+    y = (doc as any).lastAutoTable.finalY + 4;
+  }
+
+  // ── Prescriptions ──
+  if (prescriptions.length > 0) {
+    addSectionTitle("Prescriptions");
+    (doc as any).autoTable({
+      startY: y,
+      head: [["Medication", "Dosage", "Date", "Doctor", "Status"]],
+      body: prescriptions.map((rx) => [
+        rx.medication,
+        rx.dosage,
+        new Date(rx.prescribed_date + "T00:00:00").toLocaleDateString(),
+        rx.doctors?.full_name ?? "—",
+        rx.status,
+      ]),
+      theme: "grid",
+      headStyles: { fillColor: primaryColor, textColor: 255, fontStyle: "bold" },
+      styles: { fontSize: 8, cellPadding: 2 },
+      margin: { left: 14, right: 14 },
+    });
+    y = (doc as any).lastAutoTable.finalY + 4;
+  }
+
+  // ── Lab Orders ──
+  if (labOrders.length > 0) {
+    addSectionTitle("Laboratory Orders");
+    (doc as any).autoTable({
+      startY: y,
+      head: [["Test", "Date", "Doctor", "Status", "Result"]],
+      body: labOrders.map((l) => [
+        l.test_name,
+        new Date(l.order_date + "T00:00:00").toLocaleDateString(),
+        l.doctors?.full_name ?? "—",
+        l.status,
+        (l.result ?? "—").substring(0, 50),
+      ]),
+      theme: "grid",
+      headStyles: { fillColor: primaryColor, textColor: 255, fontStyle: "bold" },
+      styles: { fontSize: 8, cellPadding: 2 },
+      margin: { left: 14, right: 14 },
+    });
+    y = (doc as any).lastAutoTable.finalY + 4;
+  }
+
+  // ── Invoices ──
+  if (invoices.length > 0) {
+    addSectionTitle("Billing & Invoices");
+    (doc as any).autoTable({
+      startY: y,
+      head: [["Invoice #", "Service", "Amount", "Date", "Status"]],
+      body: invoices.map((inv) => [
+        inv.invoice_code,
+        inv.service,
+        `$${Number(inv.amount).toLocaleString()}`,
+        new Date(inv.invoice_date + "T00:00:00").toLocaleDateString(),
+        inv.status,
+      ]),
+      theme: "grid",
+      headStyles: { fillColor: primaryColor, textColor: 255, fontStyle: "bold" },
+      styles: { fontSize: 8, cellPadding: 2 },
+      margin: { left: 14, right: 14 },
+    });
+  }
+
+  // ── Page numbers ──
+  const pageCount = (doc as any).internal.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setFontSize(8);
+    doc.setTextColor(150);
+    doc.text(
+      `Page ${i} of ${pageCount}`,
+      pageWidth / 2,
+      doc.internal.pageSize.getHeight() - 10,
+      { align: "center" }
+    );
+  }
+
+  doc.save(`patient-report-${patient.full_name.replace(/\s+/g, "-").toLowerCase()}.pdf`);
+}

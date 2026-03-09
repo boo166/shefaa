@@ -137,6 +137,7 @@ export const en = {
     recentDiagnoses: "Recent Diagnoses",
     activePrescriptions: "Active Prescriptions",
     bookAppointment: "Book Appointment",
+    printReport: "Print Report",
     uploadDocument: "Upload Document",
     noDocuments: "No documents uploaded yet",
     nameRequired: "Name required",
