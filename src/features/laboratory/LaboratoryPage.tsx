@@ -81,7 +81,7 @@ export const LaboratoryPage = () => {
     { key: "patient_name", header: t("appointments.patient"), searchable: true },
     { key: "test_name", header: t("laboratory.test"), searchable: true, render: (l) => <span className="font-medium">{l.test_name}</span> },
     { key: "doctor_name", header: t("laboratory.orderedBy"), searchable: true },
-    { key: "order_date", header: t("common.date") },
+    { key: "order_date", header: t("common.date"), render: (l) => formatDate(l.order_date, locale) },
     { key: "status", header: t("common.status"), render: (l) => <StatusBadge variant={statusVariant[l.status] ?? "default"}>{getLabStatusLabel(l.status)}</StatusBadge> },
     { key: "result", header: t("common.result"), render: (l) => l.result ? <span className="font-medium">{l.result}</span> : <span className="text-muted-foreground">—</span> },
     {

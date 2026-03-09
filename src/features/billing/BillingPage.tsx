@@ -105,8 +105,8 @@ export const BillingPage = () => {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard title={t("billing.totalRevenue")} value={`$${totalRevenue.toLocaleString()}`} icon={DollarSign} />
-        <StatCard title={t("billing.pendingPayments")} value={`$${pendingAmount.toLocaleString()}`} icon={CreditCard} />
+        <StatCard title={t("billing.totalRevenue")} value={formatCurrency(totalRevenue, locale)} icon={DollarSign} />
+        <StatCard title={t("billing.pendingPayments")} value={formatCurrency(pendingAmount, locale)} icon={CreditCard} />
         <StatCard title={t("billing.invoicesThisMonth")} value={String(displayData.length)} icon={FileText} />
         <StatCard title={t("billing.collectionRate")} value={displayData.length ? `${Math.round((displayData.filter((i) => i.status === "paid").length / displayData.length) * 100)}%` : "—"} icon={TrendingUp} />
       </div>

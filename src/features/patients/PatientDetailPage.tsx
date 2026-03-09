@@ -476,8 +476,8 @@ export const PatientDetailPage = () => {
                     <tr key={inv.id} className="hover:bg-muted/30 transition-colors">
                       <td className="font-medium">{inv.invoice_code}</td>
                       <td>{inv.service}</td>
-                      <td className="font-semibold">${Number(inv.amount).toLocaleString()}</td>
-                      <td className="text-muted-foreground whitespace-nowrap">{inv.invoice_date}</td>
+                      <td className="font-semibold">{formatCurrency(Number(inv.amount), locale)}</td>
+                      <td className="text-muted-foreground whitespace-nowrap">{formatDate(inv.invoice_date, locale)}</td>
                       <td>
                         <StatusBadge variant={invoiceStatusVariant[inv.status] ?? "default"}>
                           {getInvoiceStatusLabel(inv.status)}

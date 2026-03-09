@@ -126,7 +126,7 @@ export const PharmacyPage = () => {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatCard title={t("pharmacy.totalMedications")} value={String(meds.length)} icon={Pill} />
         <StatCard title={t("pharmacy.lowStockItems")} value={String(meds.filter((m) => m.status === "low_stock").length)} icon={AlertTriangle} />
-        <StatCard title={t("pharmacy.inventoryValue")} value={`$${meds.reduce((s, m) => s + m.price * m.stock, 0).toLocaleString()}`} icon={Package} />
+        <StatCard title={t("pharmacy.inventoryValue")} value={formatCurrency(meds.reduce((s, m) => s + m.price * m.stock, 0), locale)} icon={Package} />
       </div>
 
       <DataTable

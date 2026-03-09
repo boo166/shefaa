@@ -79,8 +79,8 @@ export const InsurancePage = () => {
     { key: "patient_name", header: t("appointments.patient"), searchable: true },
     { key: "provider", header: t("common.provider"), searchable: true },
     { key: "service", header: t("common.service"), searchable: true },
-    { key: "amount", header: t("common.amount"), render: (c) => `$${c.amount}` },
-    { key: "claim_date", header: t("common.date") },
+    { key: "amount", header: t("common.amount"), render: (c) => formatCurrency(c.amount, locale) },
+    { key: "claim_date", header: t("common.date"), render: (c) => formatDate(c.claim_date, locale) },
     { key: "status", header: t("common.status"), render: (c) => <StatusBadge variant={statusVariant[c.status] ?? "default"}>{getClaimStatusLabel(c.status)}</StatusBadge> },
     {
       key: "actions",
