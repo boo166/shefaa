@@ -52,7 +52,7 @@ const invoiceStatusVariant: Record<string, "success" | "warning" | "destructive"
 };
 
 export const PatientDetailPage = () => {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { clinicSlug, patientId } = useParams();
   const { user } = useAuth();
   const navigate = useNavigate();
