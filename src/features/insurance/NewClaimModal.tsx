@@ -16,8 +16,14 @@ interface NewClaimModalProps {
 }
 
 const PROVIDERS = [
-  "National Health Co.", "Gulf Insurance", "MedCare Plus", "Bupa Arabia",
-  "Tawuniya", "Medgulf", "SABB Takaful", "AXA Cooperative",
+  "National Health Co.",
+  "Gulf Insurance",
+  "MedCare Plus",
+  "Bupa Arabia",
+  "Tawuniya",
+  "Medgulf",
+  "SABB Takaful",
+  "AXA Cooperative",
 ];
 
 export const NewClaimModal = ({ open, onClose, onSuccess, patients }: NewClaimModalProps) => {
@@ -36,7 +42,7 @@ export const NewClaimModal = ({ open, onClose, onSuccess, patients }: NewClaimMo
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.patient_id || !form.service || !form.amount) {
-      toast({ title: "Please fill all required fields", variant: "destructive" });
+      toast({ title: t("common.missingFields"), description: t("common.pleaseFillAllRequiredFields"), variant: "destructive" });
       return;
     }
     setLoading(true);
@@ -51,9 +57,9 @@ export const NewClaimModal = ({ open, onClose, onSuccess, patients }: NewClaimMo
     });
 
     if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: t("common.error"), description: error.message, variant: "destructive" });
     } else {
-      toast({ title: "Claim submitted" });
+      toast({ title: t("insurance.claimSubmitted") });
       onSuccess();
       onClose();
       setForm({ patient_id: "", provider: "National Health Co.", service: "", amount: "" });
@@ -66,33 +72,65 @@ export const NewClaimModal = ({ open, onClose, onSuccess, patients }: NewClaimMo
       <div className="bg-card rounded-lg border shadow-lg w-full max-w-md mx-4">
         <div className="flex items-center justify-between px-6 py-4 border-b">
           <h2 className="text-lg font-semibold">{t("insurance.newClaim")}</h2>
-          <button onClick={onClose} className="p-1 rounded-md hover:bg-muted"><X className="h-5 w-5" /></button>
+          <button onClick={onClose} className="p-1 rounded-md hover:bg-muted">
+            <X className="h-5 w-5" />
+          </button>
         </div>
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div className="space-y-2">
             <Label>{t("appointments.patient")} *</Label>
-            <select value={form.patient_id} onChange={(e) => setForm({ ...form, patient_id: e.target.value })} className="w-full h-10 px-3 rounded-md border bg-background text-sm">
-              <option value="">Select patient</option>
-              {patients.map((p) => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+            <select
+              value={form.patient_id}
+              onChange={(e) => setForm({ ...form, patient_id: e.target.value })}
+              className="w-full h-10 px-3 rounded-md border bg-background text-sm"
+            >
+              <option value="">{t("appointments.selectPatient")}</option>
+              {patients.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.full_name}
+                </option>
+              ))}
             </select>
           </div>
           <div className="space-y-2">
             <Label>{t("common.provider")} *</Label>
-            <select value={form.provider} onChange={(e) => setForm({ ...form, provider: e.target.value })} className="w-full h-10 px-3 rounded-md border bg-background text-sm">
-              {PROVIDERS.map((p) => <option key={p} value={p}>{p}</option>)}
+            <select
+              value={form.provider}
+              onChange={(e) => setForm({ ...form, provider: e.target.value })}
+              className="w-full h-10 px-3 rounded-md border bg-background text-sm"
+            >
+              {PROVIDERS.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
             </select>
           </div>
           <div className="space-y-2">
             <Label>{t("common.service")} *</Label>
-            <Input value={form.service} onChange={(e) => setForm({ ...form, service: e.target.value })} placeholder="Cardiology Consultation" />
+            <Input
+              value={form.service}
+              onChange={(e) => setForm({ ...form, service: e.target.value })}
+              placeholder="Cardiology Consultation"
+            />
           </div>
           <div className="space-y-2">
             <Label>{t("common.amount")} ($) *</Label>
-            <Input type="number" step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder="350.00" />
+            <Input
+              type="number"
+              step="0.01"
+              value={form.amount}
+              onChange={(e) => setForm({ ...form, amount: e.target.value })}
+              placeholder="350.00"
+            />
           </div>
           <div className="flex justify-end gap-3 pt-4">
-            <Button type="button" variant="outline" onClick={onClose}>{t("common.cancel")}</Button>
-            <Button type="submit" disabled={loading}>{loading ? "..." : t("common.save")}</Button>
+            <Button type="button" variant="outline" onClick={onClose}>
+              {t("common.cancel")}
+            </Button>
+            <Button type="submit" disabled={loading}>
+              {loading ? t("common.loading") : t("common.save")}
+            </Button>
           </div>
         </form>
       </div>

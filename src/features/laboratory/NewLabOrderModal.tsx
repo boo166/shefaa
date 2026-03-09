@@ -16,9 +16,17 @@ interface NewLabOrderModalProps {
 }
 
 const TEST_OPTIONS = [
-  "Complete Blood Count (CBC)", "HbA1c", "Lipid Panel", "Thyroid Panel",
-  "Basic Metabolic Panel", "Comprehensive Metabolic Panel", "Liver Function Test",
-  "Kidney Function Test", "Urinalysis", "Blood Glucose", "Hemoglobin",
+  "Complete Blood Count (CBC)",
+  "HbA1c",
+  "Lipid Panel",
+  "Thyroid Panel",
+  "Basic Metabolic Panel",
+  "Comprehensive Metabolic Panel",
+  "Liver Function Test",
+  "Kidney Function Test",
+  "Urinalysis",
+  "Blood Glucose",
+  "Hemoglobin",
 ];
 
 export const NewLabOrderModal = ({ open, onClose, onSuccess, patients, doctors }: NewLabOrderModalProps) => {
@@ -36,7 +44,7 @@ export const NewLabOrderModal = ({ open, onClose, onSuccess, patients, doctors }
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.patient_id || !form.doctor_id || !form.test_name) {
-      toast({ title: "Please fill all fields", variant: "destructive" });
+      toast({ title: t("common.missingFields"), description: t("common.pleaseFillAllRequiredFields"), variant: "destructive" });
       return;
     }
     setLoading(true);
@@ -50,9 +58,9 @@ export const NewLabOrderModal = ({ open, onClose, onSuccess, patients, doctors }
     });
 
     if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: t("common.error"), description: error.message, variant: "destructive" });
     } else {
-      toast({ title: "Lab order created" });
+      toast({ title: t("laboratory.labOrderCreated") });
       onSuccess();
       onClose();
       setForm({ patient_id: "", doctor_id: "", test_name: "Complete Blood Count (CBC)" });
@@ -65,32 +73,62 @@ export const NewLabOrderModal = ({ open, onClose, onSuccess, patients, doctors }
       <div className="bg-card rounded-lg border shadow-lg w-full max-w-md mx-4">
         <div className="flex items-center justify-between px-6 py-4 border-b">
           <h2 className="text-lg font-semibold">{t("laboratory.newLabOrder")}</h2>
-          <button onClick={onClose} className="p-1 rounded-md hover:bg-muted"><X className="h-5 w-5" /></button>
+          <button onClick={onClose} className="p-1 rounded-md hover:bg-muted">
+            <X className="h-5 w-5" />
+          </button>
         </div>
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div className="space-y-2">
             <Label>{t("appointments.patient")} *</Label>
-            <select value={form.patient_id} onChange={(e) => setForm({ ...form, patient_id: e.target.value })} className="w-full h-10 px-3 rounded-md border bg-background text-sm">
-              <option value="">Select patient</option>
-              {patients.map((p) => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+            <select
+              value={form.patient_id}
+              onChange={(e) => setForm({ ...form, patient_id: e.target.value })}
+              className="w-full h-10 px-3 rounded-md border bg-background text-sm"
+            >
+              <option value="">{t("appointments.selectPatient")}</option>
+              {patients.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.full_name}
+                </option>
+              ))}
             </select>
           </div>
           <div className="space-y-2">
             <Label>{t("laboratory.orderedBy")} *</Label>
-            <select value={form.doctor_id} onChange={(e) => setForm({ ...form, doctor_id: e.target.value })} className="w-full h-10 px-3 rounded-md border bg-background text-sm">
-              <option value="">Select doctor</option>
-              {doctors.map((d) => <option key={d.id} value={d.id}>{d.full_name}</option>)}
+            <select
+              value={form.doctor_id}
+              onChange={(e) => setForm({ ...form, doctor_id: e.target.value })}
+              className="w-full h-10 px-3 rounded-md border bg-background text-sm"
+            >
+              <option value="">{t("appointments.selectDoctor")}</option>
+              {doctors.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.full_name}
+                </option>
+              ))}
             </select>
           </div>
           <div className="space-y-2">
             <Label>{t("laboratory.test")} *</Label>
-            <select value={form.test_name} onChange={(e) => setForm({ ...form, test_name: e.target.value })} className="w-full h-10 px-3 rounded-md border bg-background text-sm">
-              {TEST_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
+            <select
+              value={form.test_name}
+              onChange={(e) => setForm({ ...form, test_name: e.target.value })}
+              className="w-full h-10 px-3 rounded-md border bg-background text-sm"
+            >
+              {TEST_OPTIONS.map((opt) => (
+                <option key={opt} value={opt}>
+                  {opt}
+                </option>
+              ))}
             </select>
           </div>
           <div className="flex justify-end gap-3 pt-4">
-            <Button type="button" variant="outline" onClick={onClose}>{t("common.cancel")}</Button>
-            <Button type="submit" disabled={loading}>{loading ? "..." : t("common.save")}</Button>
+            <Button type="button" variant="outline" onClick={onClose}>
+              {t("common.cancel")}
+            </Button>
+            <Button type="submit" disabled={loading}>
+              {loading ? t("common.loading") : t("common.save")}
+            </Button>
           </div>
         </form>
       </div>

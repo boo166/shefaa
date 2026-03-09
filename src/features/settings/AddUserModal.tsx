@@ -15,12 +15,12 @@ interface AddUserModalProps {
 }
 
 const ROLES = [
-  { value: "clinic_admin", label: "Admin" },
-  { value: "doctor", label: "Doctor" },
-  { value: "receptionist", label: "Receptionist" },
-  { value: "nurse", label: "Nurse" },
-  { value: "accountant", label: "Accountant" },
-];
+  { value: "clinic_admin", labelKey: "roles.clinic_admin" },
+  { value: "doctor", labelKey: "roles.doctor" },
+  { value: "receptionist", labelKey: "roles.receptionist" },
+  { value: "nurse", labelKey: "roles.nurse" },
+  { value: "accountant", labelKey: "roles.accountant" },
+] as const;
 
 export const AddUserModal = ({ open, onClose, onSuccess }: AddUserModalProps) => {
   const { t } = useI18n();
@@ -37,14 +37,16 @@ export const AddUserModal = ({ open, onClose, onSuccess }: AddUserModalProps) =>
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
     if (!form.full_name || !form.email || !form.password) {
-      toast({ title: "Please fill all fields", variant: "destructive" });
+      toast({ title: t("common.missingFields"), description: t("common.pleaseFillAllFields"), variant: "destructive" });
       return;
     }
     if (form.password.length < 6) {
-      toast({ title: "Password must be at least 6 characters", variant: "destructive" });
+      toast({ title: t("common.passwordMinLength"), variant: "destructive" });
       return;
     }
+
     setLoading(true);
 
     // Sign up new user with metadata
@@ -57,13 +59,17 @@ export const AddUserModal = ({ open, onClose, onSuccess }: AddUserModalProps) =>
           tenant_id: user?.tenantId,
           role: form.role,
         },
+        emailRedirectTo: window.location.origin,
       },
     });
 
     if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: t("common.error"), description: error.message, variant: "destructive" });
     } else if (data.user) {
-      toast({ title: "User invited", description: "They will receive an email to confirm their account." });
+      toast({
+        title: t("settings.addUser"),
+        description: t("auth.confirmationSent"),
+      });
       onSuccess();
       onClose();
       setForm({ full_name: "", email: "", password: "", role: "doctor" });
@@ -75,8 +81,10 @@ export const AddUserModal = ({ open, onClose, onSuccess }: AddUserModalProps) =>
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/20 backdrop-blur-sm">
       <div className="bg-card rounded-lg border shadow-lg w-full max-w-md mx-4">
         <div className="flex items-center justify-between px-6 py-4 border-b">
-          <h2 className="text-lg font-semibold">Add Team Member</h2>
-          <button onClick={onClose} className="p-1 rounded-md hover:bg-muted"><X className="h-5 w-5" /></button>
+          <h2 className="text-lg font-semibold">{t("settings.addUser")}</h2>
+          <button onClick={onClose} className="p-1 rounded-md hover:bg-muted">
+            <X className="h-5 w-5" />
+          </button>
         </div>
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div className="space-y-2">
@@ -92,16 +100,26 @@ export const AddUserModal = ({ open, onClose, onSuccess }: AddUserModalProps) =>
             <Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="Min 6 characters" />
           </div>
           <div className="space-y-2">
-            <Label>Role *</Label>
-            <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} className="w-full h-10 px-3 rounded-md border bg-background text-sm">
-              {ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+            <Label>{t("settings.usersRoles")} *</Label>
+            <select
+              value={form.role}
+              onChange={(e) => setForm({ ...form, role: e.target.value })}
+              className="w-full h-10 px-3 rounded-md border bg-background text-sm"
+            >
+              {ROLES.map((r) => (
+                <option key={r.value} value={r.value}>
+                  {t(r.labelKey)}
+                </option>
+              ))}
             </select>
           </div>
           <div className="flex justify-end gap-3 pt-4">
-            <Button type="button" variant="outline" onClick={onClose}>{t("common.cancel")}</Button>
+            <Button type="button" variant="outline" onClick={onClose}>
+              {t("common.cancel")}
+            </Button>
             <Button type="submit" disabled={loading}>
               {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-              {loading ? "Creating..." : "Add User"}
+              {loading ? t("common.loading") : t("settings.addUser")}
             </Button>
           </div>
         </form>
