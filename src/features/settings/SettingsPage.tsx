@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PermissionGuard } from "@/core/auth/PermissionGuard";
 import { cn } from "@/lib/utils";
 import { Building, Users, Bell, Palette, Loader2, UserPlus, Shield, Eye, EyeOff } from "lucide-react";
@@ -20,7 +21,7 @@ import { useDarkMode } from "@/hooks/useDarkMode";
 type Tab = "general" | "users" | "notifications" | "appearance" | "security";
 
 export const SettingsPage = () => {
-  const { t } = useI18n();
+  const { t, calendarType, setCalendarType } = useI18n();
   const { user, logout } = useAuth();
   const { enabled: darkMode, setEnabled: setDarkMode } = useDarkMode();
   const queryClient = useQueryClient();
@@ -188,6 +189,20 @@ export const SettingsPage = () => {
                 <Label>{t("common.language")}</Label>
                 <LanguageSwitcher />
               </div>
+
+              <div className="flex items-center gap-4">
+                <Label>{t("settings.calendarSystem")}</Label>
+                <Select value={calendarType} onValueChange={(v) => setCalendarType(v as any)}>
+                  <SelectTrigger className="w-[220px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="gregorian">{t("settings.calendarGregorian")}</SelectItem>
+                    <SelectItem value="hijri">{t("settings.calendarHijri")}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
               <Button onClick={handleSaveGeneral} disabled={saving}>
                 {saving && <Loader2 className="h-4 w-4 animate-spin" />}
                 {t("common.save")}

@@ -42,7 +42,7 @@ function parseLooseDate(raw: string) {
 }
 
 export const AppointmentsPage = () => {
-  const { t, locale } = useI18n();
+  const { t, locale, calendarType } = useI18n();
   const { user, hasPermission } = useAuth();
   const queryClient = useQueryClient();
   const isDemo = user?.tenantId === "demo";
@@ -154,7 +154,7 @@ export const AppointmentsPage = () => {
     {
       key: "appointment_date",
       header: t("appointments.dateTime"),
-      render: (a) => formatDate(a.appointment_date, locale, "datetime"),
+      render: (a) => formatDate(a.appointment_date, locale, "datetime", calendarType),
     },
     {
       key: "type",

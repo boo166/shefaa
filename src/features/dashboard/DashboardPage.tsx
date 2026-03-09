@@ -24,7 +24,7 @@ const DEMO_APPOINTMENTS = [
 ];
 
 export const DashboardPage = () => {
-  const { t, locale } = useI18n();
+  const { t, locale, calendarType } = useI18n();
   const { user } = useAuth();
   const isDemo = user?.tenantId === "demo";
 
@@ -47,7 +47,7 @@ export const DashboardPage = () => {
         id: a.id,
         patient: a.patients?.full_name ?? "—",
         doctor: a.doctors?.full_name ?? "—",
-        time: formatDate(a.appointment_date, locale, "time"),
+        time: formatDate(a.appointment_date, locale, "time", calendarType),
         status: a.status,
       }));
 

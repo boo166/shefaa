@@ -63,7 +63,7 @@ const apptStatusVariant: Record<string, "default" | "warning" | "success" | "des
 };
 
 export const PatientDetailPage = () => {
-  const { t, locale } = useI18n();
+  const { t, locale, calendarType } = useI18n();
   const { clinicSlug, patientId } = useParams();
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -210,7 +210,7 @@ export const PatientDetailPage = () => {
             </StatusBadge>
           </div>
           <p className="text-sm text-muted-foreground capitalize">
-            {patient.gender ? t(`patients.${patient.gender}`) : ""} · {patient.date_of_birth ? `${t("patients.dateOfBirth")}: ${formatDate(patient.date_of_birth, locale)}` : ""}
+            {patient.gender ? t(`patients.${patient.gender}`) : ""} · {patient.date_of_birth ? `${t("patients.dateOfBirth")}: ${formatDate(patient.date_of_birth, locale, "date", calendarType)}` : ""}
           </p>
         </div>
         <Button variant="outline" onClick={() => navigate(`/tenant/${clinicSlug}/appointments`)}>
@@ -263,15 +263,15 @@ export const PatientDetailPage = () => {
                 <p className="text-sm text-muted-foreground text-center py-6">{t("patients.noMedicalRecordsYet")}</p>
               ) : (
                 <div className="space-y-3">
-                  {medicalRecords.slice(0, 3).map((h: any, i: number) => (
-                    <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
-                      <div className="h-2 w-2 rounded-full bg-primary mt-2 shrink-0" />
-                      <div>
-                        <p className="text-sm font-medium">{h.diagnosis ?? t("patients.noDiagnosis")}</p>
-                        <p className="text-xs text-muted-foreground">{formatDate(h.record_date, locale)} · {h.doctors?.full_name ?? "—"}</p>
+                    {medicalRecords.slice(0, 3).map((h: any, i: number) => (
+                      <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
+                        <div className="h-2 w-2 rounded-full bg-primary mt-2 shrink-0" />
+                        <div>
+                          <p className="text-sm font-medium">{h.diagnosis ?? t("patients.noDiagnosis")}</p>
+                          <p className="text-xs text-muted-foreground">{formatDate(h.record_date, locale, "date", calendarType)} · {h.doctors?.full_name ?? "—"}</p>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
                 </div>
               )}
             </div>
@@ -335,7 +335,7 @@ export const PatientDetailPage = () => {
 
         const AppointmentRow = ({ a }: { a: any }) => (
           <tr className="hover:bg-muted/30 transition-colors">
-            <td className="whitespace-nowrap text-muted-foreground">{formatDate(a.appointment_date, locale, "datetime")}</td>
+            <td className="whitespace-nowrap text-muted-foreground">{formatDate(a.appointment_date, locale, "datetime", calendarType)}</td>
             <td className="font-medium capitalize">{a.type?.replace("_", " ") ?? "—"}</td>
             <td>{a.doctors?.full_name ?? "—"}</td>
             <td>
@@ -432,7 +432,7 @@ export const PatientDetailPage = () => {
               <tbody>
                 {medicalRecords.map((h: any, i: number) => (
                   <tr key={i} className="hover:bg-muted/30 transition-colors">
-                    <td className="text-muted-foreground whitespace-nowrap">{formatDate(h.record_date, locale)}</td>
+                    <td className="text-muted-foreground whitespace-nowrap">{formatDate(h.record_date, locale, "date", calendarType)}</td>
                     <td className="font-medium">{h.diagnosis ?? "—"}</td>
                     <td>{h.doctors?.full_name ?? "—"}</td>
                     <td className="text-sm text-muted-foreground max-w-xs truncate">{h.notes}</td>
@@ -464,7 +464,7 @@ export const PatientDetailPage = () => {
                     <td className="font-medium">{rx.medication}</td>
                     <td>{rx.dosage}</td>
                     <td>{rx.doctors?.full_name ?? "—"}</td>
-                    <td className="text-muted-foreground">{formatDate(rx.prescribed_date, locale)}</td>
+                    <td className="text-muted-foreground">{formatDate(rx.prescribed_date, locale, "date", calendarType)}</td>
                     <td>
                       <StatusBadge variant={rx.status === "active" ? "success" : "default"}>
                         {rx.status === "active" ? t("patients.active") : t("patients.inactive")}
@@ -491,7 +491,7 @@ export const PatientDetailPage = () => {
                     <StatusBadge variant="info">{note.record_type?.replace("_", " ") ?? "Note"}</StatusBadge>
                     <span className="text-sm text-muted-foreground ms-3">{note.doctors?.full_name}</span>
                   </div>
-                  <span className="text-sm text-muted-foreground">{formatDate(note.record_date, locale)}</span>
+                  <span className="text-sm text-muted-foreground">{formatDate(note.record_date, locale, "date", calendarType)}</span>
                 </div>
                 <p className="text-sm leading-relaxed">{note.notes}</p>
               </div>
@@ -537,7 +537,7 @@ export const PatientDetailPage = () => {
                     <tr key={l.id} className="hover:bg-muted/30 transition-colors">
                       <td className="font-medium">{l.test_name}</td>
                       <td>{l.doctors?.full_name ?? "—"}</td>
-                      <td className="text-muted-foreground whitespace-nowrap">{formatDate(l.order_date, locale)}</td>
+                      <td className="text-muted-foreground whitespace-nowrap">{formatDate(l.order_date, locale, "date", calendarType)}</td>
                       <td>
                         <StatusBadge variant={labStatusVariant[l.status] ?? "default"}>
                           {getLabStatusLabel(l.status)}
@@ -598,7 +598,7 @@ export const PatientDetailPage = () => {
                       <td className="font-medium">{inv.invoice_code}</td>
                       <td>{inv.service}</td>
                       <td className="font-semibold">{formatCurrency(Number(inv.amount), locale)}</td>
-                      <td className="text-muted-foreground whitespace-nowrap">{formatDate(inv.invoice_date, locale)}</td>
+                      <td className="text-muted-foreground whitespace-nowrap">{formatDate(inv.invoice_date, locale, "date", calendarType)}</td>
                       <td>
                         <StatusBadge variant={invoiceStatusVariant[inv.status] ?? "default"}>
                           {getInvoiceStatusLabel(inv.status)}

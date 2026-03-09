@@ -69,7 +69,10 @@ const statusChipClass: Record<string, string> = {
 };
 
 export function AppointmentCalendar({ appointments, view, onViewChange, rescheduleEnabled, onReschedule }: Props) {
-  const { t, locale } = useI18n();
+  const { t, locale, calendarType } = useI18n();
+  const intlLocale = locale === "ar" ? "ar-SA" : "en-US";
+  const calendar = calendarType === "hijri" ? "islamic-umalqura" : "gregory";
+
   const [cursor, setCursor] = useState(() => {
     const now = new Date();
     now.setHours(0, 0, 0, 0);
@@ -136,20 +139,30 @@ export function AppointmentCalendar({ appointments, view, onViewChange, reschedu
     if (view === "week") {
       const start = startOfWeek(cursor);
       const end = addDays(start, 6);
-      return `${start.toLocaleDateString(locale, { month: "short", day: "numeric" })} – ${end.toLocaleDateString(locale, {
+      return `${start.toLocaleDateString(intlLocale, {
+        calendar,
+        month: "short",
+        day: "numeric",
+      })} – ${end.toLocaleDateString(intlLocale, {
+        calendar,
         month: "short",
         day: "numeric",
         year: "numeric",
       })}`;
     }
-    return cursor.toLocaleDateString(locale, { month: "long", year: "numeric" });
-  }, [cursor, view, locale]);
+    return cursor.toLocaleDateString(intlLocale, { calendar, month: "long", year: "numeric" });
+  }, [cursor, view, intlLocale, calendar]);
 
   const weekdayShort = useMemo(() => {
-    const fmt = new Intl.DateTimeFormat(locale, { weekday: "short" });
+    const fmt = new Intl.DateTimeFormat(intlLocale, { calendar, weekday: "short" });
     const baseSunday = new Date(2024, 0, 7); // Sunday
     return Array.from({ length: 7 }, (_, i) => fmt.format(addDays(baseSunday, i)));
-  }, [locale]);
+  }, [intlLocale, calendar]);
+
+  const dayNumber = useMemo(() => {
+    const fmt = new Intl.DateTimeFormat(intlLocale, { calendar, day: "numeric" });
+    return (d: Date) => fmt.format(d);
+  }, [intlLocale, calendar]);
 
   const rangeDays = useMemo(() => {
     if (view === "week") {
@@ -257,14 +270,16 @@ export function AppointmentCalendar({ appointments, view, onViewChange, reschedu
                 )}
               >
                 <div className="flex items-center justify-between mb-2">
-                  <span className={cn("text-xs font-medium", isOutside && "text-muted-foreground")}>{day.getDate()}</span>
+                  <span className={cn("text-xs font-medium", isOutside && "text-muted-foreground")}>{dayNumber(day)}</span>
                   {dayAppointments.length > 0 && <span className="text-[10px] text-muted-foreground">{dayAppointments.length}</span>}
                 </div>
 
                 <div className="space-y-1">
                   {dayAppointments.slice(0, 3).map((a) => {
                     const dt = parseAppointmentDate(a.appointment_date);
-                    const time = Number.isNaN(dt.getTime()) ? "" : dt.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
+                    const time = Number.isNaN(dt.getTime())
+                      ? ""
+                      : dt.toLocaleTimeString(intlLocale, { hour: "2-digit", minute: "2-digit" });
                     return (
                       <div
                         key={a.id}
