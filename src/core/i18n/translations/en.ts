@@ -87,6 +87,7 @@ export const en = {
     toggleTheme: "Toggle the app theme",
     compactView: "Compact View",
     comingSoon: "Coming soon",
+    print: "Print",
   },
 
   roles: {
