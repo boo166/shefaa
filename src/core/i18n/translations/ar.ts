@@ -184,6 +184,11 @@ export const ar = {
     billingAlerts: "تنبيهات الفواتير",
     systemUpdates: "تحديثات النظام",
     themeCustomization: "تخصيص المظهر قريباً",
+    security: "الأمان",
+    changePassword: "تغيير كلمة المرور",
+    newPassword: "كلمة المرور الجديدة",
+    confirmPassword: "تأكيد كلمة المرور",
+    updatePassword: "تحديث كلمة المرور",
   },
   auth: {
     login: "تسجيل الدخول",

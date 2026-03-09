@@ -4,12 +4,16 @@ import { StatCard } from "@/shared/components/StatCard";
 import { StatusBadge } from "@/shared/components/StatusBadge";
 import { StatusFilter } from "@/shared/components/StatusFilter";
 import { DataTable, Column } from "@/shared/components/DataTable";
-import { Shield, Plus } from "lucide-react";
+import { Shield, Plus, CheckCircle, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSupabaseTable } from "@/hooks/useSupabaseQuery";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { useAuth } from "@/core/auth/authStore";
 import { Tables } from "@/integrations/supabase/types";
+import { NewClaimModal } from "./NewClaimModal";
+import { useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
 
 type Claim = Tables<"insurance_claims"> & { patients?: { full_name: string } | null };
 
@@ -25,8 +29,10 @@ const statusVariant: Record<string, "success" | "warning" | "destructive"> = { a
 export const InsurancePage = () => {
   const { t } = useI18n();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const isDemo = user?.tenantId === "demo";
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [showModal, setShowModal] = useState(false);
 
   useRealtimeSubscription(["insurance_claims"]);
 
@@ -34,6 +40,8 @@ export const InsurancePage = () => {
     select: "*, patients(full_name)",
     orderBy: { column: "claim_date", ascending: false },
   });
+  
+  const { data: patients = [] } = useSupabaseTable<Tables<"patients">>("patients");
 
   const displayData = isDemo
     ? DEMO_CLAIMS
@@ -48,6 +56,17 @@ export const InsurancePage = () => {
   const approved = displayData.filter((c) => c.status === "approved").length;
   const rate = displayData.length ? Math.round((approved / displayData.length) * 100) : 0;
 
+  const handleUpdateStatus = async (id: string, newStatus: string) => {
+    if (isDemo) return;
+    const { error } = await supabase.from("insurance_claims").update({ status: newStatus }).eq("id", id);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: `Claim ${newStatus}` });
+      queryClient.invalidateQueries({ queryKey: ["insurance_claims"] });
+    }
+  };
+
   const columns: Column<typeof displayData[0]>[] = [
     { key: "patient_name", header: t("appointments.patient"), searchable: true },
     { key: "provider", header: t("common.provider"), searchable: true },
@@ -55,13 +74,35 @@ export const InsurancePage = () => {
     { key: "amount", header: t("common.amount"), render: (c) => `$${c.amount}` },
     { key: "claim_date", header: t("common.date") },
     { key: "status", header: t("common.status"), render: (c) => <StatusBadge variant={statusVariant[c.status] ?? "default"}>{c.status}</StatusBadge> },
+    {
+      key: "actions",
+      header: t("common.actions"),
+      render: (c) => c.status === "pending" ? (
+        <div className="flex gap-1">
+          <button
+            onClick={() => handleUpdateStatus(c.id, "approved")}
+            className="p-1.5 rounded-md hover:bg-success/10 text-success"
+            title="Approve"
+          >
+            <CheckCircle className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => handleUpdateStatus(c.id, "rejected")}
+            className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive"
+            title="Reject"
+          >
+            <XCircle className="h-4 w-4" />
+          </button>
+        </div>
+      ) : null,
+    },
   ];
 
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="page-header">
         <h1 className="page-title">{t("insurance.title")}</h1>
-        <Button><Plus className="h-4 w-4" /> {t("insurance.newClaim")}</Button>
+        <Button onClick={() => setShowModal(true)}><Plus className="h-4 w-4" /> {t("insurance.newClaim")}</Button>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -79,6 +120,13 @@ export const InsurancePage = () => {
             onChange={setStatusFilter}
           />
         }
+      />
+
+      <NewClaimModal
+        open={showModal}
+        onClose={() => setShowModal(false)}
+        onSuccess={() => queryClient.invalidateQueries({ queryKey: ["insurance_claims"] })}
+        patients={patients.map((p) => ({ id: p.id, full_name: p.full_name }))}
       />
     </div>
   );

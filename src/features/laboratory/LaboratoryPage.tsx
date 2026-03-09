@@ -5,11 +5,15 @@ import { StatusBadge } from "@/shared/components/StatusBadge";
 import { StatusFilter } from "@/shared/components/StatusFilter";
 import { StatCard } from "@/shared/components/StatCard";
 import { Button } from "@/components/ui/button";
-import { FlaskConical, Clock, CheckCircle, Plus } from "lucide-react";
+import { FlaskConical, Clock, CheckCircle, Plus, FileCheck } from "lucide-react";
 import { useSupabaseTable } from "@/hooks/useSupabaseQuery";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { useAuth } from "@/core/auth/authStore";
 import { Tables } from "@/integrations/supabase/types";
+import { NewLabOrderModal } from "./NewLabOrderModal";
+import { useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
 
 type LabOrder = Tables<"lab_orders"> & {
   patients?: { full_name: string } | null;
@@ -28,8 +32,10 @@ const statusVariant: Record<string, "default" | "warning" | "success"> = { pendi
 export const LaboratoryPage = () => {
   const { t } = useI18n();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const isDemo = user?.tenantId === "demo";
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [showModal, setShowModal] = useState(false);
 
   useRealtimeSubscription(["lab_orders"]);
 
@@ -37,6 +43,9 @@ export const LaboratoryPage = () => {
     select: "*, patients(full_name), doctors(full_name)",
     orderBy: { column: "order_date", ascending: false },
   });
+
+  const { data: patients = [] } = useSupabaseTable<Tables<"patients">>("patients");
+  const { data: doctors = [] } = useSupabaseTable<Tables<"doctors">>("doctors");
 
   const displayData = isDemo
     ? DEMO_LABS
@@ -47,6 +56,19 @@ export const LaboratoryPage = () => {
 
   const filtered = useMemo(() => statusFilter ? displayData.filter((l) => l.status === statusFilter) : displayData, [displayData, statusFilter]);
 
+  const handleUpdateStatus = async (id: string, newStatus: string, result?: string) => {
+    if (isDemo) return;
+    const update: any = { status: newStatus };
+    if (result !== undefined) update.result = result;
+    const { error } = await supabase.from("lab_orders").update(update).eq("id", id);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Status updated" });
+      queryClient.invalidateQueries({ queryKey: ["lab_orders"] });
+    }
+  };
+
   const columns: Column<typeof displayData[0]>[] = [
     { key: "patient_name", header: t("appointments.patient"), searchable: true },
     { key: "test_name", header: t("laboratory.test"), searchable: true, render: (l) => <span className="font-medium">{l.test_name}</span> },
@@ -54,13 +76,37 @@ export const LaboratoryPage = () => {
     { key: "order_date", header: t("common.date") },
     { key: "status", header: t("common.status"), render: (l) => <StatusBadge variant={statusVariant[l.status] ?? "default"}>{l.status}</StatusBadge> },
     { key: "result", header: t("common.result"), render: (l) => l.result ? <span className="font-medium">{l.result}</span> : <span className="text-muted-foreground">—</span> },
+    {
+      key: "actions",
+      header: t("common.actions"),
+      render: (l) => (
+        <div className="flex gap-1">
+          {l.status === "pending" && (
+            <button
+              onClick={() => handleUpdateStatus(l.id, "processing")}
+              className="px-2 py-1 text-xs rounded bg-warning/10 text-warning hover:bg-warning/20"
+            >
+              Start
+            </button>
+          )}
+          {l.status === "processing" && (
+            <button
+              onClick={() => handleUpdateStatus(l.id, "completed", "Normal")}
+              className="px-2 py-1 text-xs rounded bg-success/10 text-success hover:bg-success/20"
+            >
+              Complete
+            </button>
+          )}
+        </div>
+      ),
+    },
   ];
 
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="page-header">
         <h1 className="page-title">{t("laboratory.title")}</h1>
-        <Button><Plus className="h-4 w-4" /> {t("laboratory.newLabOrder")}</Button>
+        <Button onClick={() => setShowModal(true)}><Plus className="h-4 w-4" /> {t("laboratory.newLabOrder")}</Button>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -78,6 +124,14 @@ export const LaboratoryPage = () => {
             onChange={setStatusFilter}
           />
         }
+      />
+
+      <NewLabOrderModal
+        open={showModal}
+        onClose={() => setShowModal(false)}
+        onSuccess={() => queryClient.invalidateQueries({ queryKey: ["lab_orders"] })}
+        patients={patients.map((p) => ({ id: p.id, full_name: p.full_name }))}
+        doctors={doctors.map((d) => ({ id: d.id, full_name: d.full_name }))}
       />
     </div>
   );

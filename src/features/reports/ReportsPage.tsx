@@ -4,10 +4,12 @@ import { useAuth } from "@/core/auth/authStore";
 import { cn } from "@/lib/utils";
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, AreaChart, Area,
 } from "recharts";
 import { useSupabaseTable } from "@/hooks/useSupabaseQuery";
 import { Tables } from "@/integrations/supabase/types";
+import { TrendingUp, Users, CalendarDays, DollarSign } from "lucide-react";
+import { StatCard } from "@/shared/components/StatCard";
 
 const COLORS = [
   "hsl(174, 62%, 34%)", "hsl(210, 80%, 52%)", "hsl(152, 60%, 40%)",
@@ -29,12 +31,12 @@ const DEMO_PATIENT_GROWTH = [
   { month: "Feb", patients: 1220 }, { month: "Mar", patients: 1284 },
 ];
 
-const DEMO_DEPARTMENT_DATA = [
-  { name: "Cardiology", value: 28 }, { name: "Orthopedics", value: 22 },
-  { name: "Pediatrics", value: 20 }, { name: "Dermatology", value: 15 }, { name: "Neurology", value: 15 },
+const DEMO_APPOINTMENT_TYPES = [
+  { name: "Checkup", value: 42 }, { name: "Follow-up", value: 28 },
+  { name: "Consultation", value: 20 }, { name: "Emergency", value: 10 },
 ];
 
-type Tab = "revenue" | "patients" | "doctors";
+type Tab = "revenue" | "patients" | "doctors" | "appointments";
 
 export const ReportsPage = () => {
   const { t } = useI18n();
@@ -73,32 +75,43 @@ export const ReportsPage = () => {
     return Object.entries(months).map(([month, count]) => ({ month, patients: count }));
   }, [patients, isDemo]);
 
-  // Department data: group doctors by specialty
-  const departmentData = useMemo(() => {
-    if (isDemo) return DEMO_DEPARTMENT_DATA;
-    const deps: Record<string, number> = {};
-    doctors.forEach((d) => { deps[d.specialty] = (deps[d.specialty] || 0) + 1; });
-    return Object.entries(deps).map(([name, value]) => ({ name, value }));
-  }, [doctors, isDemo]);
+  // Appointment type distribution
+  const appointmentTypes = useMemo(() => {
+    if (isDemo) return DEMO_APPOINTMENT_TYPES;
+    const types: Record<string, number> = {};
+    appointments.forEach((a) => { types[a.type] = (types[a.type] || 0) + 1; });
+    return Object.entries(types).map(([name, value]) => ({ name: name.replace("_", " "), value }));
+  }, [appointments, isDemo]);
 
   // Doctor performance
   const doctorPerformance = useMemo(() => {
     if (isDemo) return [
-      { name: "Dr. Sarah Ahmed", patients: 142, rating: 4.9, appointments: 38 },
-      { name: "Dr. John Smith", patients: 98, rating: 4.7, appointments: 29 },
-      { name: "Dr. Layla Khalid", patients: 215, rating: 4.8, appointments: 42 },
+      { name: "Dr. Sarah Ahmed", appointments: 38, rating: 4.9, completedRate: "94%" },
+      { name: "Dr. John Smith", appointments: 29, rating: 4.7, completedRate: "89%" },
+      { name: "Dr. Layla Khalid", appointments: 42, rating: 4.8, completedRate: "91%" },
     ];
-    return doctors.map((doc) => ({
-      name: doc.full_name,
-      patients: 0,
-      rating: Number(doc.rating) || 0,
-      appointments: appointments.filter((a) => a.doctor_id === doc.id).length,
-    }));
+    return doctors.map((doc) => {
+      const docAppts = appointments.filter((a) => a.doctor_id === doc.id);
+      const completed = docAppts.filter((a) => a.status === "completed").length;
+      return {
+        name: doc.full_name,
+        appointments: docAppts.length,
+        rating: Number(doc.rating) || 0,
+        completedRate: docAppts.length ? `${Math.round((completed / docAppts.length) * 100)}%` : "—",
+      };
+    }).sort((a, b) => b.appointments - a.appointments);
   }, [doctors, appointments, isDemo]);
+
+  // Summary stats
+  const totalRevenue = isDemo ? 240750 : invoices.filter((i) => i.status === "paid").reduce((s, i) => s + Number(i.amount), 0);
+  const totalPatients = isDemo ? 1284 : patients.length;
+  const totalAppointments = isDemo ? 182 : appointments.length;
+  const avgRating = isDemo ? 4.8 : (doctors.reduce((s, d) => s + Number(d.rating || 0), 0) / (doctors.length || 1));
 
   const tabItems: { key: Tab; label: string }[] = [
     { key: "revenue", label: t("reports.revenue") },
     { key: "patients", label: t("common.patients") },
+    { key: "appointments", label: t("common.appointments") },
     { key: "doctors", label: t("reports.doctorPerformance") },
   ];
 
@@ -106,6 +119,14 @@ export const ReportsPage = () => {
     <div className="space-y-6 animate-fade-in">
       <div className="page-header">
         <h1 className="page-title">{t("reports.title")}</h1>
+      </div>
+
+      {/* Summary stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard title={t("billing.totalRevenue")} value={`$${totalRevenue.toLocaleString()}`} icon={DollarSign} />
+        <StatCard title={t("dashboard.totalPatients")} value={String(totalPatients)} icon={Users} />
+        <StatCard title="Total Appointments" value={String(totalAppointments)} icon={CalendarDays} />
+        <StatCard title="Avg Doctor Rating" value={`${avgRating.toFixed(1)} ★`} icon={TrendingUp} />
       </div>
 
       <div className="border-b flex gap-1">
@@ -127,10 +148,10 @@ export const ReportsPage = () => {
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(214, 20%, 90%)" />
                 <XAxis dataKey="month" tick={{ fontSize: 12 }} />
                 <YAxis tick={{ fontSize: 12 }} />
-                <Tooltip />
+                <Tooltip formatter={(v: any) => `$${Number(v).toLocaleString()}`} />
                 <Legend />
                 <Bar dataKey="revenue" fill="hsl(174, 62%, 34%)" radius={[4, 4, 0, 0]} name={t("reports.revenue")} />
-                <Bar dataKey="expenses" fill="hsl(210, 80%, 52%)" radius={[4, 4, 0, 0]} name="Expenses" />
+                <Bar dataKey="expenses" fill="hsl(210, 80%, 52%)" radius={[4, 4, 0, 0]} name="Pending/Overdue" />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -138,9 +159,10 @@ export const ReportsPage = () => {
             <h3 className="font-semibold mb-4">{t("reports.revenueByDepartment")}</h3>
             <ResponsiveContainer width="100%" height={320}>
               <PieChart>
-                <Pie data={departmentData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} dataKey="value"
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
-                  {departmentData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                <Pie data={appointmentTypes} cx="50%" cy="50%" innerRadius={55} outerRadius={90} dataKey="value"
+                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  labelLine={false}>
+                  {appointmentTypes.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                 </Pie>
                 <Tooltip />
               </PieChart>
@@ -153,14 +175,57 @@ export const ReportsPage = () => {
         <div className="bg-card rounded-lg border p-5">
           <h3 className="font-semibold mb-4">{t("reports.patientGrowth")}</h3>
           <ResponsiveContainer width="100%" height={350}>
-            <LineChart data={patientGrowth}>
+            <AreaChart data={patientGrowth}>
+              <defs>
+                <linearGradient id="patientGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="hsl(174, 62%, 34%)" stopOpacity={0.15} />
+                  <stop offset="95%" stopColor="hsl(174, 62%, 34%)" stopOpacity={0} />
+                </linearGradient>
+              </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(214, 20%, 90%)" />
               <XAxis dataKey="month" tick={{ fontSize: 12 }} />
               <YAxis tick={{ fontSize: 12 }} />
               <Tooltip />
-              <Line type="monotone" dataKey="patients" stroke="hsl(174, 62%, 34%)" strokeWidth={3} dot={{ fill: "hsl(174, 62%, 34%)", r: 5 }} />
-            </LineChart>
+              <Area type="monotone" dataKey="patients" stroke="hsl(174, 62%, 34%)" fill="url(#patientGrad)" strokeWidth={3} dot={{ fill: "hsl(174, 62%, 34%)", r: 5 }} name="Patients" />
+            </AreaChart>
           </ResponsiveContainer>
+        </div>
+      )}
+
+      {activeTab === "appointments" && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 bg-card rounded-lg border p-5">
+            <h3 className="font-semibold mb-4">Appointment Status Distribution</h3>
+            {(() => {
+              const statuses = ["scheduled", "in_progress", "completed", "cancelled"];
+              const data = isDemo
+                ? [{ name: "Scheduled", value: 45 }, { name: "In Progress", value: 12 }, { name: "Completed", value: 110 }, { name: "Cancelled", value: 15 }]
+                : statuses.map((s) => ({ name: s.replace("_", " "), value: appointments.filter((a) => a.status === s).length }));
+              return (
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={data} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(214, 20%, 90%)" />
+                    <XAxis type="number" tick={{ fontSize: 12 }} />
+                    <YAxis dataKey="name" type="category" tick={{ fontSize: 12 }} width={90} />
+                    <Tooltip />
+                    <Bar dataKey="value" fill="hsl(174, 62%, 34%)" radius={[0, 4, 4, 0]} name="Count" />
+                  </BarChart>
+                </ResponsiveContainer>
+              );
+            })()}
+          </div>
+          <div className="bg-card rounded-lg border p-5">
+            <h3 className="font-semibold mb-4">By Type</h3>
+            <ResponsiveContainer width="100%" height={300}>
+              <PieChart>
+                <Pie data={appointmentTypes} cx="50%" cy="50%" innerRadius={50} outerRadius={85} dataKey="value">
+                  {appointmentTypes.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                </Pie>
+                <Tooltip />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
         </div>
       )}
 
@@ -168,14 +233,17 @@ export const ReportsPage = () => {
         <div className="bg-card rounded-lg border overflow-hidden">
           <table className="data-table">
             <thead><tr className="bg-muted/50">
-              <th>{t("reports.doctor")}</th><th>{t("reports.patientsCount")}</th><th>{t("reports.appointmentsMonth")}</th><th>{t("reports.rating")}</th>
+              <th>{t("reports.doctor")}</th>
+              <th>Appointments</th>
+              <th>Completion Rate</th>
+              <th>{t("reports.rating")}</th>
             </tr></thead>
             <tbody>
               {doctorPerformance.map((doc, i) => (
                 <tr key={i} className="hover:bg-muted/30 transition-colors">
                   <td className="font-medium">{doc.name}</td>
-                  <td>{doc.patients}</td>
                   <td>{doc.appointments}</td>
+                  <td>{doc.completedRate}</td>
                   <td><span className="inline-flex items-center gap-1"><span className="text-warning">★</span> {doc.rating}</span></td>
                 </tr>
               ))}

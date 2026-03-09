@@ -5,13 +5,15 @@ import { StatusBadge } from "@/shared/components/StatusBadge";
 import { StatusFilter } from "@/shared/components/StatusFilter";
 import { Button } from "@/components/ui/button";
 import { PermissionGuard } from "@/core/auth/PermissionGuard";
-import { CalendarPlus } from "lucide-react";
+import { CalendarPlus, CheckCircle, XCircle, Play } from "lucide-react";
 import { useSupabaseTable } from "@/hooks/useSupabaseQuery";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { useAuth } from "@/core/auth/authStore";
 import { NewAppointmentModal } from "./NewAppointmentModal";
 import { useQueryClient } from "@tanstack/react-query";
 import { Tables } from "@/integrations/supabase/types";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
 
 type Appointment = Tables<"appointments"> & {
   patients?: { full_name: string } | null;
@@ -57,12 +59,53 @@ export const AppointmentsPage = () => {
 
   const statusCounts = displayData.reduce((acc, a) => { acc[a.status] = (acc[a.status] || 0) + 1; return acc; }, {} as Record<string, number>);
 
+  const handleUpdateStatus = async (id: string, newStatus: string) => {
+    if (isDemo) return;
+    const { error } = await supabase.from("appointments").update({ status: newStatus }).eq("id", id);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: `Appointment ${newStatus}` });
+      queryClient.invalidateQueries({ queryKey: ["appointments"] });
+    }
+  };
+
   const columns: Column<typeof displayData[0]>[] = [
     { key: "patient_name", header: t("appointments.patient"), searchable: true, render: (a) => <span className="font-medium">{a.patient_name}</span> },
     { key: "doctor_name", header: t("appointments.doctor"), searchable: true },
-    { key: "appointment_date", header: t("appointments.dateTime") },
-    { key: "type", header: t("appointments.type"), render: (a) => <StatusBadge variant="default">{a.type}</StatusBadge> },
+    { key: "appointment_date", header: t("appointments.dateTime"), render: (a) => new Date(a.appointment_date).toLocaleString() },
+    { key: "type", header: t("appointments.type"), render: (a) => <StatusBadge variant="default">{a.type.replace("_", " ")}</StatusBadge> },
     { key: "status", header: t("common.status"), render: (a) => <StatusBadge variant={(statusVariant as any)[a.status] ?? "default"}>{a.status.replace("_", " ")}</StatusBadge> },
+    {
+      key: "actions",
+      header: t("common.actions"),
+      render: (a) => a.status === "scheduled" ? (
+        <div className="flex gap-1">
+          <button
+            onClick={() => handleUpdateStatus(a.id, "in_progress")}
+            className="p-1.5 rounded-md hover:bg-info/10 text-info"
+            title="Start"
+          >
+            <Play className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => handleUpdateStatus(a.id, "cancelled")}
+            className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive"
+            title="Cancel"
+          >
+            <XCircle className="h-4 w-4" />
+          </button>
+        </div>
+      ) : a.status === "in_progress" ? (
+        <button
+          onClick={() => handleUpdateStatus(a.id, "completed")}
+          className="p-1.5 rounded-md hover:bg-success/10 text-success"
+          title="Complete"
+        >
+          <CheckCircle className="h-4 w-4" />
+        </button>
+      ) : null,
+    },
   ];
 
   return (

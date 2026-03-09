@@ -184,6 +184,11 @@ export const en = {
     billingAlerts: "Billing Alerts",
     systemUpdates: "System Updates",
     themeCustomization: "Theme customization coming soon",
+    security: "Security",
+    changePassword: "Change Password",
+    newPassword: "New Password",
+    confirmPassword: "Confirm Password",
+    updatePassword: "Update Password",
   },
   auth: {
     login: "Sign In",
