@@ -303,7 +303,7 @@ export async function generatePatientReportPDF(data: PatientReportData) {
   // ── Medical History ──
   if (medicalRecords.length > 0) {
     addSectionTitle(l.medicalHistory);
-    const table = autoTable(doc, {
+    autoTable(doc, {
       startY: y,
       head: [[l.date, l.type, l.diagnosis, l.doctor, l.notes]],
       body: medicalRecords.map((r) => [
