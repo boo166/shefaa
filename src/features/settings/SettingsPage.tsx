@@ -82,6 +82,7 @@ export const SettingsPage = () => {
           {activeTab === "notifications" && <NotificationsTab />}
           {activeTab === "appearance" && <AppearanceTab />}
           {activeTab === "audit" && <AuditLogTab />}
+          {activeTab === "subscription" && <SubscriptionTab />}
         </div>
       </div>
 
