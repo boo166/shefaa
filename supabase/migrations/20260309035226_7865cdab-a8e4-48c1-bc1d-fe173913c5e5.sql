@@ -65,7 +65,12 @@ CREATE POLICY "Admins and doctors can manage schedules" ON public.doctor_schedul
   );
 
 -- Create patient-documents storage bucket
-INSERT INTO storage.buckets (id, name, public) VALUES ('patient-documents', 'patient-documents', false);
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('patient-documents', 'patient-documents', false)
+ON CONFLICT (id) DO UPDATE
+SET
+  name = EXCLUDED.name,
+  public = EXCLUDED.public;
 
 -- Storage RLS: users in the same tenant can read documents
 CREATE POLICY "Tenant users can read patient documents" ON storage.objects
