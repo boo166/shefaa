@@ -69,8 +69,7 @@ export const SubscriptionProvider = ({ children }: { children: ReactNode }) => {
           .from("subscriptions")
           .select("*")
           .eq("tenant_id", user.tenantId)
-          .single()
-          .abortSignal(controller.signal);
+          .single();
 
         if (controller.signal.aborted) return;
 
