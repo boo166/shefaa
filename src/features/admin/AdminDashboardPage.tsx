@@ -8,25 +8,34 @@ import { Button } from "@/components/ui/button";
 import { DataTable, Column } from "@/shared/components/DataTable";
 import { StatusFilter } from "@/shared/components/StatusFilter";
 import { LanguageSwitcher } from "@/shared/components/LanguageSwitcher";
+import { ConfirmDialog } from "@/shared/components/ConfirmDialog";
 import {
-  Building2, Users, CreditCard, TrendingUp, Search, LogOut,
-  BarChart3, Shield, Eye, ChevronRight, Crown, HeartPulse,
+  Building2, Users, CreditCard, TrendingUp,
+  BarChart3, LogOut, Eye, ChevronRight, Crown, HeartPulse,
 } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
-import { formatDate, formatCurrency } from "@/shared/utils/formatDate";
+import { formatDate } from "@/shared/utils/formatDate";
 import { fetchProfilesWithRoles } from "@/shared/data/profiles";
+import { toast } from "@/hooks/use-toast";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 type AdminTab = "overview" | "clinics" | "users" | "subscriptions";
+
+const PLAN_OPTIONS = ["free", "starter", "pro", "enterprise"] as const;
+const STATUS_OPTIONS = ["active", "trialing", "expired", "canceled"] as const;
 
 export const AdminDashboardPage = () => {
   const { t, locale } = useI18n();
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<AdminTab>("overview");
   const [clinicFilter, setClinicFilter] = useState<string | null>(null);
   const [subFilter, setSubFilter] = useState<string | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{ id: string; field: string; value: string } | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
 
   // Fetch all tenants
   const { data: tenants = [], isLoading: loadingTenants } = useQuery({
@@ -64,6 +73,26 @@ export const AdminDashboardPage = () => {
     navigate("/login");
   };
 
+  const handleSubUpdate = async () => {
+    if (!confirmAction) return;
+    setActionLoading(true);
+    try {
+      const { error } = await supabase
+        .from("subscriptions")
+        .update({ [confirmAction.field]: confirmAction.value, updated_at: new Date().toISOString() })
+        .eq("id", confirmAction.id);
+
+      if (error) throw error;
+      toast({ title: "Updated", description: `Subscription ${confirmAction.field} changed to ${confirmAction.value}` });
+      queryClient.invalidateQueries({ queryKey: ["admin-subscriptions"] });
+    } catch (err: any) {
+      toast({ title: "Error", description: err?.message || "Failed to update", variant: "destructive" });
+    } finally {
+      setActionLoading(false);
+      setConfirmAction(null);
+    }
+  };
+
   const tabs: { key: AdminTab; icon: any; label: string }[] = [
     { key: "overview", icon: BarChart3, label: "Overview" },
     { key: "clinics", icon: Building2, label: "Clinics" },
@@ -83,6 +112,10 @@ export const AdminDashboardPage = () => {
     )},
     { key: "email", header: "Email", searchable: true, render: (c) => c.email || "—" },
     { key: "phone", header: "Phone", render: (c) => c.phone || "—" },
+    { key: "plan", header: "Plan", render: (c) => {
+      const sub = subscriptions.find((s: any) => s.tenant_id === c.id);
+      return <StatusBadge variant={sub?.plan === "pro" ? "success" : sub?.plan === "enterprise" ? "info" : "default"}>{sub?.plan || "free"}</StatusBadge>;
+    }},
     { key: "created_at", header: "Created", render: (c) => formatDate(c.created_at, locale, "date") },
     { key: "actions", header: "", render: (c) => (
       <Button variant="ghost" size="sm" onClick={() => navigate(`/tenant/${c.slug}/dashboard`)}>
@@ -122,16 +155,37 @@ export const AdminDashboardPage = () => {
         </div>
       </div>
     )},
-    { key: "plan", header: "Plan", render: (s) => {
-      const variant = s.plan === "enterprise" ? "info" : s.plan === "pro" ? "success" : "default";
-      return <StatusBadge variant={variant as any}>{s.plan.charAt(0).toUpperCase() + s.plan.slice(1)}</StatusBadge>;
-    }},
+    { key: "plan", header: "Plan", render: (s) => (
+      <Select
+        value={s.plan}
+        onValueChange={(val) => setConfirmAction({ id: s.id, field: "plan", value: val })}
+      >
+        <SelectTrigger className="h-8 w-28">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {PLAN_OPTIONS.map((p) => (
+            <SelectItem key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    )},
     { key: "amount", header: "Amount", render: (s) => s.amount > 0 ? `${s.currency} ${Number(s.amount).toLocaleString()}` : "Free" },
     { key: "billing_cycle", header: "Cycle", render: (s) => s.billing_cycle },
     { key: "status", header: "Status", render: (s) => (
-      <StatusBadge variant={s.status === "active" ? "success" : s.status === "expired" ? "destructive" : "warning"}>
-        {s.status}
-      </StatusBadge>
+      <Select
+        value={s.status}
+        onValueChange={(val) => setConfirmAction({ id: s.id, field: "status", value: val })}
+      >
+        <SelectTrigger className="h-8 w-28">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {STATUS_OPTIONS.map((st) => (
+            <SelectItem key={st} value={st}>{st.charAt(0).toUpperCase() + st.slice(1)}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     )},
     { key: "expires_at", header: "Expires", render: (s) => s.expires_at ? formatDate(s.expires_at, locale, "date") : "—" },
   ];
@@ -142,6 +196,13 @@ export const AdminDashboardPage = () => {
   }) : tenants;
 
   const filteredSubs = subFilter ? subscriptions.filter((s: any) => s.plan === subFilter) : subscriptions;
+
+  const planBreakdown = PLAN_OPTIONS.map((plan) => {
+    const count = subscriptions.filter((s: any) => s.plan === plan).length;
+    const pct = subscriptions.length ? Math.round((count / subscriptions.length) * 100) : 0;
+    const variant = plan === "pro" ? "success" : plan === "enterprise" ? "info" : plan === "starter" ? "warning" : "default";
+    return { plan, count, pct, variant };
+  });
 
   return (
     <div className="min-h-screen bg-background" dir={locale === "ar" ? "rtl" : "ltr"}>
@@ -237,24 +298,20 @@ export const AdminDashboardPage = () => {
               </div>
             </div>
 
-            {/* Subscription breakdown */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {["free", "pro", "enterprise"].map((plan) => {
-                const count = subscriptions.filter((s: any) => s.plan === plan).length;
-                const pct = subscriptions.length ? Math.round((count / subscriptions.length) * 100) : 0;
-                return (
-                  <div key={plan} className="bg-card rounded-xl border p-5">
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="text-sm font-medium capitalize">{plan} Plan</span>
-                      <StatusBadge variant={plan === "pro" ? "success" : plan === "enterprise" ? "info" : "default"}>{count}</StatusBadge>
-                    </div>
-                    <div className="h-2 bg-muted rounded-full">
-                      <div className="h-2 bg-primary rounded-full transition-all" style={{ width: `${pct}%` }} />
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-2">{pct}% of total</p>
+            {/* Subscription breakdown - all 4 plans */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {planBreakdown.map(({ plan, count, pct, variant }) => (
+                <div key={plan} className="bg-card rounded-xl border p-5">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm font-medium capitalize">{plan} Plan</span>
+                    <StatusBadge variant={variant as any}>{count}</StatusBadge>
                   </div>
-                );
-              })}
+                  <div className="h-2 bg-muted rounded-full">
+                    <div className="h-2 bg-primary rounded-full transition-all" style={{ width: `${pct}%` }} />
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">{pct}% of total</p>
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -271,11 +328,7 @@ export const AdminDashboardPage = () => {
               exportFileName="clinics"
               filterSlot={
                 <StatusFilter
-                  options={[
-                    { value: "free", label: "Free" },
-                    { value: "pro", label: "Pro" },
-                    { value: "enterprise", label: "Enterprise" },
-                  ]}
+                  options={PLAN_OPTIONS.map((p) => ({ value: p, label: p.charAt(0).toUpperCase() + p.slice(1) }))}
                   selected={clinicFilter}
                   onChange={setClinicFilter}
                 />
@@ -310,11 +363,7 @@ export const AdminDashboardPage = () => {
               exportFileName="subscriptions"
               filterSlot={
                 <StatusFilter
-                  options={[
-                    { value: "free", label: "Free" },
-                    { value: "pro", label: "Pro" },
-                    { value: "enterprise", label: "Enterprise" },
-                  ]}
+                  options={PLAN_OPTIONS.map((p) => ({ value: p, label: p.charAt(0).toUpperCase() + p.slice(1) }))}
                   selected={subFilter}
                   onChange={setSubFilter}
                 />
@@ -323,6 +372,19 @@ export const AdminDashboardPage = () => {
           </div>
         )}
       </div>
+
+      {/* Confirm dialog for subscription changes */}
+      <ConfirmDialog
+        open={!!confirmAction}
+        title="Confirm Subscription Change"
+        message={`Are you sure you want to change ${confirmAction?.field} to "${confirmAction?.value}"?`}
+        confirmLabel="Update"
+        cancelLabel="Cancel"
+        variant="warning"
+        loading={actionLoading}
+        onConfirm={handleSubUpdate}
+        onCancel={() => setConfirmAction(null)}
+      />
     </div>
   );
 };
