@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useI18n } from "@/core/i18n/i18nStore";
 import { useAuth } from "@/core/auth/authStore";
 import { cn } from "@/lib/utils";
-import { Building, Users, Bell, Palette, Shield, ScrollText, User } from "lucide-react";
+import { Building, Users, Bell, Palette, Shield, ScrollText, User, CreditCard } from "lucide-react";
 import { AddUserModal } from "./AddUserModal";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { GeneralTab } from "./tabs/GeneralTab";
