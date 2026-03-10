@@ -345,7 +345,7 @@ export async function generatePatientReportPDF(data: PatientReportData) {
   // ── Lab Orders ──
   if (labOrders.length > 0) {
     addSectionTitle(l.labOrders);
-    const table = autoTable(doc, {
+    autoTable(doc, {
       startY: y,
       head: [[l.test, l.date, l.doctor, l.status, l.result]],
       body: labOrders.map((lo) => [
@@ -360,7 +360,7 @@ export async function generatePatientReportPDF(data: PatientReportData) {
       styles: { fontSize: 8, cellPadding: 2 },
       margin: { left: 14, right: 14 },
     });
-    y = table.finalY + 4;
+    y = (doc as any).lastAutoTable.finalY + 4;
   }
 
   // ── Invoices ──
