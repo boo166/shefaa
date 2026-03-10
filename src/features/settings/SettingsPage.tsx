@@ -12,6 +12,7 @@ import { NotificationsTab } from "./tabs/NotificationsTab";
 import { AppearanceTab } from "./tabs/AppearanceTab";
 import { AuditLogTab } from "./tabs/AuditLogTab";
 import { ProfileTab } from "./tabs/ProfileTab";
+import { SubscriptionTab } from "./tabs/SubscriptionTab";
 import { fetchProfilesWithRoles } from "@/shared/data/profiles";
 
 type Tab = "profile" | "general" | "users" | "notifications" | "appearance" | "security" | "audit";
