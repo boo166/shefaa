@@ -32,7 +32,7 @@ export const reportRepository: ReportRepository = {
     return ((data as any)?.[0] ?? { total_revenue: 0, total_patients: 0, total_appointments: 0, avg_doctor_rating: 0 }) as ReportOverview;
   },
   async getRevenueByMonth(_tenantId, months = 6) {
-    const { data, error } = await supabase.rpc("get_report_revenue_by_month", { _months: months });
+    const { data, error } = await (supabase.rpc as any)("get_report_revenue_by_month", { _months: months });
     if (error) {
       throw new ServiceError(error.message ?? "Failed to load revenue report", {
         code: error.code,
