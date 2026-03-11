@@ -92,7 +92,7 @@ export const InsurancePage = () => {
   const totalClaims = listPage?.count ?? 0;
 
   const claims: ClaimDisplayRow[] = isDemo
-    ? DEMO_CLAIMS
+    ? (DEMO_CLAIMS as ClaimDisplayRow[])
     : liveClaims.map((c) => ({
         id: c.id,
         patient_name: (c as any).patients?.full_name ?? "-",

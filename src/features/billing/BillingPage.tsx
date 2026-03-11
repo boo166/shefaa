@@ -109,7 +109,7 @@ export const BillingPage = () => {
   const totalInvoices = listPage?.count ?? 0;
 
   const invoices: InvoiceDisplayRow[] = isDemo
-    ? DEMO_INVOICES
+    ? (DEMO_INVOICES as InvoiceDisplayRow[])
     : liveInvoices.map((inv) => ({
         id: inv.id,
         invoice_code: inv.invoice_code,

@@ -110,7 +110,7 @@ export const LaboratoryPage = () => {
   const totalLabs = listPage?.count ?? 0;
 
   const displayData: LabDisplayRow[] = isDemo
-    ? DEMO_LABS
+    ? (DEMO_LABS as LabDisplayRow[])
     : liveLabs.map((l) => ({
         id: l.id,
         patient_name: l.patients?.full_name ?? "-",

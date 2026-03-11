@@ -80,7 +80,7 @@ export const PharmacyPage = () => {
   const totalMeds = listPage?.count ?? 0;
 
   const meds: MedicationRow[] = isDemo
-    ? DEMO_MEDS
+    ? (DEMO_MEDS as MedicationRow[])
     : liveMeds.map((m) => ({
         id: m.id,
         name: m.name,
