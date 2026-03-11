@@ -72,7 +72,7 @@ export const reportRepository: ReportRepository = {
     return (data ?? []) as AppointmentStatusRow[];
   },
   async getRevenueByService(_tenantId, limit = 6) {
-    const { data, error } = await supabase.rpc("get_report_revenue_by_service", { _limit: limit });
+    const { data, error } = await (supabase.rpc as any)("get_report_revenue_by_service", { _limit: limit });
     if (error) {
       throw new ServiceError(error.message ?? "Failed to load revenue by service report", {
         code: error.code,
