@@ -88,6 +88,7 @@ export const PharmacyPage = () => {
         stock: m.stock,
         unit: m.unit,
         price: Number(m.price),
+        status: m.status as MedicationRow["status"],
         status: m.status,
       }));
 

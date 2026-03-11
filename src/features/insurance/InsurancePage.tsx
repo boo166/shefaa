@@ -95,7 +95,7 @@ export const InsurancePage = () => {
     ? DEMO_CLAIMS
     : liveClaims.map((c) => ({
         id: c.id,
-        patient_name: c.patients?.full_name ?? "-",
+        patient_name: (c as any).patients?.full_name ?? "-",
         provider: c.provider,
         service: c.service,
         amount: Number(c.amount),

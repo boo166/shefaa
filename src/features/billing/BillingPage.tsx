@@ -117,7 +117,7 @@ export const BillingPage = () => {
         service: inv.service,
         amount: Number(inv.amount),
         invoice_date: inv.invoice_date,
-        status: inv.status,
+        status: inv.status as InvoiceDisplayRow["status"],
       }));
 
   const demoFiltered = useMemo(() => {

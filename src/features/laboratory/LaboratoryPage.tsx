@@ -117,7 +117,7 @@ export const LaboratoryPage = () => {
         test_name: l.test_name,
         doctor_name: l.doctors?.full_name ?? "-",
         order_date: l.order_date,
-        status: l.status,
+        status: l.status as LabDisplayRow["status"],
         result: l.result ?? null,
       }));
 
