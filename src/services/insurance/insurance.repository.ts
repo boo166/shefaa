@@ -136,7 +136,7 @@ export const insuranceRepository: InsuranceRepository = {
       });
     }
 
-    return (data?.[0] ?? {
+    return ((data as any)?.[0] ?? {
       total_count: 0,
       pending_count: 0,
       approved_count: 0,
