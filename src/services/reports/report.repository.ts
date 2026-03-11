@@ -52,7 +52,7 @@ export const reportRepository: ReportRepository = {
     return (data ?? []) as PatientGrowthRow[];
   },
   async getAppointmentTypes(_tenantId) {
-    const { data, error } = await supabase.rpc("get_report_appointment_types");
+    const { data, error } = await (supabase.rpc as any)("get_report_appointment_types");
     if (error) {
       throw new ServiceError(error.message ?? "Failed to load appointment types report", {
         code: error.code,
