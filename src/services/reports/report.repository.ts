@@ -22,7 +22,7 @@ export interface ReportRepository {
 
 export const reportRepository: ReportRepository = {
   async getOverview(_tenantId) {
-    const { data, error } = await supabase.rpc("get_report_overview");
+    const { data, error } = await (supabase.rpc as any)("get_report_overview");
     if (error) {
       throw new ServiceError(error.message ?? "Failed to load report overview", {
         code: error.code,
