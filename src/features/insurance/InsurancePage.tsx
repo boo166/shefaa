@@ -92,15 +92,15 @@ export const InsurancePage = () => {
   const totalClaims = listPage?.count ?? 0;
 
   const claims: ClaimDisplayRow[] = isDemo
-    ? DEMO_CLAIMS
+    ? (DEMO_CLAIMS as ClaimDisplayRow[])
     : liveClaims.map((c) => ({
         id: c.id,
-        patient_name: c.patients?.full_name ?? "-",
+        patient_name: (c as any).patients?.full_name ?? "-",
         provider: c.provider,
         service: c.service,
         amount: Number(c.amount),
         claim_date: c.claim_date,
-        status: c.status,
+        status: c.status as ClaimDisplayRow["status"],
       }));
 
   const demoFiltered = useMemo(() => {

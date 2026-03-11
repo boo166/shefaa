@@ -80,7 +80,7 @@ export const PharmacyPage = () => {
   const totalMeds = listPage?.count ?? 0;
 
   const meds: MedicationRow[] = isDemo
-    ? DEMO_MEDS
+    ? (DEMO_MEDS as MedicationRow[])
     : liveMeds.map((m) => ({
         id: m.id,
         name: m.name,
@@ -88,7 +88,7 @@ export const PharmacyPage = () => {
         stock: m.stock,
         unit: m.unit,
         price: Number(m.price),
-        status: m.status,
+        status: m.status as MedicationRow["status"],
       }));
 
   const demoFiltered = useMemo(() => {

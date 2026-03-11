@@ -69,7 +69,7 @@ export const pharmacyRepository: PharmacyRepository = {
     return { data: (data ?? []) as Medication[], count: count ?? 0 };
   },
   async getSummary(_tenantId) {
-    const { data, error } = await supabase.rpc("get_medication_summary");
+    const { data, error } = await (supabase.rpc as any)("get_medication_summary");
     if (error) {
       throw new ServiceError(error.message ?? "Failed to load medication summary", {
         code: error.code,
@@ -77,7 +77,7 @@ export const pharmacyRepository: PharmacyRepository = {
       });
     }
 
-    return (data?.[0] ?? { total_count: 0, low_stock_count: 0, inventory_value: 0 }) as MedicationSummary;
+    return ((data as any)?.[0] ?? { total_count: 0, low_stock_count: 0, inventory_value: 0 }) as MedicationSummary;
   },
   async create(input, tenantId) {
     const payload: Record<string, unknown> = {
@@ -93,7 +93,7 @@ export const pharmacyRepository: PharmacyRepository = {
 
     const result = await supabase
       .from("medications")
-      .insert(payload)
+      .insert(payload as any)
       .select(MEDICATION_COLUMNS)
       .single();
 
