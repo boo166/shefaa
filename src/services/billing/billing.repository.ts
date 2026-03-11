@@ -138,7 +138,7 @@ export const billingRepository: BillingRepository = {
       });
     }
 
-    return (data?.[0] ?? { total_count: 0, paid_count: 0, paid_amount: 0, pending_amount: 0 }) as InvoiceSummary;
+    return ((data as any)?.[0] ?? { total_count: 0, paid_count: 0, paid_amount: 0, pending_amount: 0 }) as InvoiceSummary;
   },
   async countInRange(start, end, tenantId) {
     const { count, error } = await supabase
