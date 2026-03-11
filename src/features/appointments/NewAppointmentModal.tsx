@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { X } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { appointmentService } from "@/services/appointments/appointment.service";
+import type { AppointmentCreateInput } from "@/domain/appointment/appointment.types";
 
 interface NewAppointmentModalProps {
   open: boolean;
@@ -19,6 +20,7 @@ interface NewAppointmentModalProps {
 export const NewAppointmentModal = ({ open, onClose, onSuccess, patients, doctors }: NewAppointmentModalProps) => {
   const { t } = useI18n();
   const { user } = useAuth();
+  const isDemo = user?.tenantId === "demo";
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     patient_id: "",
@@ -40,24 +42,28 @@ export const NewAppointmentModal = ({ open, onClose, onSuccess, patients, doctor
       });
       return;
     }
+    if (isDemo) {
+      toast({ title: t("common.demoMode"), description: t("common.demoModeNoSave"), variant: "destructive" });
+      return;
+    }
     setLoading(true);
-    const { error } = await supabase.from("appointments").insert({
-      tenant_id: user?.tenantId ?? "",
-      patient_id: form.patient_id,
-      doctor_id: form.doctor_id,
-      appointment_date: form.appointment_date,
-      type: form.type,
-      notes: form.notes || null,
-    });
-
-    if (error) {
-      toast({ title: t("common.error"), description: error.message, variant: "destructive" });
-    } else {
+    try {
+      await appointmentService.create({
+        patient_id: form.patient_id,
+        doctor_id: form.doctor_id,
+        appointment_date: form.appointment_date,
+        type: form.type as AppointmentCreateInput["type"],
+        notes: form.notes || null,
+      });
       toast({ title: t("appointments.appointmentCreated") });
       onSuccess();
       onClose();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : t("common.error");
+      toast({ title: t("common.error"), description: message, variant: "destructive" });
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (

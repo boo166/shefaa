@@ -5,8 +5,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Upload, FileText, AlertTriangle, CheckCircle2, X, Download } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { patientService } from "@/services/patients/patient.service";
 
 interface Props {
   open: boolean;
@@ -19,6 +19,35 @@ interface ImportResult {
   errors: { row: number; message: string }[];
 }
 
+const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB
+
+function parseCsvLine(line: string): string[] {
+  const result: string[] = [];
+  let current = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    const next = line[i + 1];
+    if (char === '"' && next === '"') {
+      current += '"';
+      i++;
+      continue;
+    }
+    if (char === '"') {
+      inQuotes = !inQuotes;
+      continue;
+    }
+    if (char === "," && !inQuotes) {
+      result.push(current.trim());
+      current = "";
+      continue;
+    }
+    current += char;
+  }
+  result.push(current.trim());
+  return result;
+}
+
 export const ImportPatientsModal = ({ open, onClose, onSuccess }: Props) => {
   const { t } = useI18n();
   const { user } = useAuth();
@@ -28,7 +57,13 @@ export const ImportPatientsModal = ({ open, onClose, onSuccess }: Props) => {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files?.[0];
-    if (selected && selected.type === "text/csv") {
+    if (!selected) return;
+    if (selected.size > MAX_FILE_SIZE) {
+      toast({ title: t("common.error"), description: "File must be under 2 MB", variant: "destructive" });
+      return;
+    }
+    const isCsv = selected.type === "text/csv" || selected.name.toLowerCase().endsWith(".csv");
+    if (isCsv) {
       setFile(selected);
       setResult(null);
     } else {
@@ -38,14 +73,23 @@ export const ImportPatientsModal = ({ open, onClose, onSuccess }: Props) => {
 
   const handleImport = async () => {
     if (!file || !user) return;
+    if (user.tenantId === "demo") {
+      toast({ title: t("common.demoMode"), variant: "destructive" });
+      return;
+    }
 
     setImporting(true);
     setResult(null);
 
     try {
       const text = await file.text();
-      const lines = text.split("\n").filter((l) => l.trim());
-      const headers = lines[0].split(",").map((h) => h.trim().toLowerCase());
+      const lines = text.split(/\r?\n/).filter((l) => l.trim());
+      if (lines.length < 2) {
+        toast({ title: t("common.error"), description: "CSV file is empty", variant: "destructive" });
+        setImporting(false);
+        return;
+      }
+      const headers = parseCsvLine(lines[0]).map((h) => h.trim().toLowerCase());
 
       // Expected headers: full_name, date_of_birth, gender, blood_type, phone, email, address, insurance_provider
       const requiredHeaders = ["full_name"];
@@ -62,9 +106,11 @@ export const ImportPatientsModal = ({ open, onClose, onSuccess }: Props) => {
 
       const errors: { row: number; message: string }[] = [];
       let success = 0;
+      const allowedBloodTypes = new Set(["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"]);
 
+      const rows: Array<{ rowIndex: number; payload: any }> = [];
       for (let i = 1; i < lines.length; i++) {
-        const values = lines[i].split(",").map((v) => v.trim());
+        const values = parseCsvLine(lines[i]);
         const row: any = {};
         headers.forEach((h, idx) => {
           row[h] = values[idx] || null;
@@ -75,31 +121,38 @@ export const ImportPatientsModal = ({ open, onClose, onSuccess }: Props) => {
           continue;
         }
 
-        // Generate patient code
-        const count = await supabase
-          .from("patients")
-          .select("id", { count: "exact", head: true })
-          .eq("tenant_id", user.tenantId);
-        const patientCode = `PT-${String((count.count ?? 0) + 1 + success).padStart(3, "0")}`;
+        const genderRaw = typeof row.gender === "string" ? row.gender.trim().toLowerCase() : "";
+        const gender = genderRaw === "male" || genderRaw === "female" ? genderRaw : null;
 
-        const { error } = await supabase.from("patients").insert({
-          tenant_id: user.tenantId,
-          patient_code: patientCode,
-          full_name: row.full_name,
-          date_of_birth: row.date_of_birth || null,
-          gender: row.gender || null,
-          blood_type: row.blood_type || null,
-          phone: row.phone || null,
-          email: row.email || null,
-          address: row.address || null,
-          insurance_provider: row.insurance_provider || null,
-          status: "active",
+        const bloodTypeRaw = typeof row.blood_type === "string" ? row.blood_type.trim().toUpperCase() : "";
+        const blood_type = allowedBloodTypes.has(bloodTypeRaw) ? bloodTypeRaw : null;
+
+        rows.push({
+          rowIndex: i + 1,
+          payload: {
+            full_name: row.full_name,
+            date_of_birth: row.date_of_birth || null,
+            gender,
+            blood_type,
+            phone: row.phone || null,
+            email: row.email || null,
+            address: row.address || null,
+            insurance_provider: row.insurance_provider || null,
+            status: "active",
+          },
         });
+      }
 
-        if (error) {
-          errors.push({ row: i + 1, message: error.message });
-        } else {
-          success++;
+      const chunkSize = 200;
+      for (let i = 0; i < rows.length; i += chunkSize) {
+        const chunk = rows.slice(i, i + chunkSize);
+        for (const item of chunk) {
+          try {
+            await patientService.create(item.payload);
+            success++;
+          } catch (rowErr: any) {
+            errors.push({ row: item.rowIndex, message: rowErr?.message ?? "Failed to import row" });
+          }
         }
       }
 

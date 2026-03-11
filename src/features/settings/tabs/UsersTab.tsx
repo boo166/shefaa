@@ -2,10 +2,10 @@ import { useI18n } from "@/core/i18n/i18nStore";
 import { Button } from "@/components/ui/button";
 import { PermissionGuard } from "@/core/auth/PermissionGuard";
 import { UserPlus } from "lucide-react";
-import { Tables } from "@/integrations/supabase/types";
+import type { ProfileWithRoles } from "@/domain/settings/profile.types";
 
 interface UsersTabProps {
-  profiles: (Tables<"profiles"> & { user_roles?: { role: string }[] })[];
+  profiles: ProfileWithRoles[];
   isDemo: boolean;
   onAddUser: () => void;
 }
@@ -48,7 +48,7 @@ export const UsersTab = ({ profiles, isDemo, onAddUser }: UsersTabProps) => {
                   <div>
                     <span className="text-sm font-medium">{p.full_name}</span>
                     <span className="text-xs text-muted-foreground ml-2 capitalize bg-muted px-2 py-0.5 rounded">
-                      {(p as any).user_roles?.[0]?.role?.replace("_", " ") ?? "—"}
+                      {p.user_roles?.[0]?.role?.replace("_", " ") ?? "-"}
                     </span>
                   </div>
                 </div>

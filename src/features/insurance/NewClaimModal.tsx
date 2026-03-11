@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { X } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { insuranceService } from "@/services/insurance/insurance.service";
+import type { InsuranceClaimCreateInput } from "@/domain/insurance/insurance.types";
 
 interface NewClaimModalProps {
   open: boolean;
@@ -15,24 +16,14 @@ interface NewClaimModalProps {
   patients: { id: string; full_name: string }[];
 }
 
-const PROVIDERS = [
-  "National Health Co.",
-  "Gulf Insurance",
-  "MedCare Plus",
-  "Bupa Arabia",
-  "Tawuniya",
-  "Medgulf",
-  "SABB Takaful",
-  "AXA Cooperative",
-];
-
 export const NewClaimModal = ({ open, onClose, onSuccess, patients }: NewClaimModalProps) => {
   const { t } = useI18n();
   const { user } = useAuth();
+  const isDemo = user?.tenantId === "demo";
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     patient_id: "",
-    provider: "National Health Co.",
+    provider: "",
     service: "",
     amount: "",
   });
@@ -41,30 +32,33 @@ export const NewClaimModal = ({ open, onClose, onSuccess, patients }: NewClaimMo
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.patient_id || !form.service || !form.amount) {
+    if (!form.patient_id || !form.provider || !form.service || !form.amount) {
       toast({ title: t("common.missingFields"), description: t("common.pleaseFillAllRequiredFields"), variant: "destructive" });
+      return;
+    }
+    if (isDemo) {
+      toast({ title: t("common.demoMode"), description: t("common.demoModeNoSave"), variant: "destructive" });
       return;
     }
     setLoading(true);
 
-    const { error } = await supabase.from("insurance_claims").insert({
-      tenant_id: user?.tenantId ?? "",
-      patient_id: form.patient_id,
-      provider: form.provider,
-      service: form.service,
-      amount: parseFloat(form.amount),
-      status: "pending",
-    });
-
-    if (error) {
-      toast({ title: t("common.error"), description: error.message, variant: "destructive" });
-    } else {
+    try {
+      await insuranceService.create({
+        patient_id: form.patient_id,
+        provider: form.provider,
+        service: form.service,
+        amount: Number.parseFloat(form.amount),
+        status: "pending",
+      } as InsuranceClaimCreateInput);
       toast({ title: t("insurance.claimSubmitted") });
       onSuccess();
       onClose();
-      setForm({ patient_id: "", provider: "National Health Co.", service: "", amount: "" });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : t("common.error");
+      toast({ title: t("common.error"), description: message, variant: "destructive" });
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
@@ -94,17 +88,11 @@ export const NewClaimModal = ({ open, onClose, onSuccess, patients }: NewClaimMo
           </div>
           <div className="space-y-2">
             <Label>{t("common.provider")} *</Label>
-            <select
+            <Input
               value={form.provider}
               onChange={(e) => setForm({ ...form, provider: e.target.value })}
-              className="w-full h-10 px-3 rounded-md border bg-background text-sm"
-            >
-              {PROVIDERS.map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
-              ))}
-            </select>
+              placeholder="National Health Co."
+            />
           </div>
           <div className="space-y-2">
             <Label>{t("common.service")} *</Label>

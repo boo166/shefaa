@@ -1,10 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { enforceCors, getAllowedOriginsFromEnv } from "../_shared/cors.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+const allowedOrigins = getAllowedOriginsFromEnv();
 
 function slugify(value: string) {
   return value
@@ -15,38 +12,9 @@ function slugify(value: string) {
 
 const SUFFIXES = ["clinic", "health", "med", "care", "plus"];
 
-// --- In-memory sliding-window rate limiter ---
-const RATE_LIMIT_WINDOW_MS = 60_000; // 1 minute
+// --- Durable rate limiter (DB-backed) ---
+const RATE_LIMIT_WINDOW_SECONDS = 60; // 1 minute
 const RATE_LIMIT_MAX = 20; // max requests per IP per window
-
-const ipHits = new Map<string, number[]>();
-
-function isRateLimited(ip: string): boolean {
-  const now = Date.now();
-  const hits = ipHits.get(ip) ?? [];
-  // Prune old entries
-  const recent = hits.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
-  if (recent.length >= RATE_LIMIT_MAX) {
-    ipHits.set(ip, recent);
-    return true;
-  }
-  recent.push(now);
-  ipHits.set(ip, recent);
-  return false;
-}
-
-// Periodic cleanup to prevent memory leaks (every 5 min)
-setInterval(() => {
-  const now = Date.now();
-  for (const [ip, hits] of ipHits) {
-    const recent = hits.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
-    if (recent.length === 0) {
-      ipHits.delete(ip);
-    } else {
-      ipHits.set(ip, recent);
-    }
-  }
-}, 5 * 60_000);
 
 async function findAvailableSlugs(
   adminClient: ReturnType<typeof createClient>,
@@ -70,8 +38,23 @@ async function findAvailableSlugs(
 }
 
 Deno.serve(async (req) => {
+  const { corsHeaders, errorResponse } = enforceCors(req, {
+    allowedOrigins,
+  });
+
+  if (errorResponse) {
+    return errorResponse;
+  }
+
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
+  }
+
+  if (req.method !== "POST") {
+    return new Response(JSON.stringify({ error: "Method not allowed" }), {
+      status: 405,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 
   // Rate limit by client IP
@@ -80,21 +63,42 @@ Deno.serve(async (req) => {
     req.headers.get("cf-connecting-ip") ??
     "unknown";
 
-  if (isRateLimited(clientIp)) {
-    return new Response(
-      JSON.stringify({ error: "Too many requests. Please slow down." }),
+  try {
+    const adminClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+
+    const { data: allowed, error: rateError } = await adminClient.rpc(
+      "check_rate_limit",
       {
-        status: 429,
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "application/json",
-          "Retry-After": "10",
-        },
+        _key: `check-slug:${clientIp}`,
+        _max_hits: RATE_LIMIT_MAX,
+        _window_seconds: RATE_LIMIT_WINDOW_SECONDS,
       },
     );
-  }
 
-  try {
+    if (rateError) {
+      return new Response(JSON.stringify({ error: "Rate limiter unavailable" }), {
+        status: 503,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (!allowed) {
+      return new Response(
+        JSON.stringify({ error: "Too many requests. Please slow down." }),
+        {
+          status: 429,
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "application/json",
+            "Retry-After": "10",
+          },
+        },
+      );
+    }
+
     const body = await req.json();
     const clinicName = body.clinicName;
     const customSlug = body.customSlug; // optional: user-provided custom slug
@@ -105,7 +109,7 @@ Deno.serve(async (req) => {
         ? slugify(String(clinicName).trim())
         : "";
 
-    if (!slugToCheck) {
+    if (!slugToCheck || slugToCheck.length < 2 || slugToCheck.length > 60) {
       return new Response(
         JSON.stringify({
           available: false,
@@ -126,11 +130,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    const adminClient = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
-
     const { data } = await adminClient
       .from("tenants")
       .select("id")
@@ -138,7 +137,7 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     if (data) {
-      // Slug is taken â€” generate suggestions
+      // Slug is taken — generate suggestions
       const baseSlug = customSlug ? slugToCheck : slugify(String(clinicName).trim());
       const suggestions = await findAvailableSlugs(adminClient, baseSlug);
       return new Response(

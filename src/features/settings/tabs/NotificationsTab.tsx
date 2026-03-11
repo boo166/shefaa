@@ -4,8 +4,10 @@ import { useAuth } from "@/core/auth/authStore";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Loader2 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { useQuery } from "@tanstack/react-query";
+import { notificationPreferencesService } from "@/services/settings/notification.service";
+import { queryKeys } from "@/services/queryKeys";
 
 interface NotifPrefs {
   appointment_reminders: boolean;
@@ -29,51 +31,42 @@ export const NotificationsTab = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  const { data: loadedPrefs } = useQuery({
+    queryKey: user?.id ? queryKeys.settings.notifications(user.id, user.tenantId) : ["settings", "notifications", "anon"],
+    enabled: !isDemo && !!user?.id,
+    queryFn: () => notificationPreferencesService.getCurrentUserPreferences(user?.id ?? ""),
+  });
+
   useEffect(() => {
     if (isDemo || !user?.id) {
       setLoading(false);
       return;
     }
 
-    supabase
-      .from("notification_preferences" as any)
-      .select("*")
-      .eq("user_id", user.id)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data) {
-          setPrefs({
-            appointment_reminders: (data as any).appointment_reminders,
-            lab_results_ready: (data as any).lab_results_ready,
-            billing_alerts: (data as any).billing_alerts,
-            system_updates: (data as any).system_updates,
-          });
-        }
-        setLoading(false);
+    if (loadedPrefs) {
+      setPrefs({
+        appointment_reminders: loadedPrefs.appointment_reminders,
+        lab_results_ready: loadedPrefs.lab_results_ready,
+        billing_alerts: loadedPrefs.billing_alerts,
+        system_updates: loadedPrefs.system_updates,
       });
-  }, [user?.id, isDemo]);
+      setLoading(false);
+    }
+  }, [loadedPrefs, isDemo, user?.id]);
 
   const handleSave = async () => {
     if (isDemo || !user?.id) return;
     setSaving(true);
 
-    const { error } = await supabase
-      .from("notification_preferences" as any)
-      .upsert(
-        {
-          user_id: user.id,
-          tenant_id: user.tenantId,
-          ...prefs,
-        },
-        { onConflict: "user_id" },
-      );
-
-    if (error) {
-      toast({ title: t("common.error"), description: error.message, variant: "destructive" });
-    } else {
+    try {
+      await notificationPreferencesService.saveCurrentUserPreferences(user.id, prefs);
       toast({ title: t("settings.preferencesSaved") });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : t("common.error");
+      toast({ title: t("common.error"), description: message, variant: "destructive" });
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   };
 
   const toggles: { key: keyof NotifPrefs; label: string }[] = [

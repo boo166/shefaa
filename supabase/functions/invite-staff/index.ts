@@ -1,54 +1,41 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  buildRedirectUrl,
+  enforceCors,
+  getAllowedOriginsFromEnv,
+} from "../_shared/cors.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+const allowedOrigins = getAllowedOriginsFromEnv();
 
-// --- In-memory sliding-window rate limiter ---
-const RATE_LIMIT_WINDOW_MS = 60_000;
+// --- Durable rate limiter (DB-backed) ---
+const RATE_LIMIT_WINDOW_SECONDS = 60;
 const RATE_LIMIT_MAX = 10;
 
-const ipHits = new Map<string, number[]>();
-
-function isRateLimited(ip: string): boolean {
-  const now = Date.now();
-  const hits = ipHits.get(ip) ?? [];
-  const recent = hits.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
-  if (recent.length >= RATE_LIMIT_MAX) {
-    ipHits.set(ip, recent);
-    return true;
-  }
-  recent.push(now);
-  ipHits.set(ip, recent);
-  return false;
-}
-
-setInterval(() => {
-  const now = Date.now();
-  for (const [ip, hits] of ipHits) {
-    const recent = hits.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
-    if (recent.length === 0) ipHits.delete(ip);
-    else ipHits.set(ip, recent);
-  }
-}, 5 * 60_000);
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 Deno.serve(async (req) => {
+  const { corsHeaders, errorResponse } = enforceCors(req, {
+    allowedOrigins,
+  });
+
+  if (errorResponse) {
+    return errorResponse;
+  }
+
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
+  }
+
+  if (req.method !== "POST") {
+    return new Response(JSON.stringify({ error: "Method not allowed" }), {
+      status: 405,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 
   const clientIp =
     req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
     req.headers.get("cf-connecting-ip") ?? "unknown";
-
-  if (isRateLimited(clientIp)) {
-    return new Response(
-      JSON.stringify({ error: "Too many requests. Please try again later." }),
-      { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": "15" } },
-    );
-  }
 
   try {
     const authHeader = req.headers.get("Authorization");
@@ -60,15 +47,50 @@ Deno.serve(async (req) => {
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? Deno.env.get("SUPABASE_PUBLISHABLE_KEY")!;
+    const anonKey =
+      Deno.env.get("SUPABASE_ANON_KEY") ??
+      Deno.env.get("SUPABASE_PUBLISHABLE_KEY")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+    const adminClient = createClient(supabaseUrl, serviceRoleKey);
+
+    const { data: allowed, error: rateError } = await adminClient.rpc(
+      "check_rate_limit",
+      {
+        _key: `invite-staff:${clientIp}`,
+        _max_hits: RATE_LIMIT_MAX,
+        _window_seconds: RATE_LIMIT_WINDOW_SECONDS,
+      },
+    );
+
+    if (rateError) {
+      return new Response(JSON.stringify({ error: "Rate limiter unavailable" }), {
+        status: 503,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (!allowed) {
+      return new Response(
+        JSON.stringify({ error: "Too many requests. Please try again later." }),
+        {
+          status: 429,
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "application/json",
+            "Retry-After": "15",
+          },
+        },
+      );
+    }
 
     const callerClient = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: authHeader } },
     });
 
     const token = authHeader.replace("Bearer ", "");
-    const { data: claimsData, error: claimsError } = await callerClient.auth.getClaims(token);
+    const { data: claimsData, error: claimsError } =
+      await callerClient.auth.getClaims(token);
     if (claimsError || !claimsData?.claims?.sub) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
@@ -77,7 +99,6 @@ Deno.serve(async (req) => {
     }
 
     const callerId = claimsData.claims.sub;
-    const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
     const { data: roleData } = await adminClient
       .from("user_roles")
@@ -86,10 +107,13 @@ Deno.serve(async (req) => {
       .single();
 
     if (!roleData || roleData.role !== "clinic_admin") {
-      return new Response(JSON.stringify({ error: "Only clinic admins can invite staff" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ error: "Only clinic admins can invite staff" }),
+        {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
 
     const { data: callerProfile } = await adminClient
@@ -114,7 +138,28 @@ Deno.serve(async (req) => {
     }
 
     const normalizedEmail = String(email).trim().toLowerCase();
-    const validRoles = ["clinic_admin", "doctor", "receptionist", "nurse", "accountant"];
+    if (!EMAIL_REGEX.test(normalizedEmail)) {
+      return new Response(JSON.stringify({ error: "Invalid email" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const normalizedName = String(full_name).trim();
+    if (normalizedName.length < 2 || normalizedName.length > 100) {
+      return new Response(JSON.stringify({ error: "Invalid full name" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const validRoles = [
+      "clinic_admin",
+      "doctor",
+      "receptionist",
+      "nurse",
+      "accountant",
+    ];
     if (!validRoles.includes(role)) {
       return new Response(JSON.stringify({ error: "Invalid role" }), {
         status: 400,
@@ -139,20 +184,17 @@ Deno.serve(async (req) => {
       });
     }
 
-    const origin = req.headers.get("origin");
-    const redirectTo = origin ? `${origin}/login` : undefined;
+    const redirectTo = buildRedirectUrl(req, "/login", allowedOrigins);
 
-    const { data: inviteUserData, error: createErr } = await adminClient.auth.admin.inviteUserByEmail(
-      normalizedEmail,
-      {
+    const { data: inviteUserData, error: createErr } =
+      await adminClient.auth.admin.inviteUserByEmail(normalizedEmail, {
         data: {
-          full_name,
+          full_name: normalizedName,
           tenant_id: callerProfile.tenant_id,
           invite_code: inviteCode,
         },
         redirectTo,
-      },
-    );
+      });
 
     if (createErr) {
       await adminClient
@@ -179,14 +221,19 @@ Deno.serve(async (req) => {
       _details: { email: normalizedEmail, role, invited_by: callerId },
     });
 
-    return new Response(JSON.stringify({ success: true, user_id: inviteUserData.user?.id }), {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({ success: true, user_id: inviteUserData.user?.id }),
+      {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
   } catch (err) {
     return new Response(
-      JSON.stringify({ error: err instanceof Error ? err.message : "Internal server error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      JSON.stringify({
+        error: err instanceof Error ? err.message : "Internal server error",
+      }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }
 });

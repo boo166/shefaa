@@ -5,8 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, Eye, EyeOff } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { securityService } from "@/services/settings/security.service";
 
 export const SecurityTab = () => {
   const { t } = useI18n();
@@ -31,15 +31,17 @@ export const SecurityTab = () => {
       return;
     }
     setChangingPassword(true);
-    const { error } = await supabase.auth.updateUser({ password: newPassword });
-    if (error) {
-      toast({ title: t("common.error"), description: error.message, variant: "destructive" });
-    } else {
+    try {
+      await securityService.updatePassword(newPassword);
       toast({ title: t("auth.passwordUpdated"), description: t("auth.passwordUpdatedDesc") });
       setNewPassword("");
       setConfirmPassword("");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : t("common.error");
+      toast({ title: t("common.error"), description: message, variant: "destructive" });
+    } finally {
+      setChangingPassword(false);
     }
-    setChangingPassword(false);
   };
 
   return (

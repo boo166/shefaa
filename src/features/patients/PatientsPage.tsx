@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useI18n } from "@/core/i18n/i18nStore";
 import { DataTable, Column } from "@/shared/components/DataTable";
@@ -9,18 +9,17 @@ import { PermissionGuard } from "@/core/auth/PermissionGuard";
 import { UserPlus, Eye, Trash2, Upload } from "lucide-react";
 import { AddPatientModal } from "./AddPatientModal";
 import { ImportPatientsModal } from "./ImportPatientsModal";
-import { useSupabaseTable } from "@/hooks/useSupabaseQuery";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { useAuth } from "@/core/auth/authStore";
-import { Tables } from "@/integrations/supabase/types";
-import { useQueryClient } from "@tanstack/react-query";
-import { useMemo } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
+import { patientService } from "@/services/patients/patient.service";
+import { queryKeys } from "@/services/queryKeys";
+import type { Patient } from "@/domain/patient/patient.types";
 
-type Patient = Tables<"patients">;
+type PatientRow = Patient;
 
-const DEMO_PATIENTS = [
+const DEMO_PATIENTS: PatientRow[] = [
   { id: "1", full_name: "Mohammed Al-Rashid", patient_code: "PT-001", gender: "male", date_of_birth: "1985-03-15", blood_type: "A+", phone: "+966 50 123 4567", status: "active", email: null, address: null, insurance_provider: null, tenant_id: "demo", created_at: "", updated_at: "" },
   { id: "2", full_name: "Fatima Hassan", patient_code: "PT-002", gender: "female", date_of_birth: "1990-07-22", blood_type: "O-", phone: "+966 55 987 6543", status: "active", email: null, address: null, insurance_provider: null, tenant_id: "demo", created_at: "", updated_at: "" },
   { id: "3", full_name: "Ali Mansour", patient_code: "PT-003", gender: "male", date_of_birth: "1978-11-30", blood_type: "B+", phone: "+966 53 456 7890", status: "active", email: null, address: null, insurance_provider: null, tenant_id: "demo", created_at: "", updated_at: "" },
@@ -31,38 +30,85 @@ export const PatientsPage = () => {
   const { t } = useI18n();
   const navigate = useNavigate();
   const { clinicSlug } = useParams();
-  const { user, hasPermission } = useAuth();
+  const { user, hasPermission, hasRole } = useAuth();
   const queryClient = useQueryClient();
   const [showAdd, setShowAdd] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [searchTerm, setSearchTerm] = useState("");
+  const pageSize = 25;
   const isDemo = user?.tenantId === "demo";
   const canManage = hasPermission("manage_patients");
+  const canDelete = hasRole("clinic_admin");
 
   useRealtimeSubscription(["patients"]);
 
-  const { data: livePatients = [], isLoading } = useSupabaseTable<Patient>("patients", {
-    orderBy: { column: "created_at", ascending: false },
+  const { data: liveResult, isLoading } = useQuery<{ data: PatientRow[]; count: number }>({
+    queryKey: queryKeys.patients.list({
+      tenantId: user?.tenantId,
+      page,
+      pageSize,
+      search: searchTerm || undefined,
+      filters: statusFilter ? { status: statusFilter } : undefined,
+    }),
+    queryFn: () =>
+      patientService.listPaged({
+        page,
+        pageSize,
+        search: searchTerm || undefined,
+        filters: statusFilter ? { status: statusFilter } : undefined,
+        sort: { column: "created_at", ascending: false },
+      }),
+    enabled: !!user?.tenantId && user?.tenantId !== "demo",
   });
 
-  const patients = isDemo ? DEMO_PATIENTS as unknown as Patient[] : livePatients;
-  const filtered = useMemo(() => statusFilter ? patients.filter((p) => p.status === statusFilter) : patients, [patients, statusFilter]);
+  const livePatients = liveResult?.data ?? [];
+  const totalPatients = liveResult?.count ?? 0;
+
+  useEffect(() => {
+    setPage(1);
+  }, [statusFilter, searchTerm]);
+
+  const patients = isDemo ? DEMO_PATIENTS : livePatients;
+  const demoFiltered = useMemo(() => {
+    if (!isDemo) return patients;
+    const q = searchTerm.trim().toLowerCase();
+    return patients.filter((p) => {
+      if (statusFilter && p.status !== statusFilter) return false;
+      if (!q) return true;
+      return (
+        p.patient_code?.toLowerCase().includes(q) ||
+        p.full_name?.toLowerCase().includes(q) ||
+        (p.phone ?? "").toLowerCase().includes(q) ||
+        (p.email ?? "").toLowerCase().includes(q)
+      );
+    });
+  }, [patients, statusFilter, searchTerm, isDemo]);
+  const pagedDemo = isDemo
+    ? demoFiltered.slice((page - 1) * pageSize, page * pageSize)
+    : patients;
+  const total = isDemo ? demoFiltered.length : totalPatients;
 
   const handleBulkDelete = async (selectedIds: string[]) => {
     if (isDemo) {
       toast({ title: t("common.demoMode"), variant: "destructive" });
       return;
     }
-    const { error } = await supabase.from("patients").delete().in("id", selectedIds);
-    if (error) {
-      toast({ title: t("common.error"), description: error.message, variant: "destructive" });
-    } else {
+    if (!canDelete) {
+      toast({ title: t("settings.noPermission"), variant: "destructive" });
+      return;
+    }
+    try {
+      await patientService.deleteBulk(selectedIds);
       toast({ title: `${selectedIds.length} patients deleted` });
-      queryClient.invalidateQueries({ queryKey: ["patients"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.patients.root(user?.tenantId) });
+    } catch (err: any) {
+      toast({ title: t("common.error"), description: err?.message ?? "Failed to delete patients", variant: "destructive" });
     }
   };
 
-  const columns: Column<Patient>[] = [
+  const columns: Column<PatientRow>[] = [
     { key: "patient_code", header: t("patients.patientId"), searchable: true },
     {
       key: "full_name", header: t("patients.fullName"), searchable: true,
@@ -108,14 +154,21 @@ export const PatientsPage = () => {
 
       <DataTable
         columns={columns}
-        data={filtered}
+        data={pagedDemo}
         keyExtractor={(p) => p.id}
         emptyMessage={t("common.noData")}
         searchable
+        serverSearch
+        searchValue={searchTerm}
+        onSearchChange={setSearchTerm}
         isLoading={!isDemo && isLoading}
         exportFileName="patients"
         pdfExport={{ title: "Patient List", subtitle: `Generated on ${new Date().toLocaleDateString()}` }}
-        bulkActions={canManage && !isDemo ? [
+        page={page}
+        pageSize={pageSize}
+        total={total}
+        onPageChange={setPage}
+        bulkActions={canDelete && !isDemo ? [
           {
             label: t("common.delete"),
             icon: <Trash2 className="h-4 w-4 me-1" />,
@@ -132,11 +185,15 @@ export const PatientsPage = () => {
         }
       />
 
-      <AddPatientModal open={showAdd} onClose={() => setShowAdd(false)} onSuccess={() => queryClient.invalidateQueries({ queryKey: ["patients"] })} />
+      <AddPatientModal
+        open={showAdd}
+        onClose={() => setShowAdd(false)}
+        onSuccess={() => queryClient.invalidateQueries({ queryKey: queryKeys.patients.root(user?.tenantId) })}
+      />
       <ImportPatientsModal
         open={showImport}
         onClose={() => setShowImport(false)}
-        onSuccess={() => queryClient.invalidateQueries({ queryKey: ["patients"] })}
+        onSuccess={() => queryClient.invalidateQueries({ queryKey: queryKeys.patients.root(user?.tenantId) })}
       />
     </div>
   );

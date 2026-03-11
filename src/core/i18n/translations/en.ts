@@ -89,6 +89,8 @@ export const en = {
     comingSoon: "Coming soon",
     print: "Print",
     selected: "selected",
+    showing: "Showing",
+    of: "of",
   },
 
   roles: {

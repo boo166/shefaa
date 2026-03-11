@@ -14,7 +14,7 @@ export async function fetchProfilesWithRoles(
 ): Promise<ProfileWithRole[]> {
   let profilesQuery = supabase
     .from("profiles")
-    .select("*")
+    .select("id, user_id, tenant_id, full_name, created_at, avatar_url")
     .order("created_at", { ascending: false });
 
   if (options.tenantId) {

@@ -13,7 +13,8 @@ import { AppearanceTab } from "./tabs/AppearanceTab";
 import { AuditLogTab } from "./tabs/AuditLogTab";
 import { ProfileTab } from "./tabs/ProfileTab";
 import { SubscriptionTab } from "./tabs/SubscriptionTab";
-import { fetchProfilesWithRoles } from "@/shared/data/profiles";
+import { settingsUsersService } from "@/services/settings/users.service";
+import { queryKeys } from "@/services/queryKeys";
 
 type Tab = "profile" | "general" | "users" | "notifications" | "appearance" | "security" | "audit" | "subscription";
 
@@ -25,11 +26,11 @@ export const SettingsPage = () => {
   const [activeTab, setActiveTab] = useState<Tab>("profile");
   const [showAddUser, setShowAddUser] = useState(false);
 
-  const profilesQueryKey = ["profiles-with-roles", user?.tenantId];
+  const profilesQueryKey = queryKeys.settings.profiles(user?.tenantId);
   const { data: profiles = [], refetch: refetchProfiles } = useQuery({
     queryKey: profilesQueryKey,
     enabled: !isDemo && !!user?.tenantId,
-    queryFn: () => fetchProfilesWithRoles({ tenantId: user?.tenantId }),
+    queryFn: () => settingsUsersService.listProfilesWithRoles(),
   });
 
   const tabs: { key: Tab; icon: any; label: string }[] = [

@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { useI18n } from "@/core/i18n/i18nStore";
 import { useAuth } from "@/core/auth/authStore";
 import { cn } from "@/lib/utils";
@@ -6,8 +6,6 @@ import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, AreaChart, Area,
 } from "recharts";
-import { useSupabaseTable } from "@/hooks/useSupabaseQuery";
-import { Tables } from "@/integrations/supabase/types";
 import {
   TrendingUp, Users, CalendarDays, DollarSign, Download, Printer,
   Activity, FileBarChart, Star, ArrowUpRight, ArrowDownRight,
@@ -15,6 +13,9 @@ import {
 import { StatCard } from "@/shared/components/StatCard";
 import { Button } from "@/components/ui/button";
 import { generatePDF } from "@/shared/utils/pdfGenerator";
+import { useQuery } from "@tanstack/react-query";
+import { reportService } from "@/services/reports/report.service";
+import { queryKeys } from "@/services/queryKeys";
 
 const COLORS = [
   "hsl(174, 62%, 34%)", "hsl(210, 80%, 52%)", "hsl(152, 60%, 40%)",
@@ -49,101 +50,72 @@ export const ReportsPage = () => {
   const isDemo = user?.tenantId === "demo";
   const [activeTab, setActiveTab] = useState<Tab>("revenue");
 
-  const { data: invoices = [] } = useSupabaseTable<Tables<"invoices">>("invoices");
-  const { data: patients = [] } = useSupabaseTable<Tables<"patients">>("patients");
-  const { data: doctors = [] } = useSupabaseTable<Tables<"doctors">>("doctors");
-  const { data: appointments = [] } = useSupabaseTable<Tables<"appointments">>("appointments");
+  const { data: overview } = useQuery({
+    queryKey: queryKeys.reports.overview(user?.tenantId),
+    enabled: !isDemo && !!user?.tenantId,
+    queryFn: () => reportService.getOverview(),
+  });
 
-  const revenueData = useMemo(() => {
-    if (isDemo) return DEMO_REVENUE;
-    const months: Record<string, { month: string; revenue: number; expenses: number; sortKey: number }> = {};
-    invoices.forEach((inv) => {
-      const d = new Date(inv.invoice_date);
-      if (Number.isNaN(d.getTime())) return;
+  const { data: revenueData = [] } = useQuery({
+    queryKey: queryKeys.reports.revenueByMonth(user?.tenantId),
+    enabled: !isDemo && !!user?.tenantId,
+    queryFn: () => reportService.getRevenueByMonth(6),
+  });
 
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-      if (!months[key]) {
-        months[key] = {
-          month: d.toLocaleString("en", { month: "short", year: "2-digit" }),
-          revenue: 0,
-          expenses: 0,
-          sortKey: new Date(d.getFullYear(), d.getMonth(), 1).getTime(),
-        };
-      }
+  const { data: patientGrowth = [] } = useQuery({
+    queryKey: queryKeys.reports.patientGrowth(user?.tenantId),
+    enabled: !isDemo && !!user?.tenantId,
+    queryFn: () => reportService.getPatientGrowth(6),
+  });
 
-      if (inv.status === "paid") months[key].revenue += Number(inv.amount);
-      else months[key].expenses += Number(inv.amount);
-    });
+  const { data: appointmentTypes = [] } = useQuery({
+    queryKey: queryKeys.reports.appointmentTypes(user?.tenantId),
+    enabled: !isDemo && !!user?.tenantId,
+    queryFn: () => reportService.getAppointmentTypes(),
+  });
 
-    return Object.values(months)
-      .sort((a, b) => a.sortKey - b.sortKey)
-      .map(({ sortKey, ...entry }) => entry);
-  }, [invoices, isDemo]);
+  const { data: revenueByService = [] } = useQuery({
+    queryKey: queryKeys.reports.revenueByService(user?.tenantId),
+    enabled: !isDemo && !!user?.tenantId,
+    queryFn: () => reportService.getRevenueByService(6),
+  });
 
-  const patientGrowth = useMemo(() => {
-    if (isDemo) return DEMO_PATIENT_GROWTH;
-    const sorted = [...patients].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-    const months: Record<string, number> = {};
-    sorted.forEach((p, i) => {
-      const key = new Date(p.created_at).toLocaleString("en", { month: "short" });
-      months[key] = i + 1;
-    });
-    return Object.entries(months).map(([month, count]) => ({ month, patients: count }));
-  }, [patients, isDemo]);
+  const { data: doctorPerformance = [] } = useQuery({
+    queryKey: queryKeys.reports.doctorPerformance(user?.tenantId),
+    enabled: !isDemo && !!user?.tenantId,
+    queryFn: () => reportService.getDoctorPerformance(),
+  });
 
-  const appointmentTypes = useMemo(() => {
-    if (isDemo) return DEMO_APPOINTMENT_TYPES;
-    const types: Record<string, number> = {};
-    appointments.forEach((a) => { types[a.type] = (types[a.type] || 0) + 1; });
-    return Object.entries(types).map(([name, value]) => ({ name: name.replace("_", " "), value }));
-  }, [appointments, isDemo]);
+  const { data: appointmentStatusCounts = { scheduled: 0, in_progress: 0, completed: 0, cancelled: 0 } } = useQuery({
+    queryKey: queryKeys.reports.appointmentStatuses(user?.tenantId),
+    enabled: !isDemo && !!user?.tenantId,
+    queryFn: () => reportService.getAppointmentStatusCounts(),
+  });
 
-  const revenueByService = useMemo(() => {
-    if (isDemo) {
-      return [
+  const effectiveRevenueData = isDemo ? DEMO_REVENUE : revenueData;
+  const effectivePatientGrowth = isDemo ? DEMO_PATIENT_GROWTH : patientGrowth;
+  const effectiveAppointmentTypes = isDemo ? DEMO_APPOINTMENT_TYPES : appointmentTypes;
+  const effectiveRevenueByService = isDemo
+    ? [
         { name: "Consultation", value: 38 },
         { name: "Lab", value: 24 },
         { name: "Pharmacy", value: 20 },
         { name: "Procedures", value: 18 },
-      ];
-    }
+      ]
+    : revenueByService;
 
-    const services: Record<string, number> = {};
-    invoices
-      .filter((i) => i.status === "paid")
-      .forEach((invoice) => {
-        const label = invoice.service || "Other";
-        services[label] = (services[label] || 0) + Number(invoice.amount);
-      });
+  const effectiveDoctorPerformance = isDemo
+    ? [
+        { name: "Dr. Sarah Ahmed", appointments: 38, rating: 4.9, completedRate: "94%", trend: true },
+        { name: "Dr. John Smith", appointments: 29, rating: 4.7, completedRate: "89%", trend: false },
+        { name: "Dr. Layla Khalid", appointments: 42, rating: 4.8, completedRate: "91%", trend: true },
+      ]
+    : doctorPerformance;
 
-    return Object.entries(services)
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value);
-  }, [invoices, isDemo]);
-
-  const doctorPerformance = useMemo(() => {
-    if (isDemo) return [
-      { name: "Dr. Sarah Ahmed", appointments: 38, rating: 4.9, completedRate: "94%", trend: true },
-      { name: "Dr. John Smith", appointments: 29, rating: 4.7, completedRate: "89%", trend: false },
-      { name: "Dr. Layla Khalid", appointments: 42, rating: 4.8, completedRate: "91%", trend: true },
-    ];
-    return doctors.map((doc) => {
-      const docAppts = appointments.filter((a) => a.doctor_id === doc.id);
-      const completed = docAppts.filter((a) => a.status === "completed").length;
-      return {
-        name: doc.full_name,
-        appointments: docAppts.length,
-        rating: Number(doc.rating) || 0,
-        completedRate: docAppts.length ? `${Math.round((completed / docAppts.length) * 100)}%` : "—",
-        trend: completed > docAppts.length / 2,
-      };
-    }).sort((a, b) => b.appointments - a.appointments);
-  }, [doctors, appointments, isDemo]);
-
-  const totalRevenue = isDemo ? 240750 : invoices.filter((i) => i.status === "paid").reduce((s, i) => s + Number(i.amount), 0);
-  const totalPatients = isDemo ? 1284 : patients.length;
-  const totalAppointments = isDemo ? 182 : appointments.length;
-  const avgRating = isDemo ? 4.8 : (doctors.reduce((s, d) => s + Number(d.rating || 0), 0) / (doctors.length || 1));
+  const totalRevenue = isDemo ? 240750 : overview?.total_revenue ?? 0;
+  const totalPatients = isDemo ? 1284 : overview?.total_patients ?? 0;
+  const totalAppointments = isDemo ? 182 : overview?.total_appointments ?? 0;
+  const avgRating = isDemo ? 4.8 : overview?.avg_doctor_rating ?? 0;
 
   const tabItems: { key: Tab; icon: any; label: string }[] = [
     { key: "revenue", icon: DollarSign, label: t("reports.revenue") },
@@ -155,13 +127,13 @@ export const ReportsPage = () => {
   const exportReportCsv = () => {
     let csv = "";
     if (activeTab === "revenue") {
-      csv = "Month,Revenue,Pending/Overdue\n" + revenueData.map((r) => `${r.month},${r.revenue},${r.expenses}`).join("\n");
+      csv = "Month,Revenue,Pending/Overdue\n" + effectiveRevenueData.map((r) => `${r.month},${r.revenue},${r.expenses}`).join("\n");
     } else if (activeTab === "patients") {
-      csv = "Month,Patients\n" + patientGrowth.map((p) => `${p.month},${p.patients}`).join("\n");
+      csv = "Month,Patients\n" + effectivePatientGrowth.map((p) => `${p.month},${p.patients}`).join("\n");
     } else if (activeTab === "appointments") {
-      csv = "Type,Count\n" + appointmentTypes.map((a) => `${a.name},${a.value}`).join("\n");
+      csv = "Type,Count\n" + effectiveAppointmentTypes.map((a) => `${a.name},${a.value}`).join("\n");
     } else if (activeTab === "doctors") {
-      csv = "Doctor,Appointments,Completion Rate,Rating\n" + doctorPerformance.map((d) => `${d.name},${d.appointments},${d.completedRate},${d.rating}`).join("\n");
+      csv = "Doctor,Appointments,Completion Rate,Rating\n" + effectiveDoctorPerformance.map((d) => `${d.name},${d.appointments},${d.completedRate},${d.rating}`).join("\n");
     }
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -182,7 +154,7 @@ export const ReportsPage = () => {
           { header: "Revenue", dataKey: "revenue" },
           { header: "Pending/Overdue", dataKey: "expenses" },
         ],
-        data: revenueData.map((r) => ({ ...r, revenue: `$${r.revenue.toLocaleString()}`, expenses: `$${r.expenses.toLocaleString()}` })),
+        data: effectiveRevenueData.map((r) => ({ ...r, revenue: `$${r.revenue.toLocaleString()}`, expenses: `$${r.expenses.toLocaleString()}` })),
         filename: `revenue-report-${new Date().toISOString().slice(0, 10)}.pdf`,
       });
     } else if (activeTab === "doctors") {
@@ -194,7 +166,7 @@ export const ReportsPage = () => {
           { header: "Completion Rate", dataKey: "completedRate" },
           { header: "Rating", dataKey: "rating" },
         ],
-        data: doctorPerformance,
+        data: effectiveDoctorPerformance,
         filename: `doctor-report-${new Date().toISOString().slice(0, 10)}.pdf`,
       });
     } else if (activeTab === "patients") {
@@ -204,7 +176,7 @@ export const ReportsPage = () => {
           { header: "Month", dataKey: "month" },
           { header: "Total Patients", dataKey: "patients" },
         ],
-        data: patientGrowth,
+        data: effectivePatientGrowth,
         filename: `patient-growth-${new Date().toISOString().slice(0, 10)}.pdf`,
       });
     } else {
@@ -214,7 +186,7 @@ export const ReportsPage = () => {
           { header: "Type", dataKey: "name" },
           { header: "Count", dataKey: "value" },
         ],
-        data: appointmentTypes,
+        data: effectiveAppointmentTypes,
         filename: `appointment-types-${new Date().toISOString().slice(0, 10)}.pdf`,
       });
     }
@@ -240,15 +212,13 @@ export const ReportsPage = () => {
         </div>
       </div>
 
-      {/* Summary stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard title={t("billing.totalRevenue")} value={`$${totalRevenue.toLocaleString()}`} icon={DollarSign} accent="warning" trend={isDemo ? { value: 12.5, positive: true } : undefined} />
         <StatCard title={t("dashboard.totalPatients")} value={String(totalPatients)} icon={Users} accent="primary" trend={isDemo ? { value: 5.2, positive: true } : undefined} />
         <StatCard title={t("reports.totalAppointments")} value={String(totalAppointments)} icon={CalendarDays} accent="info" />
-        <StatCard title={t("reports.avgDoctorRating")} value={`${avgRating.toFixed(1)} ★`} icon={TrendingUp} accent="success" />
+        <StatCard title={t("reports.avgDoctorRating")} value={`${avgRating.toFixed(1)} *`} icon={TrendingUp} accent="success" />
       </div>
 
-      {/* Tabs */}
       <div className="border-b flex gap-1 overflow-x-auto">
         {tabItems.map((tab) => (
           <button key={tab.key} onClick={() => setActiveTab(tab.key)}
@@ -263,7 +233,6 @@ export const ReportsPage = () => {
         ))}
       </div>
 
-      {/* Revenue Tab */}
       {activeTab === "revenue" && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 bg-card rounded-xl border p-6">
@@ -274,7 +243,7 @@ export const ReportsPage = () => {
               </h3>
             </div>
             <ResponsiveContainer width="100%" height={340}>
-              <BarChart data={revenueData} barGap={4}>
+              <BarChart data={effectiveRevenueData} barGap={4}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(214, 20%, 90%)" vertical={false} />
                 <XAxis dataKey="month" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
@@ -289,10 +258,10 @@ export const ReportsPage = () => {
             <h3 className="font-semibold mb-6">{t("reports.revenueByDepartment") || "Revenue by Service"}</h3>
             <ResponsiveContainer width="100%" height={340}>
               <PieChart>
-                <Pie data={revenueByService} cx="50%" cy="50%" innerRadius={60} outerRadius={95} dataKey="value" paddingAngle={3}
+                <Pie data={effectiveRevenueByService} cx="50%" cy="50%" innerRadius={60} outerRadius={95} dataKey="value" paddingAngle={3}
                   label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
                   labelLine={false}>
-                  {revenueByService.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                  {effectiveRevenueByService.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                 </Pie>
                 <Tooltip />
               </PieChart>
@@ -301,7 +270,6 @@ export const ReportsPage = () => {
         </div>
       )}
 
-      {/* Patients Tab */}
       {activeTab === "patients" && (
         <div className="bg-card rounded-xl border p-6">
           <h3 className="font-semibold mb-6 flex items-center gap-2">
@@ -309,7 +277,7 @@ export const ReportsPage = () => {
             {t("reports.patientGrowth")}
           </h3>
           <ResponsiveContainer width="100%" height={380}>
-            <AreaChart data={patientGrowth}>
+            <AreaChart data={effectivePatientGrowth}>
               <defs>
                 <linearGradient id="patientGrad" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="hsl(174, 62%, 34%)" stopOpacity={0.2} />
@@ -326,7 +294,6 @@ export const ReportsPage = () => {
         </div>
       )}
 
-      {/* Appointments Tab */}
       {activeTab === "appointments" && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 bg-card rounded-xl border p-6">
@@ -341,7 +308,7 @@ export const ReportsPage = () => {
                     { name: t("appointments.completed"), value: 110, fill: statusColors[2] },
                     { name: t("appointments.cancelled"), value: 15, fill: statusColors[3] },
                   ]
-                : statuses.map((s, i) => ({ name: s.replace("_", " "), value: appointments.filter((a) => a.status === s).length, fill: statusColors[i] }));
+                : statuses.map((s, i) => ({ name: s.replace("_", " "), value: appointmentStatusCounts[s as keyof typeof appointmentStatusCounts] ?? 0, fill: statusColors[i] }));
               return (
                 <ResponsiveContainer width="100%" height={320}>
                   <BarChart data={data} layout="vertical" barSize={24}>
@@ -361,8 +328,8 @@ export const ReportsPage = () => {
             <h3 className="font-semibold mb-6">{t("reports.byType")}</h3>
             <ResponsiveContainer width="100%" height={320}>
               <PieChart>
-                <Pie data={appointmentTypes} cx="50%" cy="50%" innerRadius={55} outerRadius={90} dataKey="value" paddingAngle={3}>
-                  {appointmentTypes.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                <Pie data={effectiveAppointmentTypes} cx="50%" cy="50%" innerRadius={55} outerRadius={90} dataKey="value" paddingAngle={3}>
+                  {effectiveAppointmentTypes.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                 </Pie>
                 <Tooltip />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
@@ -372,7 +339,6 @@ export const ReportsPage = () => {
         </div>
       )}
 
-      {/* Doctors Tab */}
       {activeTab === "doctors" && (
         <div className="bg-card rounded-xl border overflow-hidden">
           <div className="px-6 py-4 border-b bg-muted/20">
@@ -389,7 +355,7 @@ export const ReportsPage = () => {
               </tr>
             </thead>
             <tbody>
-              {doctorPerformance.map((doc, i) => (
+              {effectiveDoctorPerformance.map((doc, i) => (
                 <tr key={i} className="hover:bg-muted/20 transition-colors">
                   <td>
                     <div className="flex items-center gap-3">
@@ -407,7 +373,7 @@ export const ReportsPage = () => {
                       <div className="flex-1 h-2 bg-muted rounded-full max-w-[100px]">
                         <div
                           className="h-2 bg-success rounded-full transition-all"
-                          style={{ width: doc.completedRate === "—" ? "0%" : doc.completedRate }}
+                          style={{ width: doc.completedRate === "-" ? "0%" : doc.completedRate }}
                         />
                       </div>
                       <span className="text-sm font-medium">{doc.completedRate}</span>
@@ -426,7 +392,7 @@ export const ReportsPage = () => {
                   </td>
                 </tr>
               ))}
-              {doctorPerformance.length === 0 && (
+              {effectiveDoctorPerformance.length === 0 && (
                 <tr><td colSpan={5} className="text-center py-8 text-muted-foreground">{t("common.noData")}</td></tr>
               )}
             </tbody>

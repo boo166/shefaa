@@ -89,6 +89,8 @@ export const ar = {
     comingSoon: "قريباً",
     print: "طباعة",
     selected: "محدد",
+    showing: "عرض",
+    of: "من",
   },
 
   roles: {

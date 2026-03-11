@@ -4,8 +4,9 @@ import { useAuth } from "@/core/auth/authStore";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { X } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { labService } from "@/services/laboratory/lab.service";
+import type { LabResultCreateInput } from "@/domain/lab/lab.types";
 
 interface NewLabOrderModalProps {
   open: boolean;
@@ -32,6 +33,7 @@ const TEST_OPTIONS = [
 export const NewLabOrderModal = ({ open, onClose, onSuccess, patients, doctors }: NewLabOrderModalProps) => {
   const { t } = useI18n();
   const { user } = useAuth();
+  const isDemo = user?.tenantId === "demo";
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     patient_id: "",
@@ -47,25 +49,29 @@ export const NewLabOrderModal = ({ open, onClose, onSuccess, patients, doctors }
       toast({ title: t("common.missingFields"), description: t("common.pleaseFillAllRequiredFields"), variant: "destructive" });
       return;
     }
+    if (isDemo) {
+      toast({ title: t("common.demoMode"), description: t("common.demoModeNoSave"), variant: "destructive" });
+      return;
+    }
     setLoading(true);
 
-    const { error } = await supabase.from("lab_orders").insert({
-      tenant_id: user?.tenantId ?? "",
-      patient_id: form.patient_id,
-      doctor_id: form.doctor_id,
-      test_name: form.test_name,
-      status: "pending",
-    });
-
-    if (error) {
-      toast({ title: t("common.error"), description: error.message, variant: "destructive" });
-    } else {
+    try {
+      await labService.create({
+        patient_id: form.patient_id,
+        doctor_id: form.doctor_id,
+        test_name: form.test_name,
+        status: "pending",
+      } as LabResultCreateInput);
       toast({ title: t("laboratory.labOrderCreated") });
       onSuccess();
       onClose();
       setForm({ patient_id: "", doctor_id: "", test_name: "Complete Blood Count (CBC)" });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : t("common.error");
+      toast({ title: t("common.error"), description: message, variant: "destructive" });
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (

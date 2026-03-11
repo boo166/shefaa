@@ -1,14 +1,15 @@
 import { useState, useRef } from "react";
 import { useI18n } from "@/core/i18n/i18nStore";
 import { useAuth } from "@/core/auth/authStore";
-import { supabase } from "@/integrations/supabase/client";
-import { Tables } from "@/integrations/supabase/types";
 import { toast } from "@/hooks/use-toast";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/shared/components/ConfirmDialog";
 import { FileText, Upload, Trash2, Download, Loader2, File, Image, FileSpreadsheet } from "lucide-react";
 import { formatDate } from "@/shared/utils/formatDate";
+import { patientDocumentsService } from "@/services/patients/patientDocuments.service";
+import { queryKeys } from "@/services/queryKeys";
+import type { PatientDocument } from "@/domain/patient/patient.types";
 
 interface Props {
   patientId: string;
@@ -25,8 +26,6 @@ const FILE_ICONS: Record<string, typeof FileText> = {
 
 const MAX_SIZE = 10 * 1024 * 1024; // 10MB
 
-type PatientDocument = Tables<"patient_documents">;
-
 export const PatientDocuments = ({ patientId, isDemo }: Props) => {
   const { t, locale, calendarType } = useI18n();
   const { user } = useAuth();
@@ -36,18 +35,10 @@ export const PatientDocuments = ({ patientId, isDemo }: Props) => {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  const { data: documents = [], isLoading } = useQuery({
-    queryKey: ["patient_documents", patientId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("patient_documents")
-        .select("*")
-        .eq("patient_id", patientId)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data ?? [];
-    },
-    enabled: !!patientId && !isDemo,
+  const { data: documents = [], isLoading } = useQuery<PatientDocument[]>({
+    queryKey: queryKeys.patients.documents(patientId, user?.tenantId),
+    queryFn: () => patientDocumentsService.listByPatient(patientId),
+    enabled: !!patientId && !!user?.tenantId && !isDemo,
   });
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -60,37 +51,15 @@ export const PatientDocuments = ({ patientId, isDemo }: Props) => {
     }
 
     setUploading(true);
-    const ext = file.name.split(".").pop();
-    const path = `${user.tenantId}/${patientId}/${Date.now()}.${ext}`;
-
     try {
-      const { error: uploadErr } = await supabase.storage
-        .from("patient-documents")
-        .upload(path, file);
-
-      if (uploadErr) {
-        toast({ title: t("common.error"), description: uploadErr.message, variant: "destructive" });
-        return;
-      }
-
-      const { error: insertErr } = await supabase.from("patient_documents").insert({
+      await patientDocumentsService.upload({
         patient_id: patientId,
-        tenant_id: user.tenantId,
-        file_name: file.name,
-        file_path: path,
-        file_size: file.size,
-        file_type: file.type || "application/octet-stream",
-        uploaded_by: user.id,
+        file,
       });
-
-      if (insertErr) {
-        await supabase.storage.from("patient-documents").remove([path]);
-        toast({ title: t("common.error"), description: insertErr.message, variant: "destructive" });
-        return;
-      }
-
       toast({ title: t("common.saved") });
-      queryClient.invalidateQueries({ queryKey: ["patient_documents", patientId] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.patients.documents(patientId, user?.tenantId) });
+    } catch (err: any) {
+      toast({ title: t("common.error"), description: err?.message ?? "Upload failed", variant: "destructive" });
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = "";
@@ -98,57 +67,40 @@ export const PatientDocuments = ({ patientId, isDemo }: Props) => {
   };
 
   const handleDownload = async (doc: PatientDocument) => {
-    const { data, error } = await supabase.storage
-      .from("patient-documents")
-      .download(doc.file_path);
-    if (error || !data) {
-      toast({ title: t("common.error"), description: error?.message, variant: "destructive" });
-      return;
+    try {
+      const blob = await patientDocumentsService.download(doc);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = doc.file_name;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      toast({ title: t("common.error"), description: err?.message ?? "Download failed", variant: "destructive" });
     }
-    const url = URL.createObjectURL(data);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = doc.file_name;
-    a.click();
-    URL.revokeObjectURL(url);
   };
 
   const handleDelete = async () => {
     if (!deleteId) return;
     setDeleting(true);
 
-    const { data: deletedDoc, error: deleteDbErr } = await supabase
-      .from("patient_documents")
-      .delete()
-      .eq("id", deleteId)
-      .select("file_path")
-      .single();
-
-    if (deleteDbErr) {
-      toast({ title: t("common.error"), description: deleteDbErr.message, variant: "destructive" });
-      setDeleting(false);
-      return;
-    }
-
-    if (deletedDoc?.file_path) {
-      const { error: storageErr } = await supabase
-        .storage
-        .from("patient-documents")
-        .remove([deletedDoc.file_path]);
-
-      if (storageErr) {
+    try {
+      const result = await patientDocumentsService.remove(deleteId);
+      queryClient.invalidateQueries({ queryKey: queryKeys.patients.documents(patientId, user?.tenantId) });
+      toast({ title: t("common.saved") });
+      if (result?.storageError) {
         toast({
           title: t("common.error"),
-          description: `Document record deleted, but file cleanup failed: ${storageErr.message}`,
+          description: `Document record deleted, but file cleanup failed: ${result.storageError}`,
           variant: "destructive",
         });
       }
+    } catch (err: any) {
+      toast({ title: t("common.error"), description: err?.message ?? "Delete failed", variant: "destructive" });
+    } finally {
+      setDeleting(false);
+      setDeleteId(null);
     }
-
-    queryClient.invalidateQueries({ queryKey: ["patient_documents", patientId] });
-    toast({ title: t("common.saved") });
-    setDeleting(false);
-    setDeleteId(null);
   };
 
   const formatSize = (bytes: number) => {

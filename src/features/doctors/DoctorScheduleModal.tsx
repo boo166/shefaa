@@ -1,13 +1,15 @@
 import { useState, useEffect } from "react";
 import { useI18n } from "@/core/i18n/i18nStore";
 import { useAuth } from "@/core/auth/authStore";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Loader2 } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/services/queryKeys";
+import { doctorScheduleService } from "@/services/doctors/doctorSchedule.service";
 
 interface Props {
   open: boolean;
@@ -34,35 +36,56 @@ const DEFAULT_SCHEDULE: ScheduleRow[] = Array.from({ length: 7 }, (_, i) => ({
   is_active: i >= 1 && i <= 5, // Mon-Fri active
 }));
 
+function mergeSchedule(rows: ScheduleRow[]) {
+  return DEFAULT_SCHEDULE.map((def) => {
+    const found = rows.find((row) => row.day_of_week === def.day_of_week);
+    return found
+      ? {
+        ...def,
+        start_time: found.start_time,
+        end_time: found.end_time,
+        is_active: found.is_active,
+        id: found.id,
+      }
+      : def;
+  });
+}
+
 export const DoctorScheduleModal = ({ open, onClose, doctorId, doctorName }: Props) => {
   const { t, locale } = useI18n();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [schedule, setSchedule] = useState<ScheduleRow[]>(DEFAULT_SCHEDULE);
-  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const isDemo = user?.tenantId === "demo";
+
+  const { data: scheduleData, isLoading } = useQuery({
+    queryKey: queryKeys.doctors.schedules(doctorId, user?.tenantId),
+    queryFn: async () => {
+      if (!doctorId) return DEFAULT_SCHEDULE;
+      const rows = await doctorScheduleService.listByDoctor(doctorId);
+      const mapped = rows.map((row) => ({
+        day_of_week: row.day_of_week,
+        start_time: row.start_time,
+        end_time: row.end_time,
+        is_active: row.is_active,
+        id: row.id,
+      }));
+      return mergeSchedule(mapped);
+    },
+    enabled: open && !!doctorId && !!user?.tenantId && !isDemo,
+  });
 
   useEffect(() => {
-    if (!open || !doctorId) return;
-    setLoading(true);
-    supabase
-      .from("doctor_schedules" as any)
-      .select("*")
-      .eq("doctor_id", doctorId)
-      .then(({ data, error }) => {
-        if (!error && data && data.length > 0) {
-          const merged = DEFAULT_SCHEDULE.map((def) => {
-            const found = (data as any[]).find((d) => d.day_of_week === def.day_of_week);
-            return found
-              ? { ...def, start_time: found.start_time?.slice(0, 5), end_time: found.end_time?.slice(0, 5), is_active: found.is_active, id: found.id }
-              : def;
-          });
-          setSchedule(merged);
-        } else {
-          setSchedule(DEFAULT_SCHEDULE);
-        }
-        setLoading(false);
-      });
-  }, [open, doctorId]);
+    if (!open) return;
+    if (isDemo) {
+      setSchedule(DEFAULT_SCHEDULE);
+      return;
+    }
+    if (scheduleData) {
+      setSchedule(scheduleData);
+    }
+  }, [open, isDemo, scheduleData]);
 
   const updateRow = (dayIdx: number, field: keyof ScheduleRow, value: any) => {
     setSchedule((prev) =>
@@ -71,31 +94,28 @@ export const DoctorScheduleModal = ({ open, onClose, doctorId, doctorName }: Pro
   };
 
   const handleSave = async () => {
-    if (!user) return;
+    if (!user || !doctorId || isDemo) return;
     setSaving(true);
 
-    // Upsert all rows
-    for (const row of schedule) {
-      if (row.id) {
-        await supabase
-          .from("doctor_schedules" as any)
-          .update({ start_time: row.start_time, end_time: row.end_time, is_active: row.is_active })
-          .eq("id", row.id);
-      } else {
-        await supabase.from("doctor_schedules" as any).insert({
-          doctor_id: doctorId,
-          tenant_id: user.tenantId,
+    try {
+      await doctorScheduleService.save(
+        doctorId,
+        schedule.map((row) => ({
           day_of_week: row.day_of_week,
           start_time: row.start_time,
           end_time: row.end_time,
           is_active: row.is_active,
-        });
-      }
+        })),
+      );
+      queryClient.invalidateQueries({ queryKey: queryKeys.doctors.schedules(doctorId, user.tenantId) });
+      toast({ title: t("common.saved") });
+      onClose();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : t("common.error");
+      toast({ title: t("common.error"), description: message, variant: "destructive" });
+    } finally {
+      setSaving(false);
     }
-
-    toast({ title: t("common.saved") });
-    setSaving(false);
-    onClose();
   };
 
   const dayLabels = locale === "ar" ? DAYS_AR : DAYS;
@@ -107,7 +127,7 @@ export const DoctorScheduleModal = ({ open, onClose, doctorId, doctorName }: Pro
           <DialogTitle>{doctorName} — {t("doctors.schedule")}</DialogTitle>
         </DialogHeader>
 
-        {loading ? (
+        {(!isDemo && isLoading) ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="h-6 w-6 animate-spin text-primary" />
           </div>

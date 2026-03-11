@@ -122,6 +122,35 @@ export function generatePrescriptionPDF(prescription: any, patient: { full_name:
   doc.save(`prescription-${prescription.id}.pdf`);
 }
 
+export function generatePrescriptionsListPDF(
+  prescriptions: Array<{ medication: string; dosage: string; prescribed_date: string; status: string; doctors?: { full_name: string } | null }>,
+  patient: { full_name: string },
+  locale: "en" | "ar" = "en",
+) {
+  const dateLocale = locale === "ar" ? "ar-SA" : "en-US";
+  generatePDF({
+    title: `Prescriptions - ${patient.full_name}`,
+    subtitle: `Generated on ${new Date().toLocaleDateString(dateLocale)}`,
+    columns: [
+      { header: "Medication", dataKey: "medication" },
+      { header: "Dosage", dataKey: "dosage" },
+      { header: "Doctor", dataKey: "doctor" },
+      { header: "Date", dataKey: "date" },
+      { header: "Status", dataKey: "status" },
+    ],
+    data: prescriptions.map((rx) => ({
+      medication: rx.medication ?? "",
+      dosage: rx.dosage ?? "",
+      doctor: rx.doctors?.full_name ?? "",
+      date: rx.prescribed_date
+        ? new Date(rx.prescribed_date + "T00:00:00").toLocaleDateString(dateLocale)
+        : "",
+      status: rx.status ?? "",
+    })),
+    filename: `prescriptions-${patient.full_name.replace(/\s+/g, "-").toLowerCase()}.pdf`,
+  });
+}
+
 type ReportLocale = "en" | "ar";
 
 const labels: Record<ReportLocale, Record<string, string>> = {

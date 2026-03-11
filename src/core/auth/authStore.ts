@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { supabase } from "@/integrations/supabase/client";
 import type { User as SupaUser } from "@supabase/supabase-js";
+import { profileStorage } from "@/services/settings/profile.storage";
 
 export type Role = "super_admin" | "clinic_admin" | "doctor" | "receptionist" | "nurse" | "accountant";
 
@@ -137,7 +138,7 @@ async function loadUserProfile(
   // Get profile
   const { data: profile } = await supabase
     .from("profiles")
-    .select("*, tenants:tenant_id(*)")
+    .select("id, user_id, tenant_id, full_name, avatar_url, tenants:tenant_id(name, slug)")
     .eq("user_id", supaUser.id)
     .single();
 
@@ -150,6 +151,16 @@ async function loadUserProfile(
 
   if (profile && roleData) {
     const tenant = profile.tenants as any;
+    let avatarUrl: string | undefined = profile.avatar_url ?? undefined;
+
+    if (avatarUrl && !avatarUrl.startsWith("http")) {
+      try {
+        avatarUrl = await profileStorage.getSignedAvatarUrl(avatarUrl);
+      } catch {
+        avatarUrl = undefined;
+      }
+    }
+
     set({
       user: {
         id: supaUser.id,
@@ -159,7 +170,7 @@ async function loadUserProfile(
         tenantId: profile.tenant_id,
         tenantSlug: tenant?.slug ?? "default",
         tenantName: tenant?.name ?? "Clinic",
-        avatar: profile.avatar_url ?? undefined,
+        avatar: avatarUrl,
       },
       supabaseUser: supaUser,
       isAuthenticated: true,

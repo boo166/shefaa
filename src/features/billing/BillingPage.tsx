@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useI18n } from "@/core/i18n/i18nStore";
 import { StatCard } from "@/shared/components/StatCard";
 import { StatusBadge } from "@/shared/components/StatusBadge";
@@ -8,17 +8,16 @@ import { Button } from "@/components/ui/button";
 import { PermissionGuard } from "@/core/auth/PermissionGuard";
 import { DollarSign, CreditCard, FileText, TrendingUp, Plus, CheckCircle } from "lucide-react";
 import { NewInvoiceModal } from "./NewInvoiceModal";
-import { useSupabaseTable } from "@/hooks/useSupabaseQuery";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { useAuth } from "@/core/auth/authStore";
-import { useQueryClient } from "@tanstack/react-query";
-import { Tables } from "@/integrations/supabase/types";
-import { supabase } from "@/integrations/supabase/client";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
 import { formatDate, formatCurrency } from "@/shared/utils/formatDate";
-import { generatePDF } from "@/shared/utils/pdfGenerator";
-
-type Invoice = Tables<"invoices"> & { patients?: { full_name: string } | null };
+import { billingService } from "@/services/billing/billing.service";
+import { patientService } from "@/services/patients/patient.service";
+import { queryKeys } from "@/services/queryKeys";
+import type { InvoiceWithPatient } from "@/domain/billing/billing.types";
+import type { Patient } from "@/domain/patient/patient.types";
 
 const DEMO_INVOICES = [
   { id: "1", invoice_code: "INV-001", patient_name: "Mohammed Al-Rashid", service: "Cardiology Consultation", amount: 350, invoice_date: "2026-03-08", status: "paid" },
@@ -29,6 +28,21 @@ const DEMO_INVOICES = [
 
 const statusVariant = { paid: "success", pending: "warning", overdue: "destructive" } as const;
 
+const toDateKey = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+type InvoiceRow = InvoiceWithPatient;
+
+type InvoiceDisplayRow = {
+  id: string;
+  invoice_code: string;
+  patient_name: string;
+  service: string;
+  amount: number;
+  invoice_date: string;
+  status: "paid" | "pending" | "overdue";
+};
+
 export const BillingPage = () => {
   const { t, locale } = useI18n();
   const { user } = useAuth();
@@ -36,34 +50,122 @@ export const BillingPage = () => {
   const isDemo = user?.tenantId === "demo";
   const [showModal, setShowModal] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [searchTerm, setSearchTerm] = useState("");
+  const pageSize = 25;
 
   useRealtimeSubscription(["invoices"]);
 
-  const { data: liveInvoices = [], isLoading } = useSupabaseTable<Invoice>("invoices", {
-    select: "*, patients(full_name)",
-    orderBy: { column: "created_at", ascending: false },
+  const { data: listPage, isLoading } = useQuery({
+    queryKey: queryKeys.billing.list({
+      tenantId: user?.tenantId,
+      page,
+      pageSize,
+      search: searchTerm.trim() || undefined,
+      filters: statusFilter ? { status: statusFilter } : undefined,
+    }),
+    queryFn: async () => billingService.listPagedWithRelations({
+      page,
+      pageSize,
+      search: searchTerm.trim() || undefined,
+      filters: statusFilter ? { status: statusFilter } : undefined,
+      sort: { column: "created_at", ascending: false },
+    }),
+    enabled: !isDemo && !!user?.tenantId,
   });
-  const { data: patients = [] } = useSupabaseTable<Tables<"patients">>("patients");
 
-  const displayData = isDemo
+  const { data: patientPage } = useQuery({
+    queryKey: queryKeys.patients.list({ tenantId: user?.tenantId, page: 1, pageSize: 500 }),
+    queryFn: async () => patientService.listPaged({ page: 1, pageSize: 500, sort: { column: "full_name", ascending: true } }),
+    enabled: !!user?.tenantId && !isDemo,
+  });
+
+  const patients: Patient[] = patientPage?.data ?? [];
+
+  useEffect(() => {
+    setPage(1);
+  }, [statusFilter, searchTerm]);
+
+  const now = new Date();
+  const monthStartDate = new Date(now.getFullYear(), now.getMonth(), 1);
+  const monthEndDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const monthStart = toDateKey(monthStartDate);
+  const monthEnd = toDateKey(monthEndDate);
+  const monthKey = `${now.getFullYear()}-${now.getMonth() + 1}`;
+
+  const { data: invoiceSummary = { total_count: 0, paid_count: 0, paid_amount: 0, pending_amount: 0 } } = useQuery({
+    queryKey: queryKeys.billing.summary(user?.tenantId),
+    enabled: !isDemo && !!user?.tenantId,
+    queryFn: async () => billingService.getSummary(),
+  });
+
+  const { data: invoicesThisMonth = 0 } = useQuery({
+    queryKey: queryKeys.billing.monthCount(user?.tenantId, monthKey),
+    enabled: !isDemo && !!user?.tenantId,
+    queryFn: async () => billingService.countInRange(monthStart, monthEnd),
+  });
+
+  const liveInvoices: InvoiceRow[] = listPage?.data ?? [];
+  const totalInvoices = listPage?.count ?? 0;
+
+  const invoices: InvoiceDisplayRow[] = isDemo
     ? DEMO_INVOICES
     : liveInvoices.map((inv) => ({
-        id: inv.id, invoice_code: inv.invoice_code, patient_name: inv.patients?.full_name ?? "—",
-        service: inv.service, amount: Number(inv.amount), invoice_date: inv.invoice_date, status: inv.status,
+        id: inv.id,
+        invoice_code: inv.invoice_code,
+        patient_name: inv.patients?.full_name ?? "-",
+        service: inv.service,
+        amount: Number(inv.amount),
+        invoice_date: inv.invoice_date,
+        status: inv.status,
       }));
 
-  const filtered = useMemo(() => statusFilter ? displayData.filter((i) => i.status === statusFilter) : displayData, [displayData, statusFilter]);
-  const totalRevenue = displayData.filter((i) => i.status === "paid").reduce((s, i) => s + i.amount, 0);
-  const pendingAmount = displayData.filter((i) => i.status === "pending" || i.status === "overdue").reduce((s, i) => s + i.amount, 0);
+  const demoFiltered = useMemo(() => {
+    if (!isDemo) return invoices;
+    const q = searchTerm.trim().toLowerCase();
+    return invoices.filter((i) => {
+      if (statusFilter && i.status !== statusFilter) return false;
+      if (!q) return true;
+      return (
+        i.invoice_code.toLowerCase().includes(q) ||
+        i.patient_name.toLowerCase().includes(q) ||
+        i.service.toLowerCase().includes(q) ||
+        i.status.toLowerCase().includes(q)
+      );
+    });
+  }, [invoices, isDemo, searchTerm, statusFilter]);
+
+  const pagedDemo = isDemo ? demoFiltered.slice((page - 1) * pageSize, page * pageSize) : invoices;
+  const total = isDemo ? demoFiltered.length : totalInvoices;
+
+  const demoPaidAmount = DEMO_INVOICES.filter((i) => i.status === "paid").reduce((s, i) => s + i.amount, 0);
+  const demoPendingAmount = DEMO_INVOICES.filter((i) => i.status === "pending" || i.status === "overdue").reduce((s, i) => s + i.amount, 0);
+  const demoPaidCount = DEMO_INVOICES.filter((i) => i.status === "paid").length;
+  const demoMonthCount = DEMO_INVOICES.filter((i) => {
+    const d = new Date(i.invoice_date);
+    return d >= monthStartDate && d < monthEndDate;
+  }).length;
+
+  const totalRevenue = isDemo ? demoPaidAmount : invoiceSummary.paid_amount;
+  const pendingAmount = isDemo ? demoPendingAmount : invoiceSummary.pending_amount;
+  const totalCount = isDemo ? DEMO_INVOICES.length : invoiceSummary.total_count;
+  const paidCount = isDemo ? demoPaidCount : invoiceSummary.paid_count;
+  const collectionRate = totalCount ? Math.round((paidCount / totalCount) * 100) : 0;
+  const invoicesThisMonthValue = isDemo ? demoMonthCount : invoicesThisMonth;
+
+  const invalidateInvoices = () => {
+    queryClient.invalidateQueries({ queryKey: queryKeys.billing.root(user?.tenantId) });
+  };
 
   const handleMarkPaid = async (id: string) => {
     if (isDemo) return;
-    const { error } = await supabase.from("invoices").update({ status: "paid" }).eq("id", id);
-    if (error) {
-      toast({ title: t("common.error"), description: error.message, variant: "destructive" });
-    } else {
+    try {
+      await billingService.update(id, { status: "paid" });
       toast({ title: t("billing.invoiceMarkedPaid") });
-      queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      invalidateInvoices();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : t("common.error");
+      toast({ title: t("common.error"), description: message, variant: "destructive" });
     }
   };
 
@@ -74,7 +176,7 @@ export const BillingPage = () => {
     return status;
   };
 
-  const columns: Column<typeof displayData[0]>[] = [
+  const columns: Column<InvoiceDisplayRow>[] = [
     { key: "invoice_code", header: t("billing.invoiceNumber"), searchable: true, render: (inv) => <span className="font-medium">{inv.invoice_code}</span> },
     { key: "patient_name", header: t("appointments.patient"), searchable: true },
     { key: "service", header: t("common.service"), searchable: true },
@@ -108,21 +210,28 @@ export const BillingPage = () => {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard title={t("billing.totalRevenue")} value={formatCurrency(totalRevenue, locale)} icon={DollarSign} />
         <StatCard title={t("billing.pendingPayments")} value={formatCurrency(pendingAmount, locale)} icon={CreditCard} />
-        <StatCard title={t("billing.invoicesThisMonth")} value={String(displayData.length)} icon={FileText} />
-        <StatCard title={t("billing.collectionRate")} value={displayData.length ? `${Math.round((displayData.filter((i) => i.status === "paid").length / displayData.length) * 100)}%` : "—"} icon={TrendingUp} />
+        <StatCard title={t("billing.invoicesThisMonth")} value={String(invoicesThisMonthValue)} icon={FileText} />
+        <StatCard title={t("billing.collectionRate")} value={totalCount ? `${collectionRate}%` : "-"} icon={TrendingUp} />
       </div>
 
       <DataTable
         columns={columns}
-        data={filtered}
+        data={pagedDemo}
         keyExtractor={(inv) => inv.id}
         searchable
+        serverSearch
+        searchValue={searchTerm}
+        onSearchChange={setSearchTerm}
         isLoading={!isDemo && isLoading}
         exportFileName="invoices"
         pdfExport={{
           title: t("billing.title"),
-          subtitle: `${t("billing.totalRevenue")}: ${formatCurrency(totalRevenue, locale)} · ${t("billing.collectionRate")}: ${displayData.length ? Math.round((displayData.filter((i) => i.status === "paid").length / displayData.length) * 100) : 0}%`
+          subtitle: `${t("billing.totalRevenue")}: ${formatCurrency(totalRevenue, locale)} | ${t("billing.collectionRate")}: ${totalCount ? collectionRate : 0}%`,
         }}
+        page={page}
+        pageSize={pageSize}
+        total={total}
+        onPageChange={setPage}
         filterSlot={
           <StatusFilter
             options={[
@@ -138,7 +247,9 @@ export const BillingPage = () => {
 
       <NewInvoiceModal
         open={showModal} onClose={() => setShowModal(false)}
-        onSuccess={() => queryClient.invalidateQueries({ queryKey: ["invoices"] })}
+        onSuccess={() => {
+          invalidateInvoices();
+        }}
         patients={patients.map((p) => ({ id: p.id, full_name: p.full_name }))}
       />
     </div>

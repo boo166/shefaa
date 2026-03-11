@@ -33,6 +33,13 @@ interface DataTableProps<T> {
     subtitle?: string;
   };
   bulkActions?: BulkAction<T>[];
+  page?: number;
+  pageSize?: number;
+  total?: number;
+  onPageChange?: (page: number) => void;
+  serverSearch?: boolean;
+  searchValue?: string;
+  onSearchChange?: (value: string) => void;
 }
 
 export function DataTable<T>({
@@ -47,15 +54,28 @@ export function DataTable<T>({
   exportFileName,
   pdfExport,
   bulkActions,
+  page,
+  pageSize,
+  total,
+  onPageChange,
+  serverSearch = false,
+  searchValue,
+  onSearchChange,
 }: DataTableProps<T>) {
   const { t } = useI18n();
-  const [search, setSearch] = useState("");
+  const [localSearch, setLocalSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkLoading, setBulkLoading] = useState(false);
   const noData = emptyMessage ?? t("common.noData");
+  const search = serverSearch ? (searchValue ?? "") : localSearch;
+  const isPaged = typeof total === "number" && typeof pageSize === "number" && !!onPageChange;
+  const currentPage = page ?? 1;
+  const totalPages = isPaged ? Math.max(1, Math.ceil((total ?? 0) / (pageSize ?? 1))) : 1;
+  const pageStart = isPaged && total ? (currentPage - 1) * (pageSize ?? 1) + 1 : 0;
+  const pageEnd = isPaged && total ? Math.min(total, currentPage * (pageSize ?? 1)) : 0;
 
   const filtered = useMemo(() => {
-    if (!search || !searchable) return data;
+    if (serverSearch || !search || !searchable) return data;
     const q = search.toLowerCase();
     const searchCols = columns.filter((c) => c.searchable !== false);
     return data.filter((item) =>
@@ -64,7 +84,15 @@ export function DataTable<T>({
         return val && String(val).toLowerCase().includes(q);
       })
     );
-  }, [data, search, searchable, columns]);
+  }, [data, search, searchable, columns, serverSearch]);
+
+  const handleSearchChange = (value: string) => {
+    if (serverSearch) {
+      onSearchChange?.(value);
+      return;
+    }
+    setLocalSearch(value);
+  };
 
   const exportCsv = useCallback(() => {
     const headers = columns.filter((c) => c.key !== "actions").map((c) => c.header);
@@ -149,7 +177,7 @@ export function DataTable<T>({
               <input
                 type="text"
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => handleSearchChange(e.target.value)}
                 placeholder={searchPlaceholder ?? t("common.search")}
                 className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
               />
@@ -260,6 +288,34 @@ export function DataTable<T>({
             </tbody>
           </table>
         </div>
+        {isPaged && totalPages > 1 && (
+          <div className="flex items-center justify-between px-4 py-3 text-sm text-muted-foreground border-t">
+            <span>
+              {t("common.showing")} {pageStart}-{pageEnd} {t("common.of")} {total}
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onPageChange?.(Math.max(1, currentPage - 1))}
+                disabled={currentPage <= 1}
+              >
+                {t("common.previous")}
+              </Button>
+              <span>
+                {currentPage} / {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onPageChange?.(Math.min(totalPages, currentPage + 1))}
+                disabled={currentPage >= totalPages}
+              >
+                {t("common.next")}
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

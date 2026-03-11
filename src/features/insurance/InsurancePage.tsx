@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useI18n } from "@/core/i18n/i18nStore";
 import { StatCard } from "@/shared/components/StatCard";
 import { StatusBadge } from "@/shared/components/StatusBadge";
@@ -6,17 +6,17 @@ import { StatusFilter } from "@/shared/components/StatusFilter";
 import { DataTable, Column } from "@/shared/components/DataTable";
 import { Shield, Plus, CheckCircle, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useSupabaseTable } from "@/hooks/useSupabaseQuery";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { useAuth } from "@/core/auth/authStore";
-import { Tables } from "@/integrations/supabase/types";
 import { NewClaimModal } from "./NewClaimModal";
-import { useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
 import { formatDate, formatCurrency } from "@/shared/utils/formatDate";
-
-type Claim = Tables<"insurance_claims"> & { patients?: { full_name: string } | null };
+import { insuranceService } from "@/services/insurance/insurance.service";
+import { patientService } from "@/services/patients/patient.service";
+import { queryKeys } from "@/services/queryKeys";
+import type { InsuranceClaimWithPatient } from "@/domain/insurance/insurance.types";
+import type { Patient } from "@/domain/patient/patient.types";
 
 const DEMO_CLAIMS = [
   { id: "1", patient_name: "Mohammed Al-Rashid", provider: "National Health Co.", service: "Cardiology Consultation", amount: 350, claim_date: "2026-03-08", status: "approved" },
@@ -27,6 +27,18 @@ const DEMO_CLAIMS = [
 
 const statusVariant: Record<string, "success" | "warning" | "destructive"> = { approved: "success", pending: "warning", rejected: "destructive" };
 
+type ClaimRow = InsuranceClaimWithPatient;
+
+type ClaimDisplayRow = {
+  id: string;
+  patient_name: string;
+  provider: string;
+  service: string;
+  amount: number;
+  claim_date: string;
+  status: "approved" | "pending" | "rejected";
+};
+
 export const InsurancePage = () => {
   const { t, locale, calendarType } = useI18n();
   const { user } = useAuth();
@@ -34,37 +46,105 @@ export const InsurancePage = () => {
   const isDemo = user?.tenantId === "demo";
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [page, setPage] = useState(1);
+  const [searchTerm, setSearchTerm] = useState("");
+  const pageSize = 25;
 
   useRealtimeSubscription(["insurance_claims"]);
 
-  const { data: liveClaims = [], isLoading } = useSupabaseTable<Claim>("insurance_claims", {
-    select: "*, patients(full_name)",
-    orderBy: { column: "claim_date", ascending: false },
+  const { data: listPage, isLoading } = useQuery({
+    queryKey: queryKeys.insurance.list({
+      tenantId: user?.tenantId,
+      page,
+      pageSize,
+      search: searchTerm.trim() || undefined,
+      filters: statusFilter ? { status: statusFilter } : undefined,
+    }),
+    queryFn: async () => insuranceService.listPagedWithRelations({
+      page,
+      pageSize,
+      search: searchTerm.trim() || undefined,
+      filters: statusFilter ? { status: statusFilter } : undefined,
+      sort: { column: "claim_date", ascending: false },
+    }),
+    enabled: !isDemo && !!user?.tenantId,
   });
-  
-  const { data: patients = [] } = useSupabaseTable<Tables<"patients">>("patients");
 
-  const displayData = isDemo
+  const { data: patientPage } = useQuery({
+    queryKey: queryKeys.patients.list({ tenantId: user?.tenantId, page: 1, pageSize: 500 }),
+    queryFn: async () => patientService.listPaged({ page: 1, pageSize: 500, sort: { column: "full_name", ascending: true } }),
+    enabled: !!user?.tenantId && !isDemo,
+  });
+
+  const patients: Patient[] = patientPage?.data ?? [];
+
+  useEffect(() => {
+    setPage(1);
+  }, [statusFilter, searchTerm]);
+
+  const { data: insuranceSummary = { total_count: 0, pending_count: 0, approved_count: 0, rejected_count: 0, providers_count: 0 } } = useQuery({
+    queryKey: queryKeys.insurance.summary(user?.tenantId),
+    enabled: !isDemo && !!user?.tenantId,
+    queryFn: async () => insuranceService.getSummary(),
+  });
+
+  const liveClaims: ClaimRow[] = listPage?.data ?? [];
+  const totalClaims = listPage?.count ?? 0;
+
+  const claims: ClaimDisplayRow[] = isDemo
     ? DEMO_CLAIMS
     : liveClaims.map((c) => ({
-        id: c.id, patient_name: c.patients?.full_name ?? "—", provider: c.provider,
-        service: c.service, amount: Number(c.amount), claim_date: c.claim_date, status: c.status,
+        id: c.id,
+        patient_name: c.patients?.full_name ?? "-",
+        provider: c.provider,
+        service: c.service,
+        amount: Number(c.amount),
+        claim_date: c.claim_date,
+        status: c.status,
       }));
 
-  const filtered = useMemo(() => statusFilter ? displayData.filter((c) => c.status === statusFilter) : displayData, [displayData, statusFilter]);
+  const demoFiltered = useMemo(() => {
+    if (!isDemo) return claims;
+    const q = searchTerm.trim().toLowerCase();
+    return claims.filter((c) => {
+      if (statusFilter && c.status !== statusFilter) return false;
+      if (!q) return true;
+      return (
+        c.patient_name.toLowerCase().includes(q) ||
+        c.provider.toLowerCase().includes(q) ||
+        c.service.toLowerCase().includes(q) ||
+        c.status.toLowerCase().includes(q)
+      );
+    });
+  }, [claims, isDemo, searchTerm, statusFilter]);
 
-  const pending = displayData.filter((c) => c.status === "pending").length;
-  const approved = displayData.filter((c) => c.status === "approved").length;
-  const rate = displayData.length ? Math.round((approved / displayData.length) * 100) : 0;
+  const pagedDemo = isDemo ? demoFiltered.slice((page - 1) * pageSize, page * pageSize) : claims;
+  const total = isDemo ? demoFiltered.length : totalClaims;
+
+  const demoProviderCount = new Set(DEMO_CLAIMS.map((c) => c.provider)).size;
+  const demoPending = DEMO_CLAIMS.filter((c) => c.status === "pending").length;
+  const demoApproved = DEMO_CLAIMS.filter((c) => c.status === "approved").length;
+  const demoTotal = DEMO_CLAIMS.length;
+
+  const pending = isDemo ? demoPending : insuranceSummary.pending_count;
+  const approved = isDemo ? demoApproved : insuranceSummary.approved_count;
+  const providerCount = isDemo ? demoProviderCount : insuranceSummary.providers_count;
+  const totalCount = isDemo ? demoTotal : insuranceSummary.total_count;
+  const rate = totalCount ? Math.round((approved / totalCount) * 100) : 0;
+
+  const invalidateClaims = () => {
+    queryClient.invalidateQueries({ queryKey: queryKeys.insurance.root(user?.tenantId) });
+  };
 
   const handleUpdateStatus = async (id: string, newStatus: string) => {
     if (isDemo) return;
-    const { error } = await supabase.from("insurance_claims").update({ status: newStatus }).eq("id", id);
-    if (error) {
-      toast({ title: t("common.error"), description: error.message, variant: "destructive" });
-    } else {
+    try {
+      await insuranceService.update(id, { status: newStatus as ClaimDisplayRow["status"] });
       toast({ title: newStatus === "approved" ? t("insurance.approved") : t("insurance.rejected") });
-      queryClient.invalidateQueries({ queryKey: ["insurance_claims"] });
+      invalidateClaims();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : t("common.error");
+      toast({ title: t("common.error"), description: message, variant: "destructive" });
     }
   };
 
@@ -75,7 +155,7 @@ export const InsurancePage = () => {
     return status;
   };
 
-  const columns: Column<typeof displayData[0]>[] = [
+  const columns: Column<ClaimDisplayRow>[] = [
     { key: "patient_name", header: t("appointments.patient"), searchable: true },
     { key: "provider", header: t("common.provider"), searchable: true },
     { key: "service", header: t("common.service"), searchable: true },
@@ -114,13 +194,24 @@ export const InsurancePage = () => {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <StatCard title={t("insurance.activeProviders")} value={String(new Set(displayData.map((c) => c.provider)).size)} icon={Shield} />
+        <StatCard title={t("insurance.activeProviders")} value={String(providerCount)} icon={Shield} />
         <StatCard title={t("insurance.pendingClaims")} value={String(pending)} icon={Shield} />
         <StatCard title={t("insurance.approvalRate")} value={`${rate}%`} icon={Shield} />
       </div>
 
       <DataTable
-        columns={columns} data={filtered} keyExtractor={(c) => c.id} searchable isLoading={!isDemo && isLoading}
+        columns={columns}
+        data={pagedDemo}
+        keyExtractor={(c) => c.id}
+        searchable
+        serverSearch
+        searchValue={searchTerm}
+        onSearchChange={setSearchTerm}
+        isLoading={!isDemo && isLoading}
+        page={page}
+        pageSize={pageSize}
+        total={total}
+        onPageChange={setPage}
         filterSlot={
           <StatusFilter
             options={[
@@ -137,7 +228,9 @@ export const InsurancePage = () => {
       <NewClaimModal
         open={showModal}
         onClose={() => setShowModal(false)}
-        onSuccess={() => queryClient.invalidateQueries({ queryKey: ["insurance_claims"] })}
+        onSuccess={() => {
+          invalidateClaims();
+        }}
         patients={patients.map((p) => ({ id: p.id, full_name: p.full_name }))}
       />
     </div>

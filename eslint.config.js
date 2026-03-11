@@ -24,4 +24,24 @@ export default tseslint.config(
       "@typescript-eslint/no-explicit-any": "warn",
     },
   },
+  {
+    files: ["src/features/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@/integrations/supabase/client",
+              message: "Use the services layer (src/services/*) instead of importing Supabase directly in features.",
+            },
+            {
+              name: "@/services/supabase/client",
+              message: "Use the services layer (src/services/*) instead of importing Supabase directly in features.",
+            },
+          ],
+        },
+      ],
+    },
+  },
 );

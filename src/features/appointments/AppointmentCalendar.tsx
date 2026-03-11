@@ -19,6 +19,8 @@ type Props = {
   appointments: AppointmentCalendarItem[];
   view: AppointmentCalendarView;
   onViewChange: (view: AppointmentCalendarView) => void;
+  cursor: Date;
+  onCursorChange: (next: Date) => void;
   rescheduleEnabled: boolean;
   onReschedule: (appointmentId: string, newAppointmentDate: string) => Promise<void> | void;
 };
@@ -68,16 +70,10 @@ const statusChipClass: Record<string, string> = {
   cancelled: "bg-destructive/10 text-destructive",
 };
 
-export function AppointmentCalendar({ appointments, view, onViewChange, rescheduleEnabled, onReschedule }: Props) {
+export function AppointmentCalendar({ appointments, view, onViewChange, cursor, onCursorChange, rescheduleEnabled, onReschedule }: Props) {
   const { t, locale, calendarType } = useI18n();
   const intlLocale = locale === "ar" ? "ar-SA" : "en-US";
   const calendar = calendarType === "hijri" ? "islamic-umalqura" : "gregory";
-
-  const [cursor, setCursor] = useState(() => {
-    const now = new Date();
-    now.setHours(0, 0, 0, 0);
-    return now;
-  });
 
   const statusLabel = (s: string) => {
     switch (s) {
@@ -118,21 +114,17 @@ export function AppointmentCalendar({ appointments, view, onViewChange, reschedu
   }, [appointments]);
 
   const handlePrev = () => {
-    setCursor((d) => {
-      const next = new Date(d);
-      if (view === "month") next.setMonth(next.getMonth() - 1);
-      else next.setDate(next.getDate() - 7);
-      return next;
-    });
+    const next = new Date(cursor);
+    if (view === "month") next.setMonth(next.getMonth() - 1);
+    else next.setDate(next.getDate() - 7);
+    onCursorChange(next);
   };
 
   const handleNext = () => {
-    setCursor((d) => {
-      const next = new Date(d);
-      if (view === "month") next.setMonth(next.getMonth() + 1);
-      else next.setDate(next.getDate() + 7);
-      return next;
-    });
+    const next = new Date(cursor);
+    if (view === "month") next.setMonth(next.getMonth() + 1);
+    else next.setDate(next.getDate() + 7);
+    onCursorChange(next);
   };
 
   const title = useMemo(() => {
@@ -214,7 +206,7 @@ export function AppointmentCalendar({ appointments, view, onViewChange, reschedu
           <Button variant="outline" size="sm" onClick={handlePrev} aria-label={t("common.previous")}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <Button variant="outline" size="sm" onClick={() => setCursor(new Date(today))}>
+          <Button variant="outline" size="sm" onClick={() => onCursorChange(new Date(today))}>
             {t("common.today")}
           </Button>
           <Button variant="outline" size="sm" onClick={handleNext} aria-label={t("common.next")}>

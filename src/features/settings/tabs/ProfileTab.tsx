@@ -6,8 +6,9 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Loader2, Camera, Trash2 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { profileService } from "@/services/settings/profile.service";
+import { profileStorage } from "@/services/settings/profile.storage";
 
 export const ProfileTab = () => {
   const { t } = useI18n();
@@ -28,71 +29,55 @@ export const ProfileTab = () => {
     }
 
     setUploading(true);
-    const ext = file.name.split(".").pop();
-    const path = `${user.id}/avatar.${ext}`;
-
-    const { error: uploadErr } = await supabase.storage
-      .from("avatars")
-      .upload(path, file, { upsert: true });
-
-    if (uploadErr) {
-      toast({ title: t("common.error"), description: uploadErr.message, variant: "destructive" });
-      setUploading(false);
-      return;
-    }
-
-    const { data: urlData } = supabase.storage.from("avatars").getPublicUrl(path);
-    const avatarUrl = `${urlData.publicUrl}?t=${Date.now()}`;
-
-    const { error: updateErr } = await supabase
-      .from("profiles")
-      .update({ avatar_url: avatarUrl })
-      .eq("user_id", user.id);
-
-    if (updateErr) {
-      toast({ title: t("common.error"), description: updateErr.message, variant: "destructive" });
-    } else {
-      setUser({ ...user, avatar: avatarUrl }, supabaseUser);
+    try {
+      const { path, signedUrl } = await profileStorage.uploadAvatar(user.id, file);
+      await profileService.updateProfile(user.id, { avatar_url: path });
+      setUser({ ...user, avatar: signedUrl }, supabaseUser);
       toast({ title: t("settings.avatarUpdated") });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : t("common.error");
+      toast({ title: t("common.error"), description: message, variant: "destructive" });
+    } finally {
+      setUploading(false);
     }
-    setUploading(false);
   };
 
   const handleRemoveAvatar = async () => {
     if (!user || isDemo) return;
     setUploading(true);
 
-    // Try removing from storage (may not exist)
-    await supabase.storage.from("avatars").remove([`${user.id}/avatar.jpg`, `${user.id}/avatar.png`, `${user.id}/avatar.webp`]);
-
-    await supabase.from("profiles").update({ avatar_url: null }).eq("user_id", user.id);
-    setUser({ ...user, avatar: undefined }, supabaseUser);
-    toast({ title: t("settings.avatarRemoved") });
-    setUploading(false);
+    try {
+      await profileStorage.removeAvatar(user.id);
+      await profileService.updateProfile(user.id, { avatar_url: null });
+      setUser({ ...user, avatar: undefined }, supabaseUser);
+      toast({ title: t("settings.avatarRemoved") });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : t("common.error");
+      toast({ title: t("common.error"), description: message, variant: "destructive" });
+    } finally {
+      setUploading(false);
+    }
   };
 
   const handleSaveName = async () => {
     if (!user || isDemo) return;
     setSaving(true);
-    const { error } = await supabase
-      .from("profiles")
-      .update({ full_name: fullName })
-      .eq("user_id", user.id);
-
-    if (error) {
-      toast({ title: t("common.error"), description: error.message, variant: "destructive" });
-    } else {
+    try {
+      await profileService.updateProfile(user.id, { full_name: fullName });
       setUser({ ...user, name: fullName }, supabaseUser);
       toast({ title: t("common.saved") });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : t("common.error");
+      toast({ title: t("common.error"), description: message, variant: "destructive" });
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   };
 
   return (
     <div className="space-y-6">
       <h3 className="font-semibold text-lg">{t("settings.profile")}</h3>
 
-      {/* Avatar */}
       <div className="flex items-center gap-5">
         <div className="relative">
           <Avatar className="h-20 w-20">
@@ -141,7 +126,6 @@ export const ProfileTab = () => {
         </div>
       </div>
 
-      {/* Name */}
       <div className="space-y-2 max-w-sm">
         <Label>{t("auth.fullName")}</Label>
         <Input value={fullName} onChange={(e) => setFullName(e.target.value)} />

@@ -14,12 +14,12 @@ import {
   BarChart3, LogOut, Eye, ChevronRight, Crown, HeartPulse,
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { formatDate } from "@/shared/utils/formatDate";
-import { fetchProfilesWithRoles } from "@/shared/data/profiles";
 import { toast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { adminService } from "@/services/admin/admin.service";
+import { queryKeys } from "@/services/queryKeys";
 
 type AdminTab = "overview" | "clinics" | "users" | "subscriptions";
 
@@ -34,33 +34,25 @@ export const AdminDashboardPage = () => {
   const [activeTab, setActiveTab] = useState<AdminTab>("overview");
   const [clinicFilter, setClinicFilter] = useState<string | null>(null);
   const [subFilter, setSubFilter] = useState<string | null>(null);
-  const [confirmAction, setConfirmAction] = useState<{ id: string; field: string; value: string } | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{ id: string; field: "plan" | "status"; value: string } | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
 
   // Fetch all tenants
   const { data: tenants = [], isLoading: loadingTenants } = useQuery({
-    queryKey: ["admin-tenants"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("tenants").select("*").order("created_at", { ascending: false });
-      if (error) throw error;
-      return data ?? [];
-    },
+    queryKey: queryKeys.admin.tenants(),
+    queryFn: () => adminService.listTenants(),
   });
 
   // Fetch all profiles with roles
   const { data: profiles = [], isLoading: loadingProfiles } = useQuery({
-    queryKey: ["admin-profiles"],
-    queryFn: () => fetchProfilesWithRoles(),
+    queryKey: queryKeys.admin.profiles(),
+    queryFn: () => adminService.listProfilesWithRoles(),
   });
 
   // Fetch all subscriptions
   const { data: subscriptions = [], isLoading: loadingSubs } = useQuery({
-    queryKey: ["admin-subscriptions"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("subscriptions").select("*, tenants(name, slug)").order("created_at", { ascending: false });
-      if (error) throw error;
-      return data ?? [];
-    },
+    queryKey: queryKeys.admin.subscriptions(),
+    queryFn: () => adminService.listSubscriptions(),
   });
 
   const totalClinics = tenants.length;
@@ -77,14 +69,13 @@ export const AdminDashboardPage = () => {
     if (!confirmAction) return;
     setActionLoading(true);
     try {
-      const { error } = await supabase
-        .from("subscriptions")
-        .update({ [confirmAction.field]: confirmAction.value, updated_at: new Date().toISOString() })
-        .eq("id", confirmAction.id);
-
-      if (error) throw error;
+      const updatePayload =
+        confirmAction.field === "plan"
+          ? { plan: confirmAction.value }
+          : { status: confirmAction.value };
+      await adminService.updateSubscription(confirmAction.id, updatePayload);
       toast({ title: "Updated", description: `Subscription ${confirmAction.field} changed to ${confirmAction.value}` });
-      queryClient.invalidateQueries({ queryKey: ["admin-subscriptions"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.admin.subscriptions() });
     } catch (err: any) {
       toast({ title: "Error", description: err?.message || "Failed to update", variant: "destructive" });
     } finally {

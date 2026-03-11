@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { supabase } from "@/integrations/supabase/client";
+import { clinicSlugService } from "@/services/auth/clinicSlug.service";
 import { CheckCircle2, XCircle, Loader2, Pencil } from "lucide-react";
 
 type SlugStatus = "idle" | "checking" | "available" | "taken" | "invalid";
@@ -46,30 +46,20 @@ export const ClinicNameField = ({
       setSlugStatus("checking");
 
       try {
-        const body: Record<string, string> = {};
-        if (slug) {
-          body.customSlug = slug;
-          body.clinicName = name;
-        } else {
-          body.clinicName = name.trim();
-        }
-
-        const { data, error } = await supabase.functions.invoke("check-slug", { body });
-
-        if (error) {
-          updateStatus("idle", "");
-          return;
-        }
+        const data = await clinicSlugService.checkSlug({
+          clinicName: name.trim(),
+          customSlug: slug,
+        });
 
         if (data?.error || !data?.slug) {
           updateStatus("invalid", "");
           setSuggestions([]);
         } else if (data.available) {
-          updateStatus("available", data.slug);
+          updateStatus("available", data.slug ?? "");
           setSuggestions([]);
           setShowCustomSlug(false);
         } else {
-          updateStatus("taken", data.slug);
+          updateStatus("taken", data.slug ?? "");
           setSuggestions(data.suggestions ?? []);
         }
       } catch {

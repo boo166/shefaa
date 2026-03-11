@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { useI18n } from "@/core/i18n/i18nStore";
-import { useAuth } from "@/core/auth/authStore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { X } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { useAuth } from "@/core/auth/authStore";
+import { doctorService } from "@/services/doctors/doctor.service";
 
 interface AddDoctorModalProps {
   open: boolean;
@@ -22,6 +22,7 @@ const SPECIALTIES = [
 export const AddDoctorModal = ({ open, onClose, onSuccess }: AddDoctorModalProps) => {
   const { t } = useI18n();
   const { user } = useAuth();
+  const isDemo = user?.tenantId === "demo";
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     full_name: "",
@@ -39,27 +40,31 @@ export const AddDoctorModal = ({ open, onClose, onSuccess }: AddDoctorModalProps
       toast({ title: "Name and specialty required", variant: "destructive" });
       return;
     }
+    if (isDemo) {
+      toast({ title: t("common.demoMode"), description: t("common.demoModeNoSave"), variant: "destructive" });
+      return;
+    }
     setLoading(true);
 
-    const { error } = await supabase.from("doctors").insert({
-      tenant_id: user?.tenantId ?? "",
-      full_name: form.full_name,
-      specialty: form.specialty,
-      email: form.email || null,
-      phone: form.phone || null,
-      status: form.status,
-      rating: 0,
-    });
-
-    if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    } else {
+    try {
+      await doctorService.create({
+        full_name: form.full_name,
+        specialty: form.specialty,
+        email: form.email || null,
+        phone: form.phone || null,
+        status: form.status as "available" | "busy" | "on_leave",
+        rating: 0,
+      });
       toast({ title: "Doctor added successfully" });
       onSuccess();
       onClose();
       setForm({ full_name: "", specialty: "General Practice", email: "", phone: "", status: "available" });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : t("common.error");
+      toast({ title: t("common.error"), description: message, variant: "destructive" });
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (

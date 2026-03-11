@@ -7,8 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { useQuery } from "@tanstack/react-query";
+import { tenantService } from "@/services/settings/tenant.service";
+import { queryKeys } from "@/services/queryKeys";
 
 export const GeneralTab = () => {
   const { t, calendarType, setCalendarType } = useI18n();
@@ -20,22 +22,19 @@ export const GeneralTab = () => {
   const [clinicEmail, setClinicEmail] = useState("");
   const [clinicAddress, setClinicAddress] = useState("");
 
+  const { data: tenant } = useQuery({
+    queryKey: queryKeys.settings.tenant(user?.tenantId),
+    enabled: !isDemo && !!user?.tenantId,
+    queryFn: () => tenantService.getCurrentTenant(),
+  });
+
   useEffect(() => {
-    if (isDemo || !user?.tenantId) return;
-    supabase
-      .from("tenants")
-      .select("*")
-      .eq("id", user.tenantId)
-      .single()
-      .then(({ data }) => {
-        if (data) {
-          setClinicName(data.name);
-          setClinicPhone(data.phone ?? "");
-          setClinicEmail(data.email ?? "");
-          setClinicAddress(data.address ?? "");
-        }
-      });
-  }, [user?.tenantId, isDemo]);
+    if (!tenant) return;
+    setClinicName(tenant.name);
+    setClinicPhone(tenant.phone ?? "");
+    setClinicEmail(tenant.email ?? "");
+    setClinicAddress(tenant.address ?? "");
+  }, [tenant]);
 
   const handleSave = async () => {
     if (isDemo) {
@@ -43,13 +42,20 @@ export const GeneralTab = () => {
       return;
     }
     setSaving(true);
-    const { error } = await supabase
-      .from("tenants")
-      .update({ name: clinicName, phone: clinicPhone || null, email: clinicEmail || null, address: clinicAddress || null })
-      .eq("id", user?.tenantId ?? "");
-    if (error) toast({ title: t("common.error"), description: error.message, variant: "destructive" });
-    else toast({ title: t("common.saved") });
-    setSaving(false);
+    try {
+      await tenantService.updateCurrentTenant({
+        name: clinicName,
+        phone: clinicPhone || null,
+        email: clinicEmail || null,
+        address: clinicAddress || null,
+      });
+      toast({ title: t("common.saved") });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : t("common.error");
+      toast({ title: t("common.error"), description: message, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (

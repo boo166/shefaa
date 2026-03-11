@@ -13,9 +13,16 @@ import { useNavigate, useParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { formatDate, formatCurrency } from "@/shared/utils/formatDate";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { PatientDocuments } from "./PatientDocuments";
-import { generatePatientReportPDF } from "@/shared/utils/pdfGenerator";
+import { generatePatientReportPDF, generatePrescriptionsListPDF } from "@/shared/utils/pdfGenerator";
+import { patientService } from "@/services/patients/patient.service";
+import { medicalRecordsService } from "@/services/patients/medicalRecords.service";
+import { queryKeys } from "@/services/queryKeys";
+import { appointmentService } from "@/services/appointments/appointment.service";
+import { prescriptionService } from "@/services/prescriptions/prescription.service";
+import { labService } from "@/services/laboratory/lab.service";
+import { billingService } from "@/services/billing/billing.service";
+import { tenantService } from "@/services/settings/tenant.service";
 
 type Tab = "overview" | "history" | "prescriptions" | "notes" | "lab_orders" | "invoices" | "appointments" | "documents";
 
@@ -74,12 +81,10 @@ export const PatientDetailPage = () => {
   const isDemo = user?.tenantId === "demo";
 
   const { data: tenant } = useQuery({
-    queryKey: ["tenant", user?.tenantId],
+    queryKey: queryKeys.settings.tenant(user?.tenantId),
     queryFn: async () => {
       if (isDemo) return { name: "Demo Clinic", logo_url: null } as any;
-      const { data, error } = await supabase.from("tenants").select("name, logo_url").eq("id", user?.tenantId ?? "").single();
-      if (error) throw error;
-      return data;
+      return tenantService.getCurrentTenant();
     },
     enabled: !!user?.tenantId,
   });
@@ -96,89 +101,63 @@ export const PatientDetailPage = () => {
   ];
 
   const { data: patient, isLoading: loadingPatient } = useQuery({
-    queryKey: ["patient", patientId],
+    queryKey: queryKeys.patients.detail(patientId ?? "", user?.tenantId),
     queryFn: async () => {
       if (isDemo) return DEMO_PATIENT as any;
-      const { data, error } = await supabase.from("patients").select("*").eq("id", patientId ?? "").single();
-      if (error) throw error;
-      return data;
+      if (!patientId) return null;
+      return patientService.getById(patientId);
     },
-    enabled: !!patientId,
+    enabled: !!patientId && (!!user?.tenantId || isDemo),
   });
 
   const { data: medicalRecords = [] } = useQuery({
-    queryKey: ["medical_records", patientId],
+    queryKey: queryKeys.patients.medicalRecords(patientId ?? "", user?.tenantId),
     queryFn: async () => {
       if (isDemo) return DEMO_MEDICAL_HISTORY as any[];
-      const { data, error } = await supabase
-        .from("medical_records")
-        .select("*, doctors(full_name)")
-        .eq("patient_id", patientId ?? "")
-        .order("record_date", { ascending: false });
-      if (error) throw error;
-      return data ?? [];
+      if (!patientId) return [];
+      return medicalRecordsService.listByPatient(patientId);
     },
-    enabled: !!patientId,
+    enabled: !!patientId && (!!user?.tenantId || isDemo),
   });
 
   const { data: prescriptions = [] } = useQuery({
-    queryKey: ["prescriptions", patientId],
+    queryKey: queryKeys.prescriptions.list({ tenantId: user?.tenantId, filters: { patient_id: patientId } }),
     queryFn: async () => {
       if (isDemo) return DEMO_PRESCRIPTIONS as any[];
-      const { data, error } = await supabase
-        .from("prescriptions")
-        .select("*, doctors(full_name)")
-        .eq("patient_id", patientId ?? "")
-        .order("prescribed_date", { ascending: false });
-      if (error) throw error;
-      return data ?? [];
+      if (!patientId) return [];
+      return prescriptionService.listByPatient(patientId);
     },
-    enabled: !!patientId,
+    enabled: !!patientId && (!!user?.tenantId || isDemo),
   });
 
   const { data: labOrders = [] } = useQuery({
-    queryKey: ["lab_orders", patientId],
+    queryKey: queryKeys.laboratory.list({ tenantId: user?.tenantId, filters: { patient_id: patientId } }),
     queryFn: async () => {
       if (isDemo) return DEMO_LAB_ORDERS as any[];
-      const { data, error } = await supabase
-        .from("lab_orders")
-        .select("*, doctors(full_name)")
-        .eq("patient_id", patientId ?? "")
-        .order("order_date", { ascending: false });
-      if (error) throw error;
-      return data ?? [];
+      if (!patientId) return [];
+      return labService.listByPatient(patientId);
     },
-    enabled: !!patientId,
+    enabled: !!patientId && (!!user?.tenantId || isDemo),
   });
 
   const { data: patientAppointments = [] } = useQuery({
-    queryKey: ["patient_appointments", patientId],
+    queryKey: queryKeys.appointments.list({ tenantId: user?.tenantId, filters: { patient_id: patientId } }),
     queryFn: async () => {
       if (isDemo) return DEMO_APPOINTMENTS as any[];
-      const { data, error } = await supabase
-        .from("appointments")
-        .select("*, doctors(full_name)")
-        .eq("patient_id", patientId ?? "")
-        .order("appointment_date", { ascending: false });
-      if (error) throw error;
-      return data ?? [];
+      if (!patientId) return [];
+      return appointmentService.listByPatient(patientId);
     },
-    enabled: !!patientId,
+    enabled: !!patientId && (!!user?.tenantId || isDemo),
   });
 
   const { data: invoices = [] } = useQuery({
-    queryKey: ["patient_invoices", patientId],
+    queryKey: queryKeys.billing.list({ tenantId: user?.tenantId, filters: { patient_id: patientId } }),
     queryFn: async () => {
       if (isDemo) return DEMO_INVOICES as any[];
-      const { data, error } = await supabase
-        .from("invoices")
-        .select("*")
-        .eq("patient_id", patientId ?? "")
-        .order("invoice_date", { ascending: false });
-      if (error) throw error;
-      return data ?? [];
+      if (!patientId) return [];
+      return billingService.listByPatient(patientId);
     },
-    enabled: !!patientId,
+    enabled: !!patientId && (!!user?.tenantId || isDemo),
   });
 
   const getLabStatusLabel = (s: string) =>
@@ -473,14 +452,11 @@ export const PatientDetailPage = () => {
           {prescriptions.length > 0 && (
             <div className="flex justify-end">
               <Button variant="outline" size="sm" onClick={() => {
-                const printWin = window.open("", "_blank");
-                if (!printWin) return;
-                const rows = prescriptions.map((rx: any) =>
-                  `<tr><td style="padding:8px;border:1px solid #ddd">${rx.medication}</td><td style="padding:8px;border:1px solid #ddd">${rx.dosage}</td><td style="padding:8px;border:1px solid #ddd">${rx.doctors?.full_name ?? "—"}</td><td style="padding:8px;border:1px solid #ddd">${formatDate(rx.prescribed_date, locale, "date", calendarType)}</td><td style="padding:8px;border:1px solid #ddd">${rx.status}</td></tr>`
-                ).join("");
-                printWin.document.write(`<html><head><title>Prescriptions — ${patient.full_name}</title><style>body{font-family:system-ui;padding:20px}table{width:100%;border-collapse:collapse}th{padding:8px;border:1px solid #ddd;background:#f5f5f5;text-align:start}</style></head><body><h2>${patient.full_name} — ${t("patients.prescriptions")}</h2><table><tr><th>${t("pharmacy.medication")}</th><th>Dosage</th><th>${t("appointments.doctor")}</th><th>${t("common.date")}</th><th>${t("common.status")}</th></tr>${rows}</table></body></html>`);
-                printWin.document.close();
-                printWin.print();
+                generatePrescriptionsListPDF(
+                  prescriptions as any,
+                  { full_name: patient.full_name },
+                  locale === "ar" ? "ar" : "en",
+                );
               }}>
                 <Printer className="h-4 w-4" />
                 {t("common.print")}
@@ -662,3 +638,4 @@ export const PatientDetailPage = () => {
     </div>
   );
 };
+

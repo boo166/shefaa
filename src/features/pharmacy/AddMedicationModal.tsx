@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { X } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { pharmacyService } from "@/services/pharmacy/pharmacy.service";
+import type { MedicationCreateInput } from "@/domain/pharmacy/medication.types";
 
 interface AddMedicationModalProps {
   open: boolean;
@@ -22,6 +23,7 @@ const CATEGORIES = [
 export const AddMedicationModal = ({ open, onClose, onSuccess }: AddMedicationModalProps) => {
   const { t } = useI18n();
   const { user } = useAuth();
+  const isDemo = user?.tenantId === "demo";
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     name: "",
@@ -39,30 +41,34 @@ export const AddMedicationModal = ({ open, onClose, onSuccess }: AddMedicationMo
       toast({ title: "Medication name required", variant: "destructive" });
       return;
     }
+    if (isDemo) {
+      toast({ title: t("common.demoMode"), description: t("common.demoModeNoSave"), variant: "destructive" });
+      return;
+    }
     setLoading(true);
 
-    const stock = parseInt(form.stock) || 0;
-    const status = stock === 0 ? "out_of_stock" : stock < 50 ? "low_stock" : "in_stock";
+    const stock = Number.parseInt(form.stock, 10) || 0;
+    const status: MedicationCreateInput["status"] = stock === 0 ? "out_of_stock" : stock < 50 ? "low_stock" : "in_stock";
 
-    const { error } = await supabase.from("medications").insert({
-      tenant_id: user?.tenantId ?? "",
-      name: form.name,
-      category: form.category,
-      stock,
-      unit: form.unit,
-      price: parseFloat(form.price) || 0,
-      status,
-    });
-
-    if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    } else {
+    try {
+      await pharmacyService.create({
+        name: form.name,
+        category: form.category,
+        stock,
+        unit: form.unit,
+        price: Number.parseFloat(form.price) || 0,
+        status,
+      });
       toast({ title: "Medication added successfully" });
       onSuccess();
       onClose();
       setForm({ name: "", category: "Other", stock: "", unit: "tablets", price: "" });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Error";
+      toast({ title: "Error", description: message, variant: "destructive" });
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (

@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { X } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { billingService } from "@/services/billing/billing.service";
+import type { InvoiceCreateInput } from "@/domain/billing/billing.types";
 
 interface NewInvoiceModalProps {
   open: boolean;
@@ -18,6 +19,7 @@ interface NewInvoiceModalProps {
 export const NewInvoiceModal = ({ open, onClose, onSuccess, patients }: NewInvoiceModalProps) => {
   const { t } = useI18n();
   const { user } = useAuth();
+  const isDemo = user?.tenantId === "demo";
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     patient_id: "",
@@ -33,24 +35,28 @@ export const NewInvoiceModal = ({ open, onClose, onSuccess, patients }: NewInvoi
       toast({ title: t("common.missingFields"), description: t("common.pleaseFillAllRequiredFields"), variant: "destructive" });
       return;
     }
+    if (isDemo) {
+      toast({ title: t("common.demoMode"), description: t("common.demoModeNoSave"), variant: "destructive" });
+      return;
+    }
     setLoading(true);
     const code = `INV-${String(Date.now()).slice(-6)}`;
-    const { error } = await supabase.from("invoices").insert({
-      tenant_id: user?.tenantId ?? "",
-      patient_id: form.patient_id,
-      invoice_code: code,
-      service: form.service,
-      amount: parseFloat(form.amount),
-    });
-
-    if (error) {
-      toast({ title: t("common.error"), description: error.message, variant: "destructive" });
-    } else {
+    try {
+      await billingService.create({
+        patient_id: form.patient_id,
+        invoice_code: code,
+        service: form.service,
+        amount: Number.parseFloat(form.amount),
+      } as InvoiceCreateInput);
       toast({ title: t("billing.invoiceCreated") });
       onSuccess();
       onClose();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : t("common.error");
+      toast({ title: t("common.error"), description: message, variant: "destructive" });
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (

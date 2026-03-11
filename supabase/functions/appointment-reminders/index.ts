@@ -1,10 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { enforceCors, getAllowedOriginsFromEnv } from "../_shared/cors.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-cron-secret",
-};
+const allowedOrigins = getAllowedOriginsFromEnv();
 
 interface AppointmentRow {
   id: string;
@@ -21,6 +18,15 @@ interface AppointmentRow {
 }
 
 Deno.serve(async (req) => {
+  const { corsHeaders, errorResponse } = enforceCors(req, {
+    allowedOrigins,
+    allowNoOrigin: true,
+  });
+
+  if (errorResponse) {
+    return errorResponse;
+  }
+
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -35,7 +41,13 @@ Deno.serve(async (req) => {
   try {
     const cronSecret = Deno.env.get("REMINDER_CRON_SECRET");
     const incomingSecret = req.headers.get("x-cron-secret");
-    if (!cronSecret || incomingSecret !== cronSecret) {
+    if (!cronSecret) {
+      return new Response(JSON.stringify({ error: "REMINDER_CRON_SECRET is not configured" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (incomingSecret !== cronSecret) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -172,16 +184,16 @@ Deno.serve(async (req) => {
     }
 
     return new Response(
-        JSON.stringify({
-          success: true,
-          checked: appointments.length,
-          notificationsCreated,
-          emailsSent,
-        }),
+      JSON.stringify({
+        success: true,
+        checked: appointments.length,
+        notificationsCreated,
+        emailsSent,
+      }),
       {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      },
     );
   } catch (err) {
     return new Response(
@@ -191,7 +203,7 @@ Deno.serve(async (req) => {
       {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      },
     );
   }
 });

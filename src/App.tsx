@@ -7,6 +7,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { SessionTimeout } from "./features/auth/SessionTimeout";
 import { ProtectedRoute } from "./core/auth/ProtectedRoute";
 import { SubscriptionProvider } from "./core/subscription/SubscriptionContext";
+import { ErrorBoundary } from "./shared/components/ErrorBoundary";
 
 const LandingPage = lazy(() => import("./pages/LandingPage").then((m) => ({ default: m.LandingPage })));
 const AdminDashboardPage = lazy(() => import("./features/admin/AdminDashboardPage").then((m) => ({ default: m.AdminDashboardPage })));
@@ -38,55 +39,57 @@ const App = () => (
       <Sonner />
       <SessionTimeout />
       <SubscriptionProvider>
-        <BrowserRouter
-          future={{
-            v7_startTransition: true,
-            v7_relativeSplatPath: true,
-          }}
-        >
-          <Suspense fallback={<div className="min-h-screen grid place-items-center text-sm text-muted-foreground">Loading...</div>}>
-            <Routes>
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-              <Route path="/reset-password" element={<ResetPasswordPage />} />
-              <Route path="/tutorial" element={<TutorialPage />} />
-              <Route path="/pricing" element={<PricingPage />} />
-              <Route path="/" element={<LandingPage />} />
-              <Route
-                path="/admin"
-                element={
-                  <ProtectedRoute requiredPermission="super_admin">
-                    <AdminDashboardPage />
-                  </ProtectedRoute>
-                }
-              />
+        <ErrorBoundary>
+          <BrowserRouter
+            future={{
+              v7_startTransition: true,
+              v7_relativeSplatPath: true,
+            }}
+          >
+            <Suspense fallback={<div className="min-h-screen grid place-items-center text-sm text-muted-foreground">Loading...</div>}>
+              <Routes>
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+                <Route path="/reset-password" element={<ResetPasswordPage />} />
+                <Route path="/tutorial" element={<TutorialPage />} />
+                <Route path="/pricing" element={<PricingPage />} />
+                <Route path="/" element={<LandingPage />} />
+                <Route
+                  path="/admin"
+                  element={
+                    <ProtectedRoute requiredPermission="super_admin">
+                      <AdminDashboardPage />
+                    </ProtectedRoute>
+                  }
+                />
 
-              <Route
-                path="/tenant/:clinicSlug"
-                element={
-                  <ProtectedRoute>
-                    <ClinicLayout />
-                  </ProtectedRoute>
-                }
-              >
-                <Route index element={<Navigate to="dashboard" replace />} />
-                <Route path="dashboard" element={<DashboardPage />} />
-                <Route path="patients" element={<PatientsPage />} />
-                <Route path="patients/:patientId" element={<PatientDetailPage />} />
-                <Route path="appointments" element={<AppointmentsPage />} />
-                <Route path="doctors" element={<DoctorsPage />} />
-                <Route path="billing" element={<BillingPage />} />
-                <Route path="pharmacy" element={<PharmacyPage />} />
-                <Route path="laboratory" element={<LaboratoryPage />} />
-                <Route path="insurance" element={<InsurancePage />} />
-                <Route path="reports" element={<ReportsPage />} />
-                <Route path="settings" element={<SettingsPage />} />
-              </Route>
+                <Route
+                  path="/tenant/:clinicSlug"
+                  element={
+                    <ProtectedRoute>
+                      <ClinicLayout />
+                    </ProtectedRoute>
+                  }
+                >
+                  <Route index element={<Navigate to="dashboard" replace />} />
+                  <Route path="dashboard" element={<DashboardPage />} />
+                  <Route path="patients" element={<PatientsPage />} />
+                  <Route path="patients/:patientId" element={<PatientDetailPage />} />
+                  <Route path="appointments" element={<AppointmentsPage />} />
+                  <Route path="doctors" element={<DoctorsPage />} />
+                  <Route path="billing" element={<BillingPage />} />
+                  <Route path="pharmacy" element={<PharmacyPage />} />
+                  <Route path="laboratory" element={<LaboratoryPage />} />
+                  <Route path="insurance" element={<InsurancePage />} />
+                  <Route path="reports" element={<ReportsPage />} />
+                  <Route path="settings" element={<SettingsPage />} />
+                </Route>
 
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </Suspense>
-        </BrowserRouter>
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </Suspense>
+          </BrowserRouter>
+        </ErrorBoundary>
       </SubscriptionProvider>
     </TooltipProvider>
   </QueryClientProvider>

@@ -5,8 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { X } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { patientService } from "@/services/patients/patient.service";
 
 interface AddPatientModalProps {
   open: boolean;
@@ -38,26 +38,28 @@ export const AddPatientModal = ({ open, onClose, onSuccess }: AddPatientModalPro
     }
     setLoading(true);
 
-    const code = `PT-${String(Date.now()).slice(-6)}`;
-    const { error } = await supabase.from("patients").insert({
-      tenant_id: user?.tenantId ?? "",
-      patient_code: code,
-      full_name: form.full_name,
-      date_of_birth: form.date_of_birth || null,
-      gender: form.gender,
-      blood_type: form.blood_type || null,
-      phone: form.phone || null,
-      email: form.email || null,
-      insurance_provider: form.insurance_provider || null,
-    });
+    if (user?.tenantId === "demo") {
+      toast({ title: t("common.demoMode"), variant: "destructive" });
+      setLoading(false);
+      return;
+    }
 
-    if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    } else {
+    try {
+      await patientService.create({
+        full_name: form.full_name,
+        date_of_birth: form.date_of_birth || null,
+        gender: form.gender,
+        blood_type: form.blood_type || null,
+        phone: form.phone || null,
+        email: form.email || null,
+        insurance_provider: form.insurance_provider || null,
+      });
       toast({ title: t("patients.addPatient"), description: "Patient added successfully" });
       onSuccess();
       onClose();
       setForm({ full_name: "", date_of_birth: "", gender: "male", blood_type: "", phone: "", email: "", insurance_provider: "" });
+    } catch (err: any) {
+      toast({ title: "Error", description: err?.message ?? "Failed to add patient", variant: "destructive" });
     }
     setLoading(false);
   };

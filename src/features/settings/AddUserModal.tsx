@@ -4,8 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { X, Loader2 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { userInviteService } from "@/services/settings/userInvite.service";
+import type { InviteStaffInput } from "@/domain/settings/invite.types";
 
 interface AddUserModalProps {
   open: boolean;
@@ -42,18 +43,12 @@ export const AddUserModal = ({ open, onClose, onSuccess }: AddUserModalProps) =>
 
     setLoading(true);
 
-    // Secure invite flow: server issues invite + signup email with invite metadata.
-    const { data, error } = await supabase.functions.invoke("invite-staff", {
-      body: {
+    try {
+      await userInviteService.inviteStaff({
         email: form.email,
         full_name: form.full_name,
-        role: form.role,
-      },
-    });
-
-    if (error || data?.error) {
-      toast({ title: t("common.error"), description: error?.message || data?.error, variant: "destructive" });
-    } else {
+        role: form.role as InviteStaffInput["role"],
+      });
       toast({
         title: t("settings.addUser"),
         description: t("auth.confirmationSent"),
@@ -61,8 +56,12 @@ export const AddUserModal = ({ open, onClose, onSuccess }: AddUserModalProps) =>
       onSuccess();
       onClose();
       setForm({ full_name: "", email: "", role: "doctor" });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : t("common.error");
+      toast({ title: t("common.error"), description: message, variant: "destructive" });
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
