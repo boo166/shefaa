@@ -130,7 +130,7 @@ export const billingRepository: BillingRepository = {
     return { data: (data ?? []) as InvoiceWithPatient[], count: count ?? 0 };
   },
   async getSummary(_tenantId) {
-    const { data, error } = await supabase.rpc("get_invoice_summary");
+    const { data, error } = await (supabase.rpc as any)("get_invoice_summary");
     if (error) {
       throw new ServiceError(error.message ?? "Failed to load invoice summary", {
         code: error.code,
@@ -138,7 +138,7 @@ export const billingRepository: BillingRepository = {
       });
     }
 
-    return (data?.[0] ?? { total_count: 0, paid_count: 0, paid_amount: 0, pending_amount: 0 }) as InvoiceSummary;
+    return ((data as any)?.[0] ?? { total_count: 0, paid_count: 0, paid_amount: 0, pending_amount: 0 }) as InvoiceSummary;
   },
   async countInRange(start, end, tenantId) {
     const { count, error } = await supabase
@@ -188,7 +188,7 @@ export const billingRepository: BillingRepository = {
 
     const result = await supabase
       .from("invoices")
-      .insert(payload)
+      .insert(payload as any)
       .select(INVOICE_COLUMNS)
       .single();
 

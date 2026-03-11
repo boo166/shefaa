@@ -40,8 +40,8 @@ export const AddPatientModal = ({ open, onClose, onSuccess }: AddPatientModalPro
       await patientService.create({
         full_name: form.full_name,
         date_of_birth: form.date_of_birth || null,
-        gender: form.gender,
-        blood_type: form.blood_type || null,
+        gender: (form.gender || undefined) as "male" | "female" | undefined,
+        blood_type: (form.blood_type || undefined) as "A+" | "A-" | "AB+" | "AB-" | "B+" | "B-" | "O+" | "O-" | undefined,
         phone: form.phone || null,
         email: form.email || null,
         insurance_provider: form.insurance_provider || null,

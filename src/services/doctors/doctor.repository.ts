@@ -88,7 +88,7 @@ export const doctorRepository: DoctorRepository = {
 
     const result = await supabase
       .from("doctors")
-      .insert(payload)
+      .insert(payload as any)
       .select(DOCTOR_COLUMNS)
       .single();
 

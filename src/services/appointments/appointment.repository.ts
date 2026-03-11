@@ -257,7 +257,7 @@ export const appointmentRepository: AppointmentRepository = {
 
     const result = await supabase
       .from("appointments")
-      .insert(payload)
+      .insert(payload as any)
       .select(APPOINTMENT_COLUMNS)
       .single();
 

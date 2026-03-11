@@ -112,7 +112,7 @@ export const prescriptionRepository: PrescriptionRepository = {
 
     const result = await supabase
       .from("prescriptions")
-      .insert(payload)
+      .insert(payload as any)
       .select(PRESCRIPTION_COLUMNS)
       .single();
 

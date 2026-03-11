@@ -128,7 +128,7 @@ export const insuranceRepository: InsuranceRepository = {
     return { data: (data ?? []) as InsuranceClaimWithPatient[], count: count ?? 0 };
   },
   async getSummary(_tenantId) {
-    const { data, error } = await supabase.rpc("get_insurance_summary");
+    const { data, error } = await (supabase.rpc as any)("get_insurance_summary");
     if (error) {
       throw new ServiceError(error.message ?? "Failed to load insurance summary", {
         code: error.code,
@@ -136,7 +136,7 @@ export const insuranceRepository: InsuranceRepository = {
       });
     }
 
-    return (data?.[0] ?? {
+    return ((data as any)?.[0] ?? {
       total_count: 0,
       pending_count: 0,
       approved_count: 0,
@@ -158,7 +158,7 @@ export const insuranceRepository: InsuranceRepository = {
 
     const result = await supabase
       .from("insurance_claims")
-      .insert(payload)
+      .insert(payload as any)
       .select(CLAIM_COLUMNS)
       .single();
 

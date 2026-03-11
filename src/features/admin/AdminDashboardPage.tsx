@@ -71,8 +71,8 @@ export const AdminDashboardPage = () => {
     try {
       const updatePayload =
         confirmAction.field === "plan"
-          ? { plan: confirmAction.value }
-          : { status: confirmAction.value };
+          ? { plan: confirmAction.value as "enterprise" | "free" | "pro" | "starter" }
+          : { status: confirmAction.value as "active" | "canceled" | "expired" | "trialing" };
       await adminService.updateSubscription(confirmAction.id, updatePayload);
       toast({ title: "Updated", description: `Subscription ${confirmAction.field} changed to ${confirmAction.value}` });
       queryClient.invalidateQueries({ queryKey: queryKeys.admin.subscriptions() });
