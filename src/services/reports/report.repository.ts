@@ -29,7 +29,7 @@ export const reportRepository: ReportRepository = {
         details: error,
       });
     }
-    return (data?.[0] ?? { total_revenue: 0, total_patients: 0, total_appointments: 0, avg_doctor_rating: 0 }) as ReportOverview;
+    return ((data as any)?.[0] ?? { total_revenue: 0, total_patients: 0, total_appointments: 0, avg_doctor_rating: 0 }) as ReportOverview;
   },
   async getRevenueByMonth(_tenantId, months = 6) {
     const { data, error } = await supabase.rpc("get_report_revenue_by_month", { _months: months });
