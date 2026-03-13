@@ -12,9 +12,9 @@ export const LanguageSwitcher = () => {
   return (
     <button
       onClick={toggle}
-      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors"
+      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium text-muted-foreground hover:bg-muted transition-colors"
     >
-      <Globe className="h-4 w-4" />
+      <Globe className="h-3.5 w-3.5" />
       {locale === "en" ? t("common.arabic") : t("common.english")}
     </button>
   );

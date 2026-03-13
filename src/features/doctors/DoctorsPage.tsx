@@ -3,7 +3,7 @@ import { useI18n } from "@/core/i18n/i18nStore";
 import { StatusBadge } from "@/shared/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { PermissionGuard } from "@/core/auth/PermissionGuard";
-import { UserPlus, Star, Search, MoreVertical, Pencil, Trash2, CalendarClock } from "lucide-react";
+import { UserPlus, Star, Search, MoreVertical, Pencil, Trash2, CalendarClock, ChevronLeft, ChevronRight } from "lucide-react";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { useAuth } from "@/core/auth/authStore";
 import { AddDoctorModal } from "./AddDoctorModal";
@@ -51,11 +51,8 @@ export const DoctorsPage = () => {
   const doctors = doctorPage?.data ?? [];
   const totalDoctors = doctorPage?.count ?? 0;
 
-  useEffect(() => {
-    setPage(1);
-  }, [searchTerm]);
+  useEffect(() => { setPage(1); }, [searchTerm]);
 
-  const pagedDoctors = doctors;
   const total = totalDoctors;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const pageStart = total ? (page - 1) * pageSize + 1 : 0;
@@ -97,31 +94,47 @@ export const DoctorsPage = () => {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-5 animate-fade-in">
       <div className="page-header">
-        <h1 className="page-title">{t("doctors.title")}</h1>
+        <div>
+          <h1 className="page-title">{t("doctors.title")}</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">{total} doctors</p>
+        </div>
         <PermissionGuard permission="manage_users">
-          <Button onClick={() => setShowAddModal(true)}><UserPlus className="h-4 w-4" />{t("doctors.addDoctor")}</Button>
+          <Button size="sm" onClick={() => setShowAddModal(true)}>
+            <UserPlus className="h-3.5 w-3.5 mr-1" />{t("doctors.addDoctor")}
+          </Button>
         </PermissionGuard>
       </div>
 
-      <div className="flex items-center gap-2 bg-card rounded-lg border px-4 py-2 max-w-sm">
-        <Search className="h-4 w-4 text-muted-foreground" />
+      {/* Search */}
+      <div className="relative max-w-sm">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
         <input
           type="text"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           placeholder={t("common.search")}
-          className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+          className="w-full h-9 pl-9 pr-3 bg-card rounded-lg border text-sm outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring focus:border-transparent transition-shadow"
         />
       </div>
 
       {isLoading ? (
-        <div className="text-center py-12 text-muted-foreground">
-          <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-          {t("common.loading")}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="bg-card rounded-xl border p-5 space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full bg-muted animate-pulse" />
+                <div className="space-y-2 flex-1">
+                  <div className="skeleton-line w-28" />
+                  <div className="skeleton-line w-20 h-3" />
+                </div>
+              </div>
+              <div className="skeleton-line w-full" />
+            </div>
+          ))}
         </div>
-      ) : pagedDoctors.length === 0 ? (
+      ) : doctors.length === 0 ? (
         <EmptyState
           icon={UserPlus}
           title={t("doctors.noDoctorsFound")}
@@ -132,20 +145,20 @@ export const DoctorsPage = () => {
       ) : (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {pagedDoctors.map((doc) => (
-              <div key={doc.id} className="bg-card rounded-lg border p-5 hover:shadow-md transition-shadow relative group">
-                <div className="flex items-start justify-between mb-4">
+            {doctors.map((doc) => (
+              <div key={doc.id} className="bg-card rounded-xl border p-5 hover:shadow-md transition-all relative group">
+                <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-3">
-                    <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center text-sm font-semibold text-primary">
+                    <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-sm font-semibold text-primary">
                       {doc.full_name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
                     </div>
                     <div>
-                      <h3 className="font-semibold">{doc.full_name}</h3>
-                      <p className="text-sm text-muted-foreground">{doc.specialty}</p>
+                      <h3 className="font-semibold text-sm">{doc.full_name}</h3>
+                      <p className="text-xs text-muted-foreground">{doc.specialty}</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <StatusBadge variant={statusVariant[doc.status] ?? "default"}>
+                  <div className="flex items-center gap-1.5">
+                    <StatusBadge variant={statusVariant[doc.status] ?? "default"} dot>
                       {getDoctorStatusLabel(doc.status)}
                     </StatusBadge>
                     <PermissionGuard permission="manage_users">
@@ -157,26 +170,26 @@ export const DoctorsPage = () => {
                           <MoreVertical className="h-4 w-4 text-muted-foreground" />
                         </button>
                         {openMenu === doc.id && (
-                          <div className="absolute end-0 top-full mt-1 bg-card rounded-md border shadow-lg py-1 z-10 min-w-[140px]">
+                          <div className="absolute end-0 top-full mt-1 bg-card rounded-lg border shadow-lg py-1 z-10 min-w-[140px]">
                             <button
-                              className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-start"
+                              className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted text-start"
                               onClick={() => handleStatusChange(doc.id, doc.status === "available" ? "busy" : "available")}
                             >
-                              <Pencil className="h-3.5 w-3.5" />
+                              <Pencil className="h-3 w-3" />
                               {t("doctors.toggleStatus")}
                             </button>
                             <button
-                              className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-start"
+                              className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted text-start"
                               onClick={() => { setScheduleDoctor({ id: doc.id, name: doc.full_name }); setOpenMenu(null); }}
                             >
-                              <CalendarClock className="h-3.5 w-3.5" />
+                              <CalendarClock className="h-3 w-3" />
                               {t("doctors.schedule")}
                             </button>
                             <button
-                              className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-destructive text-start"
+                              className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted text-destructive text-start"
                               onClick={() => { setDeleteId(doc.id); setOpenMenu(null); }}
                             >
-                              <Trash2 className="h-3.5 w-3.5" />
+                              <Trash2 className="h-3 w-3" />
                               {t("common.remove")}
                             </button>
                           </div>
@@ -185,43 +198,31 @@ export const DoctorsPage = () => {
                     </PermissionGuard>
                   </div>
                 </div>
-                <div className="text-sm text-muted-foreground space-y-1">
+                <div className="text-xs text-muted-foreground space-y-0.5">
                   {doc.email && <p>{doc.email}</p>}
-                  {doc.phone && <p>{doc.phone}</p>}
+                  {doc.phone && <p className="tabular-nums">{doc.phone}</p>}
                 </div>
-                <div className="flex items-center justify-end text-sm mt-3 pt-3 border-t">
+                <div className="flex items-center justify-end text-xs mt-3 pt-3 border-t">
                   <div className="flex items-center gap-1">
-                    <Star className="h-3.5 w-3.5 fill-warning text-warning" />
-                    <span className="font-medium">{doc.rating ?? "-"}</span>
+                    <Star className="h-3 w-3 fill-warning text-warning" />
+                    <span className="font-medium">{doc.rating ?? "—"}</span>
                   </div>
                 </div>
               </div>
             ))}
           </div>
+
+          {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-between px-4 py-3 text-sm text-muted-foreground border rounded-lg bg-card">
-              <span>
-                {t("common.showing")} {pageStart}-{pageEnd} {t("common.of")} {total}
-              </span>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPage(Math.max(1, page - 1))}
-                  disabled={page <= 1}
-                >
-                  {t("common.previous")}
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>{pageStart}–{pageEnd} of {total}</span>
+              <div className="flex items-center gap-1">
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setPage(Math.max(1, page - 1))} disabled={page <= 1}>
+                  <ChevronLeft className="h-4 w-4" />
                 </Button>
-                <span>
-                  {page} / {totalPages}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPage(Math.min(totalPages, page + 1))}
-                  disabled={page >= totalPages}
-                >
-                  {t("common.next")}
+                <span className="px-2 font-medium tabular-nums">{page} / {totalPages}</span>
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setPage(Math.min(totalPages, page + 1))} disabled={page >= totalPages}>
+                  <ChevronRight className="h-4 w-4" />
                 </Button>
               </div>
             </div>

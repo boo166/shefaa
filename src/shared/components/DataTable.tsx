@@ -1,7 +1,8 @@
 import { ReactNode, useState, useMemo, useCallback } from "react";
-import { Search, Download, Trash2, CheckSquare } from "lucide-react";
+import { Search, Download, ChevronLeft, ChevronRight } from "lucide-react";
 import { useI18n } from "@/core/i18n/i18nStore";
 import { Button } from "@/components/ui/button";
+import { TableSkeleton } from "./TableSkeleton";
 import { generatePDF } from "@/shared/utils/pdfGenerator";
 
 export interface Column<T> {
@@ -168,26 +169,27 @@ export function DataTable<T>({
   const someSelected = selectedIds.size > 0;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
+      {/* Toolbar */}
       {(searchable || filterSlot || hasBulkActions) && (
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           {searchable && (
-            <div className="flex items-center gap-2 bg-card rounded-lg border px-4 py-2 max-w-sm flex-1 min-w-[200px]">
-              <Search className="h-4 w-4 text-muted-foreground shrink-0" />
+            <div className="relative flex-1 min-w-[200px] max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
               <input
                 type="text"
                 value={search}
                 onChange={(e) => handleSearchChange(e.target.value)}
                 placeholder={searchPlaceholder ?? t("common.search")}
-                className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                className="w-full h-9 pl-9 pr-3 bg-card rounded-lg border text-sm outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring focus:border-transparent transition-shadow"
               />
             </div>
           )}
           {filterSlot}
-          <div className="flex items-center gap-2 ms-auto">
+          <div className="flex items-center gap-1.5 ms-auto">
             {hasBulkActions && someSelected && (
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">
+              <>
+                <span className="text-xs text-muted-foreground mr-1">
                   {selectedIds.size} {t("common.selected")}
                 </span>
                 {bulkActions!.map((action, i) => (
@@ -197,22 +199,23 @@ export function DataTable<T>({
                     variant={action.variant ?? "outline"}
                     onClick={() => handleBulkAction(action)}
                     disabled={bulkLoading}
+                    className="h-8"
                   >
                     {action.icon}
                     {action.label}
                   </Button>
                 ))}
-              </div>
+              </>
             )}
             {data.length > 0 && (
               <>
-                <Button variant="outline" size="sm" onClick={exportCsv}>
-                  <Download className="h-4 w-4" />
+                <Button variant="ghost" size="sm" onClick={exportCsv} className="h-8 text-xs">
+                  <Download className="h-3.5 w-3.5 mr-1" />
                   CSV
                 </Button>
                 {pdfExport && (
-                  <Button variant="outline" size="sm" onClick={exportPdfHandler}>
-                    <Download className="h-4 w-4" />
+                  <Button variant="ghost" size="sm" onClick={exportPdfHandler} className="h-8 text-xs">
+                    <Download className="h-3.5 w-3.5 mr-1" />
                     PDF
                   </Button>
                 )}
@@ -222,18 +225,19 @@ export function DataTable<T>({
         </div>
       )}
 
-      <div className="bg-card rounded-lg border overflow-hidden">
+      {/* Table */}
+      <div className="bg-card rounded-xl border overflow-hidden">
         <div className="overflow-x-auto">
           <table className="data-table">
             <thead>
-              <tr className="bg-muted/50">
+              <tr>
                 {hasBulkActions && (
-                  <th className="w-10">
+                  <th className="w-10 px-4">
                     <input
                       type="checkbox"
                       checked={allSelected}
                       onChange={toggleSelectAll}
-                      className="cursor-pointer accent-primary"
+                      className="rounded border-border accent-primary cursor-pointer"
                     />
                   </th>
                 )}
@@ -245,16 +249,13 @@ export function DataTable<T>({
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={columns.length + (hasBulkActions ? 1 : 0)} className="text-center py-8 text-muted-foreground">
-                    <div className="flex items-center justify-center gap-2">
-                      <div className="h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                      {t("common.loading")}
-                    </div>
+                  <td colSpan={columns.length + (hasBulkActions ? 1 : 0)} className="p-0">
+                    <TableSkeleton columns={columns.length} rows={5} />
                   </td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={columns.length + (hasBulkActions ? 1 : 0)} className="text-center py-8 text-muted-foreground">
+                  <td colSpan={columns.length + (hasBulkActions ? 1 : 0)} className="text-center py-12 text-muted-foreground text-sm">
                     {noData}
                   </td>
                 </tr>
@@ -264,15 +265,15 @@ export function DataTable<T>({
                   return (
                     <tr
                       key={id}
-                      className={`hover:bg-muted/30 transition-colors ${selectedIds.has(id) ? "bg-primary/5" : ""}`}
+                      className={selectedIds.has(id) ? "bg-primary/[0.03]" : ""}
                     >
                       {hasBulkActions && (
-                        <td className="w-10">
+                        <td className="w-10 px-4">
                           <input
                             type="checkbox"
                             checked={selectedIds.has(id)}
                             onChange={() => toggleSelect(id)}
-                            className="cursor-pointer accent-primary"
+                            className="rounded border-border accent-primary cursor-pointer"
                           />
                         </td>
                       )}
@@ -288,30 +289,34 @@ export function DataTable<T>({
             </tbody>
           </table>
         </div>
+
+        {/* Pagination */}
         {isPaged && totalPages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 text-sm text-muted-foreground border-t">
+          <div className="flex items-center justify-between px-4 py-2.5 text-xs text-muted-foreground border-t">
             <span>
-              {t("common.showing")} {pageStart}-{pageEnd} {t("common.of")} {total}
+              {pageStart}–{pageEnd} of {total}
             </span>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
               <Button
-                variant="outline"
-                size="sm"
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
                 onClick={() => onPageChange?.(Math.max(1, currentPage - 1))}
                 disabled={currentPage <= 1}
               >
-                {t("common.previous")}
+                <ChevronLeft className="h-4 w-4" />
               </Button>
-              <span>
+              <span className="px-2 font-medium tabular-nums">
                 {currentPage} / {totalPages}
               </span>
               <Button
-                variant="outline"
-                size="sm"
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
                 onClick={() => onPageChange?.(Math.min(totalPages, currentPage + 1))}
                 disabled={currentPage >= totalPages}
               >
-                {t("common.next")}
+                <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
           </div>
