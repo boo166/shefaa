@@ -12,9 +12,7 @@ dist
 dist-ssr
 *.local
 .npm-cache/
-.env
-.env.*
-!.env.example
+
 
 # Supabase CLI local state (may contain connection info)
 supabase/.temp/
