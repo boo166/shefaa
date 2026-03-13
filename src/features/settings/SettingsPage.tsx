@@ -44,31 +44,34 @@ export const SettingsPage = () => {
   ];
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="page-header">
+    <div className="space-y-5 animate-fade-in">
+      <div>
         <h1 className="page-title">{t("settings.title")}</h1>
+        <p className="text-sm text-muted-foreground mt-0.5">Manage your clinic preferences</p>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-6">
-        <div className="lg:w-56 flex lg:flex-col gap-1 overflow-x-auto">
+      <div className="flex flex-col lg:flex-row gap-5">
+        {/* Tab navigation */}
+        <div className="lg:w-52 flex lg:flex-col gap-0.5 overflow-x-auto pb-1 lg:pb-0">
           {tabs.map((tab) => (
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
               className={cn(
-                "flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-medium transition-colors whitespace-nowrap",
+                "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors whitespace-nowrap",
                 activeTab === tab.key
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:bg-muted",
+                  ? "bg-primary/10 text-primary font-medium"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
               )}
             >
-              <tab.icon className="h-4 w-4" />
+              <tab.icon className="h-4 w-4 flex-shrink-0" />
               {tab.label}
             </button>
           ))}
         </div>
 
-        <div className="flex-1 bg-card rounded-lg border p-6 max-w-2xl">
+        {/* Tab content */}
+        <div className="flex-1 bg-card rounded-xl border p-6 max-w-2xl">
           {activeTab === "profile" && <ProfileTab />}
           {activeTab === "general" && <GeneralTab />}
           {activeTab === "users" && (

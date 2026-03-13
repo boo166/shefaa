@@ -19,22 +19,14 @@ import type { AppointmentWithPatientDoctor } from "@/domain/appointment/appointm
 
 type AppointmentRow = AppointmentWithPatientDoctor;
 
-
 const statusVariant = { completed: "success", in_progress: "info", scheduled: "default", cancelled: "destructive" } as const;
 
 type ViewMode = "list" | "calendar";
 
-function parseLooseDate(raw: string) {
-  if (!raw) return new Date(NaN);
-  if (raw.includes("T")) return new Date(raw);
-  if (raw.includes(" ")) return new Date(raw.replace(" ", "T"));
-  return new Date(raw);
-}
-
 function startOfWeek(d: Date) {
   const out = new Date(d);
   out.setHours(0, 0, 0, 0);
-  const day = out.getDay(); // Sunday=0
+  const day = out.getDay();
   out.setDate(out.getDate() - day);
   return out;
 }
@@ -52,7 +44,6 @@ function getCalendarRange(cursor: Date, view: AppointmentCalendarView) {
     end.setHours(23, 59, 59, 999);
     return { start, end };
   }
-
   const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
   const start = startOfWeek(first);
   const end = addDays(start, 41);
@@ -112,37 +103,25 @@ export const AppointmentsPage = () => {
     enabled: viewMode === "calendar" && !!user?.tenantId,
   });
 
-  useEffect(() => {
-    setPage(1);
-  }, [statusFilter, searchTerm, viewMode]);
+  useEffect(() => { setPage(1); }, [statusFilter, searchTerm, viewMode]);
 
   const statusLabel = (s: string) => {
     switch (s) {
-      case "scheduled":
-        return t("appointments.scheduled");
-      case "in_progress":
-        return t("appointments.inProgress");
-      case "completed":
-        return t("appointments.completed");
-      case "cancelled":
-        return t("appointments.cancelled");
-      default:
-        return s;
+      case "scheduled": return t("appointments.scheduled");
+      case "in_progress": return t("appointments.inProgress");
+      case "completed": return t("appointments.completed");
+      case "cancelled": return t("appointments.cancelled");
+      default: return s;
     }
   };
 
   const typeLabel = (type: string) => {
     switch (type) {
-      case "checkup":
-        return t("appointments.checkup");
-      case "follow_up":
-        return t("appointments.followUp");
-      case "consultation":
-        return t("appointments.consultation");
-      case "emergency":
-        return t("appointments.emergency");
-      default:
-        return type;
+      case "checkup": return t("appointments.checkup");
+      case "follow_up": return t("appointments.followUp");
+      case "consultation": return t("appointments.consultation");
+      case "emergency": return t("appointments.emergency");
+      default: return type;
     }
   };
 
@@ -172,15 +151,11 @@ export const AppointmentsPage = () => {
     [calendarDisplayData, statusFilter],
   );
 
-  const totalForList = totalAppointments;
-
   const { data: statusCounts = { scheduled: 0, in_progress: 0, completed: 0, cancelled: 0 } } = useQuery({
     queryKey: queryKeys.appointments.statusCounts(user?.tenantId),
     enabled: !!user?.tenantId,
     queryFn: async () => appointmentService.countByStatus(),
   });
-
-  const effectiveStatusCounts = statusCounts;
 
   const handleUpdateStatus = async (id: string, newStatus: string) => {
     try {
@@ -209,13 +184,13 @@ export const AppointmentsPage = () => {
       key: "patient_name",
       header: t("appointments.patient"),
       searchable: true,
-      render: (a) => <span className="font-medium">{a.patient_name}</span>,
+      render: (a) => <span className="font-medium text-sm">{a.patient_name}</span>,
     },
     { key: "doctor_name", header: t("appointments.doctor"), searchable: true },
     {
       key: "appointment_date",
       header: t("appointments.dateTime"),
-      render: (a) => formatDate(a.appointment_date, locale, "datetime", calendarType),
+      render: (a) => <span className="text-muted-foreground tabular-nums text-sm">{formatDate(a.appointment_date, locale, "datetime", calendarType)}</span>,
     },
     {
       key: "type",
@@ -226,79 +201,93 @@ export const AppointmentsPage = () => {
       key: "status",
       header: t("common.status"),
       render: (a) => (
-        <StatusBadge variant={(statusVariant as any)[a.status] ?? "default"}>
+        <StatusBadge variant={(statusVariant as any)[a.status] ?? "default"} dot>
           {statusLabel(a.status)}
         </StatusBadge>
       ),
     },
     {
       key: "actions",
-      header: t("common.actions"),
+      header: "",
       render: (a) =>
         a.status === "scheduled" ? (
           <div className="flex gap-1">
             <button
               onClick={() => handleUpdateStatus(a.id, "in_progress")}
-              className="p-1.5 rounded-md hover:bg-info/10 text-info"
+              className="p-1.5 rounded-md hover:bg-info/10 text-info transition-colors"
               title={t("common.start")}
             >
-              <Play className="h-4 w-4" />
+              <Play className="h-3.5 w-3.5" />
             </button>
             <button
               onClick={() => handleUpdateStatus(a.id, "cancelled")}
-              className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive"
+              className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive transition-colors"
               title={t("common.cancel")}
             >
-              <XCircle className="h-4 w-4" />
+              <XCircle className="h-3.5 w-3.5" />
             </button>
           </div>
         ) : a.status === "in_progress" ? (
           <button
             onClick={() => handleUpdateStatus(a.id, "completed")}
-            className="p-1.5 rounded-md hover:bg-success/10 text-success"
+            className="p-1.5 rounded-md hover:bg-success/10 text-success transition-colors"
             title={t("common.complete")}
           >
-            <CheckCircle className="h-4 w-4" />
+            <CheckCircle className="h-3.5 w-3.5" />
           </button>
         ) : null,
     },
   ];
 
-  return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="page-header">
-        <h1 className="page-title">{t("appointments.title")}</h1>
-        <div className="flex items-center gap-2">
-          <Button size="sm" variant={viewMode === "list" ? "default" : "outline"} onClick={() => setViewMode("list")}>
-            <List className="h-4 w-4" /> {t("common.list")}
-          </Button>
-          <Button
-            size="sm"
-            variant={viewMode === "calendar" ? "default" : "outline"}
-            onClick={() => setViewMode("calendar")}
-          >
-            <CalendarDays className="h-4 w-4" /> {t("common.calendar")}
-          </Button>
+  const statusCards = [
+    { key: "scheduled" as const, color: "bg-muted text-muted-foreground" },
+    { key: "in_progress" as const, color: "bg-info/10 text-info" },
+    { key: "completed" as const, color: "bg-success/10 text-success" },
+    { key: "cancelled" as const, color: "bg-destructive/10 text-destructive" },
+  ];
 
+  return (
+    <div className="space-y-5 animate-fade-in">
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">{t("appointments.title")}</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">{totalAppointments} appointments</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center bg-muted rounded-lg p-0.5">
+            <button
+              onClick={() => setViewMode("list")}
+              className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${viewMode === "list" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}
+            >
+              <List className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={() => setViewMode("calendar")}
+              className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${viewMode === "calendar" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}
+            >
+              <CalendarDays className="h-3.5 w-3.5" />
+            </button>
+          </div>
           <PermissionGuard permission="manage_appointments">
-            <Button onClick={() => setShowModal(true)}>
-              <CalendarPlus className="h-4 w-4" />
+            <Button size="sm" onClick={() => setShowModal(true)}>
+              <CalendarPlus className="h-3.5 w-3.5 mr-1" />
               {t("appointments.newAppointment")}
             </Button>
           </PermissionGuard>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        {(["scheduled", "in_progress", "completed", "cancelled"] as const).map((status) => (
-          <div
-            key={status}
-            className="stat-card text-center cursor-pointer hover:ring-2 ring-primary/30 transition-all"
-            onClick={() => setStatusFilter(statusFilter === status ? null : status)}
+      {/* Status summary cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {statusCards.map(({ key, color }) => (
+          <button
+            key={key}
+            onClick={() => setStatusFilter(statusFilter === key ? null : key)}
+            className={`stat-card text-center cursor-pointer transition-all ${statusFilter === key ? "ring-2 ring-primary" : ""}`}
           >
-            <p className="text-2xl font-bold">{effectiveStatusCounts[status] ?? 0}</p>
-            <p className="text-sm text-muted-foreground">{statusLabel(status)}</p>
-          </div>
+            <p className="text-2xl font-semibold tabular-nums">{statusCounts[key] ?? 0}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{statusLabel(key)}</p>
+          </button>
         ))}
       </div>
 
@@ -315,7 +304,7 @@ export const AppointmentsPage = () => {
           exportFileName="appointments"
           page={page}
           pageSize={pageSize}
-          total={totalForList}
+          total={totalAppointments}
           onPageChange={setPage}
           filterSlot={
             <StatusFilter

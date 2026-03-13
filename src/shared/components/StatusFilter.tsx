@@ -8,14 +8,14 @@ interface StatusFilterProps {
 
 export const StatusFilter = ({ options, selected, onChange }: StatusFilterProps) => {
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
+    <div className="flex items-center gap-1">
       <button
         onClick={() => onChange(null)}
         className={cn(
-          "px-3 py-1.5 rounded-full text-xs font-medium transition-colors border",
+          "px-2.5 py-1 rounded-md text-xs font-medium transition-colors",
           selected === null
-            ? "bg-primary text-primary-foreground border-primary"
-            : "bg-card text-muted-foreground border-border hover:bg-muted"
+            ? "bg-primary text-primary-foreground"
+            : "text-muted-foreground hover:bg-muted"
         )}
       >
         All
@@ -25,10 +25,10 @@ export const StatusFilter = ({ options, selected, onChange }: StatusFilterProps)
           key={opt.value}
           onClick={() => onChange(selected === opt.value ? null : opt.value)}
           className={cn(
-            "px-3 py-1.5 rounded-full text-xs font-medium transition-colors border capitalize",
+            "px-2.5 py-1 rounded-md text-xs font-medium transition-colors",
             selected === opt.value
-              ? "bg-primary text-primary-foreground border-primary"
-              : "bg-card text-muted-foreground border-border hover:bg-muted"
+              ? "bg-primary text-primary-foreground"
+              : "text-muted-foreground hover:bg-muted"
           )}
         >
           {opt.label}

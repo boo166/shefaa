@@ -10,7 +10,7 @@ import { useFeatureAccess, type Feature } from "@/core/subscription/useFeatureAc
 import {
   LayoutDashboard, Users, CalendarDays, Stethoscope,
   Receipt, Pill, FlaskConical, Shield, BarChart3,
-  Settings, LogOut, Menu, X,
+  Settings, LogOut, Menu, X, Heart,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -53,27 +53,25 @@ export const ClinicLayout = () => {
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
-      {/* Paywall modal - blocks everything if expired */}
       <PaywallModal />
 
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed inset-y-0 start-0 z-50 w-64 bg-sidebar text-sidebar-foreground flex flex-col transition-transform duration-200 lg:relative lg:translate-x-0",
+          "fixed inset-y-0 start-0 z-50 w-[240px] bg-sidebar border-e border-sidebar-border flex flex-col transition-transform duration-200 lg:relative lg:translate-x-0",
           sidebarOpen ? "translate-x-0" : "-translate-x-full rtl:translate-x-full rtl:lg:translate-x-0"
         )}
       >
-        <div className="flex items-center gap-3 px-5 h-16 border-b border-sidebar-border">
-          <div className="h-8 w-8 rounded-lg bg-sidebar-primary flex items-center justify-center text-sidebar-primary-foreground font-bold text-sm">
-            M
+        {/* Logo */}
+        <div className="flex items-center gap-2.5 px-5 h-14 border-b border-sidebar-border">
+          <div className="h-7 w-7 rounded-lg bg-primary flex items-center justify-center">
+            <Heart className="h-3.5 w-3.5 text-primary-foreground" />
           </div>
-          <div>
-            <h1 className="font-semibold text-sm text-sidebar-primary-foreground">{t("common.appName")}</h1>
-            <p className="text-xs text-sidebar-foreground/60 truncate max-w-[150px]">{user?.tenantName}</p>
-          </div>
+          <span className="font-semibold text-sm text-foreground">{t("common.appName")}</span>
         </div>
 
-        <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
+        {/* Navigation */}
+        <nav className="flex-1 overflow-y-auto py-3 px-3 space-y-0.5">
           {visibleNav.map((item) => (
             <NavLink
               key={item.path}
@@ -87,43 +85,43 @@ export const ClinicLayout = () => {
           ))}
         </nav>
 
+        {/* User footer */}
         <div className="p-3 border-t border-sidebar-border">
-          <div className="flex items-center gap-3 px-3 py-2">
-            <div className="h-8 w-8 rounded-full bg-sidebar-accent flex items-center justify-center text-xs font-medium">
+          <div className="flex items-center gap-2.5 px-2 py-1.5">
+            <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center text-xs font-semibold text-primary">
               {user?.name?.charAt(0) ?? "U"}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{user?.name}</p>
-              <p className="text-xs text-sidebar-foreground/60 capitalize">{user?.role?.replace("_", " ")}</p>
+              <p className="text-xs font-medium text-foreground truncate">{user?.name}</p>
+              <p className="text-2xs text-muted-foreground capitalize">{user?.role?.replace("_", " ")}</p>
             </div>
+            <button onClick={handleLogout} className="p-1 rounded-md hover:bg-muted text-muted-foreground" title={t("common.logout")}>
+              <LogOut className="h-3.5 w-3.5" />
+            </button>
           </div>
         </div>
       </aside>
 
       {/* Overlay */}
       {sidebarOpen && (
-        <div className="fixed inset-0 z-40 bg-foreground/20 lg:hidden" onClick={() => setSidebarOpen(false)} />
+        <div className="fixed inset-0 z-40 bg-foreground/20 backdrop-blur-sm lg:hidden" onClick={() => setSidebarOpen(false)} />
       )}
 
       {/* Main */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Upgrade banner */}
         <UpgradeBanner />
 
         {/* Topbar */}
-        <header className="h-16 border-b bg-card flex items-center justify-between px-4 lg:px-6">
+        <header className="h-14 border-b bg-card flex items-center justify-between px-4 lg:px-6">
           <div className="flex items-center gap-3">
             <button onClick={() => setSidebarOpen(!sidebarOpen)} className="lg:hidden p-1.5 rounded-md hover:bg-muted">
               {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </button>
             <GlobalSearch />
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <LanguageSwitcher />
             <NotificationCenter />
-            <button onClick={handleLogout} className="p-2 rounded-md hover:bg-muted text-muted-foreground" title={t("common.logout")}>
-              <LogOut className="h-5 w-5" />
-            </button>
           </div>
         </header>
 

@@ -4,7 +4,6 @@ import { cn } from "@/lib/utils";
 import { useI18n } from "@/core/i18n/i18nStore";
 import { useAuth } from "@/core/auth/authStore";
 import { notificationService } from "@/services/notifications/notification.service";
-import { formatDate } from "@/shared/utils/formatDate";
 
 interface Notification {
   id: string;
@@ -23,22 +22,14 @@ const typeIcon: Record<string, typeof Bell> = {
   info: Info,
 };
 
-const typeColor: Record<string, string> = {
-  appointment: "text-primary",
-  lab: "text-green-600",
-  billing: "text-yellow-600",
-  alert: "text-destructive",
-  info: "text-muted-foreground",
-};
-
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diff / 60000);
   if (mins < 1) return "Just now";
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 60) return `${mins}m`;
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
+  if (hrs < 24) return `${hrs}h`;
+  return `${Math.floor(hrs / 24)}d`;
 }
 
 export const NotificationCenter = () => {
@@ -49,30 +40,19 @@ export const NotificationCenter = () => {
   const ref = useRef<HTMLDivElement>(null);
 
   const loadNotifications = useCallback(async () => {
-    if (!user?.id) {
-      setNotifications([]);
-      return;
-    }
-
+    if (!user?.id) { setNotifications([]); return; }
     const data = await notificationService.listRecent(user.id, 20);
     setNotifications(data as Notification[]);
   }, [user?.id]);
 
-  useEffect(() => {
-    loadNotifications();
-  }, [loadNotifications]);
+  useEffect(() => { loadNotifications(); }, [loadNotifications]);
 
-  // Realtime subscription for new notifications
   useEffect(() => {
     if (!user?.id) return;
-
     const subscription = notificationService.subscribe(user.id, (payload) => {
       setNotifications((prev) => [payload as Notification, ...prev]);
     });
-
-    return () => {
-      subscription.unsubscribe();
-    };
+    return () => { subscription.unsubscribe(); };
   }, [user?.id]);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
@@ -81,15 +61,13 @@ export const NotificationCenter = () => {
     if (!user?.id) return;
     const unreadIds = notifications.filter((n) => !n.read).map((n) => n.id);
     if (unreadIds.length === 0) return;
-
     await notificationService.markAllRead(user.id, unreadIds);
-
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
   };
 
-    const dismiss = async (id: string) => {
-      setNotifications((prev) => prev.filter((n) => n.id !== id));
-      if (!user?.id) return;
+  const dismiss = async (id: string) => {
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+    if (!user?.id) return;
     await notificationService.markRead(user.id, id);
   };
 
@@ -103,19 +81,19 @@ export const NotificationCenter = () => {
 
   return (
     <div className="relative" ref={ref}>
-      <button onClick={() => setOpen(!open)} className="p-2 rounded-md hover:bg-muted relative">
-        <Bell className="h-5 w-5 text-muted-foreground" />
+      <button onClick={() => setOpen(!open)} className="p-1.5 rounded-md hover:bg-muted relative">
+        <Bell className="h-4 w-4 text-muted-foreground" />
         {unreadCount > 0 && (
-          <span className="absolute top-1 end-1 h-4 w-4 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold flex items-center justify-center">
+          <span className="absolute -top-0.5 -end-0.5 h-4 min-w-4 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold flex items-center justify-center px-1">
             {unreadCount}
           </span>
         )}
       </button>
 
       {open && (
-        <div className="absolute end-0 top-full mt-2 w-80 sm:w-96 bg-card rounded-lg border shadow-lg z-50 overflow-hidden">
+        <div className="absolute end-0 top-full mt-2 w-80 bg-card rounded-xl border shadow-lg z-50 overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b">
-            <h3 className="font-semibold text-sm">{t("common.notifications")}</h3>
+            <h3 className="text-sm font-semibold">{t("common.notifications")}</h3>
             {unreadCount > 0 && (
               <button onClick={markAllRead} className="text-xs text-primary hover:underline">
                 {t("common.markAllRead") ?? "Mark all read"}
@@ -123,9 +101,9 @@ export const NotificationCenter = () => {
             )}
           </div>
 
-          <div className="max-h-80 overflow-y-auto">
+          <div className="max-h-72 overflow-y-auto">
             {notifications.length === 0 ? (
-              <div className="p-6 text-center text-muted-foreground text-sm">{t("common.noData")}</div>
+              <div className="p-8 text-center text-muted-foreground text-sm">{t("common.noData")}</div>
             ) : (
               notifications.map((n) => {
                 const Icon = typeIcon[n.type] ?? Info;
@@ -134,16 +112,16 @@ export const NotificationCenter = () => {
                     key={n.id}
                     className={cn(
                       "flex items-start gap-3 px-4 py-3 border-b last:border-0 transition-colors",
-                      !n.read && "bg-primary/5",
+                      !n.read && "bg-primary/[0.03]",
                     )}
                   >
-                    <div className={cn("mt-0.5 shrink-0", typeColor[n.type] ?? "text-muted-foreground")}>
-                      <Icon className="h-4 w-4" />
+                    <div className="mt-0.5 h-7 w-7 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+                      <Icon className="h-3.5 w-3.5 text-muted-foreground" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className={cn("text-sm", !n.read && "font-medium")}>{n.title}</p>
                       {n.body && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{n.body}</p>}
-                      <p className="text-xs text-muted-foreground/60 mt-1">{timeAgo(n.created_at)}</p>
+                      <p className="text-2xs text-muted-foreground mt-1">{timeAgo(n.created_at)}</p>
                     </div>
                     <button onClick={() => dismiss(n.id)} className="shrink-0 p-1 rounded hover:bg-muted text-muted-foreground">
                       <X className="h-3 w-3" />
