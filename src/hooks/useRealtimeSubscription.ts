@@ -70,7 +70,7 @@ export function useRealtimeSubscription(tables: RealtimeTable[]) {
       tenantId,
       watchedTables,
       () => {
-        const keys: readonly unknown[][] = [];
+        const keys: Array<readonly unknown[]> = [];
         for (const table of watchedTables) {
           const factories = INVALIDATION_MAP[table] ?? [];
           for (const factory of factories) {

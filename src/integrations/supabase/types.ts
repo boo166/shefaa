@@ -1,4 +1,4 @@
-export type Json =
+﻿export type Json =
   | string
   | number
   | boolean
@@ -7,18 +7,69 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.1"
-  }
   public: {
     Tables: {
+      appointment_reminder_log: {
+        Row: {
+          appointment_id: string
+          channel: string
+          created_at: string
+          id: string
+          notified_user_id: string | null
+          patient_email: string | null
+          tenant_id: string
+        }
+        Insert: {
+          appointment_id: string
+          channel: string
+          created_at?: string
+          id?: string
+          notified_user_id?: string | null
+          patient_email?: string | null
+          tenant_id: string
+        }
+        Update: {
+          appointment_id?: string
+          channel?: string
+          created_at?: string
+          id?: string
+          notified_user_id?: string | null
+          patient_email?: string | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "appointment_reminder_log_appointment_id_fkey"
+            columns: ["appointment_id"]
+            isOneToOne: false
+            referencedRelation: "appointments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointment_reminder_log_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_report_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "appointment_reminder_log_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       appointments: {
         Row: {
           appointment_date: string
+          appointment_range: unknown
           created_at: string
+          deleted_at: string | null
+          deleted_by: string | null
           doctor_id: string
+          duration_minutes: number
           id: string
           notes: string | null
           patient_id: string
@@ -29,8 +80,12 @@ export type Database = {
         }
         Insert: {
           appointment_date: string
+          appointment_range: unknown
           created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
           doctor_id: string
+          duration_minutes?: number
           id?: string
           notes?: string | null
           patient_id: string
@@ -41,8 +96,12 @@ export type Database = {
         }
         Update: {
           appointment_date?: string
+          appointment_range?: unknown
           created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
           doctor_id?: string
+          duration_minutes?: number
           id?: string
           notes?: string | null
           patient_id?: string
@@ -60,11 +119,25 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "appointments_doctor_id_fkey"
+            columns: ["doctor_id"]
+            isOneToOne: false
+            referencedRelation: "mv_report_doctor_performance"
+            referencedColumns: ["doctor_id"]
+          },
+          {
             foreignKeyName: "appointments_patient_id_fkey"
             columns: ["patient_id"]
             isOneToOne: false
             referencedRelation: "patients"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_report_overview"
+            referencedColumns: ["tenant_id"]
           },
           {
             foreignKeyName: "appointments_tenant_id_fkey"
@@ -114,6 +187,64 @@ export type Database = {
             foreignKeyName: "audit_logs_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "mv_report_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "audit_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_error_logs: {
+        Row: {
+          component_stack: string | null
+          created_at: string
+          id: string
+          message: string
+          stack: string | null
+          tenant_id: string
+          url: string | null
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          component_stack?: string | null
+          created_at?: string
+          id?: string
+          message: string
+          stack?: string | null
+          tenant_id: string
+          url?: string | null
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          component_stack?: string | null
+          created_at?: string
+          id?: string
+          message?: string
+          stack?: string | null
+          tenant_id?: string
+          url?: string | null
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_error_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_report_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "client_error_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -127,6 +258,7 @@ export type Database = {
           end_time: string
           id: string
           is_active: boolean
+          schedule_range: unknown
           start_time: string
           tenant_id: string
           updated_at: string
@@ -138,6 +270,7 @@ export type Database = {
           end_time: string
           id?: string
           is_active?: boolean
+          schedule_range: unknown
           start_time: string
           tenant_id: string
           updated_at?: string
@@ -149,6 +282,7 @@ export type Database = {
           end_time?: string
           id?: string
           is_active?: boolean
+          schedule_range?: unknown
           start_time?: string
           tenant_id?: string
           updated_at?: string
@@ -162,6 +296,20 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "doctor_schedules_doctor_id_fkey"
+            columns: ["doctor_id"]
+            isOneToOne: false
+            referencedRelation: "mv_report_doctor_performance"
+            referencedColumns: ["doctor_id"]
+          },
+          {
+            foreignKeyName: "doctor_schedules_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_report_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
             foreignKeyName: "doctor_schedules_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
@@ -173,6 +321,8 @@ export type Database = {
       doctors: {
         Row: {
           created_at: string
+          deleted_at: string | null
+          deleted_by: string | null
           email: string | null
           full_name: string
           id: string
@@ -186,6 +336,8 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
           email?: string | null
           full_name: string
           id?: string
@@ -199,6 +351,8 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
           email?: string | null
           full_name?: string
           id?: string
@@ -215,6 +369,13 @@ export type Database = {
             foreignKeyName: "doctors_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "mv_report_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "doctors_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -225,6 +386,8 @@ export type Database = {
           amount: number
           claim_date: string
           created_at: string
+          deleted_at: string | null
+          deleted_by: string | null
           id: string
           patient_id: string
           provider: string
@@ -237,6 +400,8 @@ export type Database = {
           amount: number
           claim_date?: string
           created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
           id?: string
           patient_id: string
           provider: string
@@ -249,6 +414,8 @@ export type Database = {
           amount?: number
           claim_date?: string
           created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
           id?: string
           patient_id?: string
           provider?: string
@@ -269,6 +436,13 @@ export type Database = {
             foreignKeyName: "insurance_claims_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "mv_report_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "insurance_claims_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -278,6 +452,8 @@ export type Database = {
         Row: {
           amount: number
           created_at: string
+          deleted_at: string | null
+          deleted_by: string | null
           id: string
           invoice_code: string
           invoice_date: string
@@ -290,6 +466,8 @@ export type Database = {
         Insert: {
           amount: number
           created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
           id?: string
           invoice_code: string
           invoice_date?: string
@@ -302,6 +480,8 @@ export type Database = {
         Update: {
           amount?: number
           created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
           id?: string
           invoice_code?: string
           invoice_date?: string
@@ -323,6 +503,13 @@ export type Database = {
             foreignKeyName: "invoices_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "mv_report_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "invoices_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -331,6 +518,8 @@ export type Database = {
       lab_orders: {
         Row: {
           created_at: string
+          deleted_at: string | null
+          deleted_by: string | null
           doctor_id: string
           id: string
           order_date: string
@@ -343,6 +532,8 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
           doctor_id: string
           id?: string
           order_date?: string
@@ -355,6 +546,8 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
           doctor_id?: string
           id?: string
           order_date?: string
@@ -374,11 +567,25 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "lab_orders_doctor_id_fkey"
+            columns: ["doctor_id"]
+            isOneToOne: false
+            referencedRelation: "mv_report_doctor_performance"
+            referencedColumns: ["doctor_id"]
+          },
+          {
             foreignKeyName: "lab_orders_patient_id_fkey"
             columns: ["patient_id"]
             isOneToOne: false
             referencedRelation: "patients"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lab_orders_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_report_overview"
+            referencedColumns: ["tenant_id"]
           },
           {
             foreignKeyName: "lab_orders_tenant_id_fkey"
@@ -432,11 +639,25 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "medical_records_doctor_id_fkey"
+            columns: ["doctor_id"]
+            isOneToOne: false
+            referencedRelation: "mv_report_doctor_performance"
+            referencedColumns: ["doctor_id"]
+          },
+          {
             foreignKeyName: "medical_records_patient_id_fkey"
             columns: ["patient_id"]
             isOneToOne: false
             referencedRelation: "patients"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "medical_records_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_report_overview"
+            referencedColumns: ["tenant_id"]
           },
           {
             foreignKeyName: "medical_records_tenant_id_fkey"
@@ -489,6 +710,13 @@ export type Database = {
             foreignKeyName: "medications_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "mv_report_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "medications_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -529,6 +757,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "notification_preferences_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_report_overview"
+            referencedColumns: ["tenant_id"]
+          },
           {
             foreignKeyName: "notification_preferences_tenant_id_fkey"
             columns: ["tenant_id"]
@@ -574,6 +809,13 @@ export type Database = {
             foreignKeyName: "notifications_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "mv_report_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "notifications_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -582,6 +824,8 @@ export type Database = {
       patient_documents: {
         Row: {
           created_at: string
+          deleted_at: string | null
+          deleted_by: string | null
           file_name: string
           file_path: string
           file_size: number
@@ -594,6 +838,8 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
           file_name: string
           file_path: string
           file_size?: number
@@ -606,6 +852,8 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
           file_name?: string
           file_path?: string
           file_size?: number
@@ -628,6 +876,13 @@ export type Database = {
             foreignKeyName: "patient_documents_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "mv_report_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "patient_documents_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -639,6 +894,8 @@ export type Database = {
           blood_type: string | null
           created_at: string
           date_of_birth: string | null
+          deleted_at: string | null
+          deleted_by: string | null
           email: string | null
           full_name: string
           gender: string | null
@@ -655,6 +912,8 @@ export type Database = {
           blood_type?: string | null
           created_at?: string
           date_of_birth?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           email?: string | null
           full_name: string
           gender?: string | null
@@ -671,6 +930,8 @@ export type Database = {
           blood_type?: string | null
           created_at?: string
           date_of_birth?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           email?: string | null
           full_name?: string
           gender?: string | null
@@ -687,6 +948,13 @@ export type Database = {
             foreignKeyName: "patients_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "mv_report_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "patients_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -695,6 +963,8 @@ export type Database = {
       prescriptions: {
         Row: {
           created_at: string
+          deleted_at: string | null
+          deleted_by: string | null
           doctor_id: string
           dosage: string
           id: string
@@ -706,6 +976,8 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
           doctor_id: string
           dosage: string
           id?: string
@@ -717,6 +989,8 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
           doctor_id?: string
           dosage?: string
           id?: string
@@ -735,11 +1009,25 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "prescriptions_doctor_id_fkey"
+            columns: ["doctor_id"]
+            isOneToOne: false
+            referencedRelation: "mv_report_doctor_performance"
+            referencedColumns: ["doctor_id"]
+          },
+          {
             foreignKeyName: "prescriptions_patient_id_fkey"
             columns: ["patient_id"]
             isOneToOne: false
             referencedRelation: "patients"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prescriptions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_report_overview"
+            referencedColumns: ["tenant_id"]
           },
           {
             foreignKeyName: "prescriptions_tenant_id_fkey"
@@ -783,10 +1071,38 @@ export type Database = {
             foreignKeyName: "profiles_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "mv_report_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "profiles_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
         ]
+      }
+      rate_limits: {
+        Row: {
+          hits: number
+          key: string
+          updated_at: string
+          window_start: string
+        }
+        Insert: {
+          hits?: number
+          key: string
+          updated_at?: string
+          window_start: string
+        }
+        Update: {
+          hits?: number
+          key?: string
+          updated_at?: string
+          window_start?: string
+        }
+        Relationships: []
       }
       subscriptions: {
         Row: {
@@ -835,6 +1151,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "subscriptions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "mv_report_overview"
+            referencedColumns: ["tenant_id"]
+          },
           {
             foreignKeyName: "subscriptions_tenant_id_fkey"
             columns: ["tenant_id"]
@@ -919,6 +1242,13 @@ export type Database = {
             foreignKeyName: "user_invites_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "mv_report_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "user_invites_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -964,13 +1294,226 @@ export type Database = {
           role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "user_roles_user_id_profiles_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+        ]
       }
     }
     Views: {
-      [_ in never]: never
+      mv_report_appointment_statuses: {
+        Row: {
+          count: number | null
+          status: string | null
+          tenant_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "appointments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_report_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "appointments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mv_report_appointment_types: {
+        Row: {
+          count: number | null
+          tenant_id: string | null
+          type: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "appointments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_report_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "appointments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mv_report_doctor_performance: {
+        Row: {
+          appointments: number | null
+          completed: number | null
+          doctor_id: string | null
+          doctor_name: string | null
+          rating: number | null
+          tenant_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "doctors_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_report_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "doctors_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mv_report_overview: {
+        Row: {
+          avg_doctor_rating: number | null
+          tenant_id: string | null
+          total_appointments: number | null
+          total_patients: number | null
+          total_revenue: number | null
+        }
+        Relationships: []
+      }
+      mv_report_patient_growth: {
+        Row: {
+          month_start: string | null
+          tenant_id: string | null
+          total_patients: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "patients_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_report_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "patients_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mv_report_revenue_by_month: {
+        Row: {
+          expenses: number | null
+          month_start: string | null
+          revenue: number | null
+          tenant_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoices_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_report_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "invoices_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mv_report_revenue_by_service: {
+        Row: {
+          revenue: number | null
+          service: string | null
+          tenant_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoices_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_report_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "invoices_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pg_all_foreign_keys: {
+        Row: {
+          fk_columns: unknown[] | null
+          fk_constraint_name: unknown
+          fk_schema_name: unknown
+          fk_table_name: unknown
+          fk_table_oid: unknown
+          is_deferrable: boolean | null
+          is_deferred: boolean | null
+          match_type: string | null
+          on_delete: string | null
+          on_update: string | null
+          pk_columns: unknown[] | null
+          pk_constraint_name: unknown
+          pk_index_name: unknown
+          pk_schema_name: unknown
+          pk_table_name: unknown
+          pk_table_oid: unknown
+        }
+        Relationships: []
+      }
+      tap_funky: {
+        Row: {
+          args: string | null
+          is_definer: boolean | null
+          is_strict: boolean | null
+          is_visible: boolean | null
+          kind: unknown
+          langoid: unknown
+          name: unknown
+          oid: unknown
+          owner: unknown
+          returns: string | null
+          returns_set: boolean | null
+          schema: unknown
+          volatility: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
+      _cleanup: { Args: never; Returns: boolean }
+      _contract_on: { Args: { "": string }; Returns: unknown }
+      _currtest: { Args: never; Returns: number }
+      _db_privs: { Args: never; Returns: unknown[] }
+      _extensions: { Args: never; Returns: unknown[] }
+      _get: { Args: { "": string }; Returns: number }
+      _get_latest: { Args: { "": string }; Returns: number[] }
+      _get_note: { Args: { "": string }; Returns: string }
+      _is_verbose: { Args: never; Returns: boolean }
+      _prokind: { Args: { p_oid: unknown }; Returns: unknown }
+      _query: { Args: { "": string }; Returns: string }
+      _refine_vol: { Args: { "": string }; Returns: string }
+      _table_privs: { Args: never; Returns: unknown[] }
+      _temptypes: { Args: { "": string }; Returns: string }
+      _todo: { Args: never; Returns: string }
       admin_set_user_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -978,12 +1521,156 @@ export type Database = {
         }
         Returns: undefined
       }
+      check_rate_limit: {
+        Args: { _key: string; _max_hits: number; _window_seconds: number }
+        Returns: boolean
+      }
+      col_is_null:
+        | {
+            Args: {
+              column_name: unknown
+              description?: string
+              schema_name: unknown
+              table_name: unknown
+            }
+            Returns: string
+          }
+        | {
+            Args: {
+              column_name: unknown
+              description?: string
+              table_name: unknown
+            }
+            Returns: string
+          }
+      col_not_null:
+        | {
+            Args: {
+              column_name: unknown
+              description?: string
+              schema_name: unknown
+              table_name: unknown
+            }
+            Returns: string
+          }
+        | {
+            Args: {
+              column_name: unknown
+              description?: string
+              table_name: unknown
+            }
+            Returns: string
+          }
       create_tenant_and_signup:
         | { Args: { _name: string; _slug: string }; Returns: string }
         | {
             Args: { _name: string; _owner_email: string; _slug: string }
             Returns: string
           }
+      diag:
+        | {
+            Args: { msg: unknown }
+            Returns: {
+              error: true
+            } & "Could not choose the best candidate function between: public.diag(msg => text), public.diag(msg => anyelement). Try renaming the parameters or the function itself in the database so function overloading can be resolved"
+          }
+        | {
+            Args: { msg: string }
+            Returns: {
+              error: true
+            } & "Could not choose the best candidate function between: public.diag(msg => text), public.diag(msg => anyelement). Try renaming the parameters or the function itself in the database so function overloading can be resolved"
+          }
+      diag_test_name: { Args: { "": string }; Returns: string }
+      do_tap:
+        | { Args: never; Returns: string[] }
+        | { Args: { "": string }; Returns: string[] }
+      fail:
+        | { Args: never; Returns: string }
+        | { Args: { "": string }; Returns: string }
+      findfuncs: { Args: { "": string }; Returns: string[] }
+      finish: { Args: { exception_on_failure?: boolean }; Returns: string[] }
+      get_insurance_summary: {
+        Args: never
+        Returns: {
+          approved_count: number
+          pending_count: number
+          providers_count: number
+          rejected_count: number
+          total_count: number
+        }[]
+      }
+      get_invoice_summary: {
+        Args: never
+        Returns: {
+          paid_amount: number
+          paid_count: number
+          pending_amount: number
+          total_count: number
+        }[]
+      }
+      get_medication_summary: {
+        Args: never
+        Returns: {
+          inventory_value: number
+          low_stock_count: number
+          total_count: number
+        }[]
+      }
+      get_report_appointment_statuses: {
+        Args: never
+        Returns: {
+          count: number
+          status: string
+        }[]
+      }
+      get_report_appointment_types: {
+        Args: never
+        Returns: {
+          count: number
+          type: string
+        }[]
+      }
+      get_report_doctor_performance: {
+        Args: never
+        Returns: {
+          appointments: number
+          completed: number
+          doctor_id: string
+          doctor_name: string
+          rating: number
+        }[]
+      }
+      get_report_overview: {
+        Args: never
+        Returns: {
+          avg_doctor_rating: number
+          total_appointments: number
+          total_patients: number
+          total_revenue: number
+        }[]
+      }
+      get_report_patient_growth: {
+        Args: { _months?: number }
+        Returns: {
+          month_start: string
+          total_patients: number
+        }[]
+      }
+      get_report_revenue_by_month: {
+        Args: { _months?: number }
+        Returns: {
+          expenses: number
+          month_start: string
+          revenue: number
+        }[]
+      }
+      get_report_revenue_by_service: {
+        Args: { _limit?: number }
+        Returns: {
+          revenue: number
+          service: string
+        }[]
+      }
       get_user_tenant_id: { Args: { _user_id: string }; Returns: string }
       has_role: {
         Args: {
@@ -992,6 +1679,11 @@ export type Database = {
         }
         Returns: boolean
       }
+      has_unique: { Args: { "": string }; Returns: string }
+      in_todo: { Args: never; Returns: boolean }
+      is_empty: { Args: { "": string }; Returns: string }
+      isnt_empty: { Args: { "": string }; Returns: string }
+      lives_ok: { Args: { "": string }; Returns: string }
       log_audit_event: {
         Args: {
           _action: string
@@ -1003,6 +1695,52 @@ export type Database = {
         }
         Returns: undefined
       }
+      no_plan: { Args: never; Returns: boolean[] }
+      num_failed: { Args: never; Returns: number }
+      os_name: { Args: never; Returns: string }
+      pass:
+        | { Args: never; Returns: string }
+        | { Args: { "": string }; Returns: string }
+      pg_version: { Args: never; Returns: string }
+      pg_version_num: { Args: never; Returns: number }
+      pgtap_version: { Args: never; Returns: number }
+      refresh_report_materialized_views: { Args: never; Returns: undefined }
+      runtests:
+        | { Args: never; Returns: string[] }
+        | { Args: { "": string }; Returns: string[] }
+      schedule_appointment_reminders: {
+        Args: {
+          _cron_secret?: string
+          _function_url?: string
+          _schedule?: string
+        }
+        Returns: undefined
+      }
+      search_global: {
+        Args: { _limit?: number; _term: string }
+        Returns: {
+          entity_id: string
+          entity_type: string
+          extra: string
+          label: string
+          sublabel: string
+        }[]
+      }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
+      skip:
+        | { Args: { "": string }; Returns: string }
+        | { Args: { how_many: number; why: string }; Returns: string }
+      throws_ok: { Args: { "": string }; Returns: string }
+      todo:
+        | { Args: { how_many: number }; Returns: boolean[] }
+        | { Args: { how_many: number; why: string }; Returns: boolean[] }
+        | { Args: { why: string }; Returns: boolean[] }
+        | { Args: { how_many: number; why: string }; Returns: boolean[] }
+      todo_end: { Args: never; Returns: boolean[] }
+      todo_start:
+        | { Args: never; Returns: boolean[] }
+        | { Args: { "": string }; Returns: boolean[] }
     }
     Enums: {
       app_role:
@@ -1014,7 +1752,9 @@ export type Database = {
         | "super_admin"
     }
     CompositeTypes: {
-      [_ in never]: never
+      _time_trial_type: {
+        a_time: number | null
+      }
     }
   }
 }
@@ -1150,3 +1890,4 @@ export const Constants = {
     },
   },
 } as const
+

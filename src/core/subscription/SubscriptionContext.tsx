@@ -88,7 +88,7 @@ export const SubscriptionProvider = ({ children }: { children: ReactNode }) => {
           isExpired,
           daysRemaining,
           isTrialing,
-          expiresAt: data.expires_at,
+          expiresAt: data.expires_at ?? null,
           isLoading: false,
         });
       } catch (err: any) {
