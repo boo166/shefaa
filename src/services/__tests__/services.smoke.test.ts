@@ -71,10 +71,27 @@ vi.mock("@/core/auth/authStore", () => ({
   useAuth: {
     getState: () => ({
       hasPermission: () => true,
-      user: { id: userId, globalRoles: ["super_admin"], tenantRoles: [] },
+      sessionVersion: "smoke-test",
+      tenantOverride: { id: tenantId, slug: "smoke", name: "Smoke clinic" },
+      user: {
+        id: userId,
+        globalRoles: ["super_admin"],
+        tenantRoles: [],
+        tenantId: null,
+        tenantStatus: "active",
+      },
+      privilegedAuth: {
+        currentLevel: null,
+        nextLevel: null,
+        verifiedFactorCount: 0,
+        unverifiedFactorCount: 0,
+        loadedAt: new Date().toISOString(),
+      },
       lastVerifiedAt: new Date().toISOString(),
     }),
   },
+  selectEffectiveTenantId: (s: { tenantOverride?: { id: string } | null; user?: { tenantId?: string | null } }) =>
+    s.tenantOverride?.id ?? s.user?.tenantId ?? null,
 }));
 
 vi.mock("@/services/supabase/tenant", () => ({
@@ -441,12 +458,20 @@ describe("services smoke", () => {
       resource_type: null,
     });
 
-    const sub = realtimeService.subscribeToTenantTables(tenantId, ["patients"], () => undefined);
+    const sub = realtimeService.subscribeToTenantTables(
+      { tenantId, sessionVersion: "test-sv", userId },
+      ["patients"],
+      () => undefined,
+    );
     sub.unsubscribe();
 
     await jobService.invoke("refresh-materialized-views", { tenantId });
 
-    expect(queryKeys.patients.root(tenantId)).toEqual(["patients", tenantId]);
+    const patientRoot = queryKeys.patients.root(tenantId);
+    expect(patientRoot[0]).toBe("patients");
+    expect(patientRoot[1]).toBe("rt");
+    expect(typeof patientRoot[2]).toBe("number");
+    expect(patientRoot[3]).toBe(tenantId);
     expect(queryKeys.admin.operationsAlerts()).toEqual(["admin", "operationsAlerts"]);
     expect(queryKeys.admin.operationsDashboard()).toEqual(["admin", "operationsDashboard", "all"]);
     expect(queryKeys.admin.pricingPlans()).toEqual(["admin", "pricingPlans"]);

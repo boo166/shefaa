@@ -152,6 +152,11 @@ interface AuthState {
   hasPermission: (permission: Permission) => boolean;
   hasRole: (role: Role) => boolean;
   setTenantOverride: (tenant: TenantOverride) => void;
+  /**
+   * Apply super-admin tenant override after coordination kernel has cleared caches and frozen writes.
+   * Does not clear React Query or publish coordination events — caller owns that.
+   */
+  applyTenantOverrideAfterCoordination: (tenant: TenantOverride) => void;
   clearTenantOverride: () => void;
   startImpersonation: (tenant: Exclude<TenantOverride, null>, session: Exclude<ImpersonationSession, null>) => void;
   stopImpersonation: () => void;
@@ -421,6 +426,15 @@ export const useAuth = create<AuthState>()(
           : user.tenantRoles.includes(role as TenantRole);
       },
       setTenantOverride: (tenant) => {
+        const s = get();
+        if (s.isAuthenticated && s.user && isSuperAdmin(s.user)) {
+          void import("@/platform/runtime/coordination/transitions/tenantSwitch").then((m) =>
+            m.switchTenantAsync({ tenant, authTraceId: crypto.randomUUID() }).catch(() => {
+              emitAuthMetric("stale_auth_context_rejected", { reason: "tenant_switch_failed" });
+            }),
+          );
+          return;
+        }
         const prevParts = {
           userId: get().user?.id ?? "anon",
           tenantId: get().tenantOverride?.id ?? get().user?.tenantId ?? "none",
@@ -440,6 +454,26 @@ export const useAuth = create<AuthState>()(
             authTraceId: crypto.randomUUID(),
           });
         }
+        if (nextVer) {
+          set({ sessionVersion: nextVer });
+          lastPrincipalKeyCommitted = nextKey;
+          lastSessionVersionCommitted = nextVer;
+        }
+        const effAfter = tenant?.id ?? get().user?.tenantId ?? null;
+        void import("@/platform/runtime/coordination/notifyAuthAndTenant").then((m) =>
+          m.notifyTenantContextChanged({ tenantId: effAfter, actorId: get().user?.id }),
+        );
+      },
+      applyTenantOverrideAfterCoordination: (tenant) => {
+        set({
+          tenantOverride: tenant,
+          impersonationSession: null,
+        });
+        const u = get().supabaseUser;
+        const effTenant = tenant?.id ?? get().user?.tenantId ?? null;
+        const privAal = get().privilegedAuth.currentLevel;
+        const nextVer = sessionVersionFromSupabaseUser(u as any, effTenant, null, privAal);
+        const nextKey = principalKeyFromSnapshot(get());
         if (nextVer) {
           set({ sessionVersion: nextVer });
           lastPrincipalKeyCommitted = nextKey;

@@ -84,6 +84,7 @@ export default tseslint.config(
       "src/services/**/*repository.{ts,tsx}",
       "src/services/supabase/**/*.{ts,tsx}",
       "src/integrations/supabase/**/*.{ts,tsx}",
+      "src/platform/data/**/*.{ts,tsx}",
     ],
     rules: {
       "no-restricted-imports": "off",

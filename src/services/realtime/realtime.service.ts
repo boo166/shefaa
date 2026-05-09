@@ -1,14 +1,15 @@
+import { subscribeEntity } from "@/platform/realtime/realtimeRuntime";
 import { toServiceError } from "@/services/supabase/errors";
-import { realtimeRepository, RealtimeTable } from "./realtime.repository";
+import type { RealtimePrincipalContext, RealtimeTable } from "./realtime.repository";
 
 export const realtimeService = {
   subscribeToTenantTables(
-    tenantId: string,
+    ctx: RealtimePrincipalContext,
     tables: RealtimeTable[],
     onChange: () => void,
   ) {
     try {
-      return realtimeRepository.subscribeToTenantTables(tenantId, tables, onChange);
+      return subscribeEntity({ ctx, tables, onEvent: onChange });
     } catch (err) {
       throw toServiceError(err, "Failed to subscribe to realtime updates");
     }

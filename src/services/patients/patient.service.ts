@@ -8,17 +8,22 @@ import {
 import { uuidListSchema, uuidSchema } from "@/domain/shared/identifiers.schema";
 import type { PatientCreateInput, PatientListParams, PatientUpdateInput } from "@/domain/patient/patient.types";
 import { emitDomainEvent } from "@/core/events";
+import { Capabilities } from "@/platform/authorization/capabilities";
 import { BusinessRuleError, ConflictError, NotFoundError, toServiceError } from "@/services/supabase/errors";
 import { getTenantContext } from "@/services/supabase/tenant";
-import { assertAnyPermission } from "@/services/supabase/permissions";
+import { withAuthStaleGuard } from "@/services/auth/authContextSnapshot";
 import { patientRepository } from "./patient.repository";
+import { requirePatientAccess } from "./patientAccess";
+
+const PATIENT_READ = [Capabilities.patients.view, Capabilities.patients.manage];
+const PATIENT_WRITE = [Capabilities.patients.manage];
 
 export const patientService = {
   async listPaged(params: PatientListParams) {
     try {
-      assertAnyPermission(["view_patients", "manage_patients"]);
       const parsed = patientListParamsSchema.parse(params);
       const { tenantId } = getTenantContext();
+      requirePatientAccess({ tenantId, anyOfCapabilities: [...PATIENT_READ] });
       const result = await patientRepository.listPaged(parsed, tenantId);
       const data = z.array(patientSchema).parse(result.data);
       const count = z.number().int().nonnegative().parse(result.count);
@@ -29,9 +34,9 @@ export const patientService = {
   },
   async getById(id: string) {
     try {
-      assertAnyPermission(["view_patients", "manage_patients"]);
       const parsedId = uuidSchema.parse(id);
       const { tenantId } = getTenantContext();
+      requirePatientAccess({ tenantId, anyOfCapabilities: [...PATIENT_READ] });
       const result = await patientRepository.getById(parsedId, tenantId);
       return patientSchema.parse(result);
     } catch (err) {
@@ -40,9 +45,10 @@ export const patientService = {
   },
   async create(input: PatientCreateInput) {
     try {
-      assertAnyPermission(["manage_patients"]);
       const parsed = patientCreateSchema.parse(input);
       const { tenantId, userId } = getTenantContext();
+      requirePatientAccess({ tenantId, anyOfCapabilities: [...PATIENT_WRITE] });
+      return await withAuthStaleGuard(async () => {
       if (parsed.full_name && parsed.date_of_birth) {
         const duplicates = await patientRepository.findByNameAndDOB(
           parsed.full_name,
@@ -74,16 +80,18 @@ export const patientService = {
         { tenantId, userId },
       );
       return patient;
+      });
     } catch (err) {
       throw toServiceError(err, "Failed to create patient");
     }
   },
   async update(id: string, input: PatientUpdateInput) {
     try {
-      assertAnyPermission(["manage_patients"]);
       const parsedId = uuidSchema.parse(id);
       const parsed = patientUpdateSchema.parse(input);
       const { tenantId } = getTenantContext();
+      requirePatientAccess({ tenantId, anyOfCapabilities: [...PATIENT_WRITE] });
+      return await withAuthStaleGuard(async () => {
       if (parsed.status === "inactive") {
         const hasActive = await patientRepository.hasActiveAppointments(parsedId, tenantId);
         if (hasActive) {
@@ -103,25 +111,27 @@ export const patientService = {
         throw new NotFoundError("Patient not found");
       }
       return patientSchema.parse(result);
+      });
     } catch (err) {
       throw toServiceError(err, "Failed to update patient");
     }
   },
   async deleteBulk(ids: string[]) {
     try {
-      assertAnyPermission(["manage_patients"]);
       const parsed = uuidListSchema.parse(ids);
       const { tenantId, userId } = getTenantContext();
-      return await patientRepository.deleteBulk(parsed, tenantId, userId);
+      requirePatientAccess({ tenantId, anyOfCapabilities: [...PATIENT_WRITE] });
+      return await withAuthStaleGuard(async () => patientRepository.deleteBulk(parsed, tenantId, userId));
     } catch (err) {
       throw toServiceError(err, "Failed to delete patients");
     }
   },
   async archive(id: string) {
     try {
-      assertAnyPermission(["manage_patients"]);
       const parsedId = uuidSchema.parse(id);
       const { tenantId, userId } = getTenantContext();
+      requirePatientAccess({ tenantId, anyOfCapabilities: [...PATIENT_WRITE] });
+      return await withAuthStaleGuard(async () => {
       const hasActive = await patientRepository.hasActiveAppointments(parsedId, tenantId);
       if (hasActive) {
         throw new BusinessRuleError("Cannot archive patient with active appointments", {
@@ -130,17 +140,20 @@ export const patientService = {
       }
       const result = await patientRepository.archive(parsedId, tenantId, userId);
       return patientSchema.parse(result);
+      });
     } catch (err) {
       throw toServiceError(err, "Failed to archive patient");
     }
   },
   async restore(id: string) {
     try {
-      assertAnyPermission(["manage_patients"]);
       const parsedId = uuidSchema.parse(id);
       const { tenantId } = getTenantContext();
+      requirePatientAccess({ tenantId, anyOfCapabilities: [...PATIENT_WRITE] });
+      return await withAuthStaleGuard(async () => {
       const result = await patientRepository.restore(parsedId, tenantId);
       return patientSchema.parse(result);
+      });
     } catch (err) {
       throw toServiceError(err, "Failed to restore patient");
     }

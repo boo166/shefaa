@@ -88,7 +88,11 @@ export const PatientDocuments = ({ patientId }: Props) => {
 
   const handleDownload = async (doc: PatientDocument) => {
     try {
-      const blob = await patientDocumentsService.download({ file_path: doc.file_path });
+      const blob = await patientDocumentsService.download({
+        file_path: doc.file_path,
+        id: doc.id,
+        patient_id: doc.patient_id,
+      });
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;

@@ -3,6 +3,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClientProvider } from "@tanstack/react-query";
+import { RuntimeEpochQueryBridge } from "@/components/providers/RuntimeEpochQueryBridge";
 import { queryClient } from "@/services/query/queryClient.instance";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { SessionTimeout } from "./features/auth/SessionTimeout";
@@ -27,6 +28,7 @@ function lazyPage<TModule>(
 
 const LandingPage = lazyPage(() => import("./pages/LandingPage"), (m) => m.LandingPage, ["common", "landing", "auth"]);
 const AdminDashboardPage = lazyPage(() => import("./features/admin/AdminDashboardPage"), (m) => m.AdminDashboardPage, ["common", "admin"]);
+const RuntimeOpsPage = lazyPage(() => import("./features/admin/RuntimeOpsPage"), (m) => m.RuntimeOpsPage, ["common", "admin"]);
 const LoginPage = lazyPage(() => import("./pages/LoginPage"), (m) => m.LoginPage, ["common", "auth"]);
 const MfaPage = lazyPage(() => import("./pages/MfaPage"), (m) => m.MfaPage, ["common", "auth"]);
 const ForgotPasswordPage = lazyPage(() => import("./pages/ForgotPasswordPage"), (m) => m.ForgotPasswordPage, ["common", "auth"]);
@@ -59,6 +61,7 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
+    <RuntimeEpochQueryBridge>
     <TooltipProvider>
       <Toaster />
       <Sonner />
@@ -88,6 +91,14 @@ const App = () => (
                   element={
                     <ProtectedRoute requiredPermission="super_admin" requiredPrivilegedRole="super_admin">
                       <AdminDashboardPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/admin/ops/runtime"
+                  element={
+                    <ProtectedRoute requiredPermission="super_admin" requiredPrivilegedRole="super_admin">
+                      <RuntimeOpsPage />
                     </ProtectedRoute>
                   }
                 />
@@ -139,6 +150,7 @@ const App = () => (
         </ErrorBoundary>
       </SubscriptionProvider>
     </TooltipProvider>
+    </RuntimeEpochQueryBridge>
   </QueryClientProvider>
 );
 

@@ -1,5 +1,7 @@
 import { useParams, useNavigate } from "react-router-dom";
-import { getPrimaryRole, isSuperAdmin, useAuth, type Permission } from "@/core/auth/authStore";
+import { getPrimaryRole, isSuperAdmin, useAuth } from "@/core/auth/authStore";
+import { Capabilities, type Capability } from "@/platform/authorization/capabilities";
+import { evaluateAuthorize } from "@/platform/authorization/authorize";
 import { useI18n } from "@/core/i18n/i18nStore";
 import { LanguageSwitcher } from "@/shared/components/LanguageSwitcher";
 import { NotificationCenter } from "@/shared/components/NotificationCenter";
@@ -19,31 +21,34 @@ import { adminImpersonationService } from "@/services/admin/adminImpersonation.s
 import { isFreshAuthRequiredError } from "@/services/auth/recentAuth.service";
 import { useState } from "react";
 import { requestReauthentication } from "@/features/auth/reauthPrompt";
+import { SessionBoundaryBadge } from "@/components/shell/SessionBoundaryBadge";
+import { IncidentBannerSlot } from "@/components/shell/IncidentBannerSlot";
+import { RuntimeStatusLayer } from "@/components/shell/RuntimeStatusLayer";
 
 interface NavConfigItem {
   path: string;
   icon: typeof LayoutDashboard;
   labelKey: string;
-  permission: Permission;
+  capability: Capability;
   feature?: Feature;
 }
 
 const navItems: NavConfigItem[] = [
-  { path: "dashboard", icon: LayoutDashboard, labelKey: "common.dashboard", permission: "view_dashboard" },
-  { path: "patients", icon: Users, labelKey: "common.patients", permission: "view_patients" },
-  { path: "appointments", icon: CalendarDays, labelKey: "common.appointments", permission: "view_appointments", feature: "appointments" },
-  { path: "doctors", icon: Stethoscope, labelKey: "common.doctors", permission: "view_dashboard" },
-  { path: "billing", icon: Receipt, labelKey: "common.billing", permission: "view_billing", feature: "billing" },
-  { path: "pharmacy", icon: Pill, labelKey: "common.pharmacy", permission: "manage_pharmacy", feature: "pharmacy" },
-  { path: "laboratory", icon: FlaskConical, labelKey: "common.laboratory", permission: "manage_laboratory", feature: "laboratory" },
-  { path: "insurance", icon: Shield, labelKey: "common.insurance", permission: "view_billing", feature: "insurance" },
-  { path: "reports", icon: BarChart3, labelKey: "common.reports", permission: "view_reports", feature: "reports" },
-  { path: "settings", icon: Settings, labelKey: "common.settings", permission: "manage_clinic" },
+  { path: "dashboard", icon: LayoutDashboard, labelKey: "common.dashboard", capability: Capabilities.dashboard.view },
+  { path: "patients", icon: Users, labelKey: "common.patients", capability: Capabilities.patients.view },
+  { path: "appointments", icon: CalendarDays, labelKey: "common.appointments", capability: Capabilities.appointments.view, feature: "appointments" },
+  { path: "doctors", icon: Stethoscope, labelKey: "common.doctors", capability: Capabilities.dashboard.view },
+  { path: "billing", icon: Receipt, labelKey: "common.billing", capability: Capabilities.billing.view, feature: "billing" },
+  { path: "pharmacy", icon: Pill, labelKey: "common.pharmacy", capability: Capabilities.pharmacy.manage, feature: "pharmacy" },
+  { path: "laboratory", icon: FlaskConical, labelKey: "common.laboratory", capability: Capabilities.laboratory.manage, feature: "laboratory" },
+  { path: "insurance", icon: Shield, labelKey: "common.insurance", capability: Capabilities.billing.view, feature: "insurance" },
+  { path: "reports", icon: BarChart3, labelKey: "common.reports", capability: Capabilities.reports.view, feature: "reports" },
+  { path: "settings", icon: Settings, labelKey: "common.settings", capability: Capabilities.clinic.manage },
 ] as const;
 
 export const ClinicLayout = () => {
   const { clinicSlug } = useParams();
-  const { user, logout, hasPermission, tenantOverride } = useAuth();
+  const { user, logout, hasPermission, tenantOverride, sessionVersion } = useAuth();
   const { hasFeature } = useFeatureAccess();
   const { t } = useI18n(["admin"]);
   const navigate = useNavigate();
@@ -90,7 +95,17 @@ export const ClinicLayout = () => {
     }
   };
 
-  const visibleNav = navItems.filter((item) => hasPermission(item.permission) && (!item.feature || hasFeature(item.feature)));
+  const visibleNav = navItems.filter((item) => {
+    if (!user) return false;
+    const allowed = evaluateAuthorize({
+      actor: user,
+      tenantOverride,
+      sessionVersion,
+      hasPermission,
+      capability: item.capability,
+    }).ok;
+    return allowed && (!item.feature || hasFeature(item.feature));
+  });
   const appNavItems: NavItem[] = visibleNav.map((item) => ({
     path: item.path,
     icon: item.icon,
@@ -119,6 +134,8 @@ export const ClinicLayout = () => {
 
   return (
     <>
+      <IncidentBannerSlot />
+      <RuntimeStatusLayer />
       <PaywallModal />
       <AppLayout
         navItems={appNavItems}
@@ -129,6 +146,7 @@ export const ClinicLayout = () => {
         topbarStartSlot={<GlobalSearch />}
         topbarEndSlot={(
           <>
+            <SessionBoundaryBadge className="mr-2" />
             {isSuperAdmin(user) && tenantOverride && (
               <Button
                 variant="outline"

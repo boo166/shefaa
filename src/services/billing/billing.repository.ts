@@ -10,9 +10,28 @@ import type {
   InvoiceWithPatient,
 } from "@/domain/billing/billing.types";
 import type { LimitOffsetParams, PagedResult } from "@/domain/shared/pagination.types";
-import { supabase } from "@/services/supabase/client";
+import { platformRepository } from "@/platform/data/platformRepository";
+import type { PlatformRepositoryContext } from "@/platform/data/platformRepository.context";
 import { ServiceError } from "@/services/supabase/errors";
 import { assertOk } from "@/services/supabase/query";
+import { assertBillingMoneyNonNegative, assertInvoiceTenantScope } from "@/platform/billing/invariants";
+
+function billingCtx(
+  tenantId: string,
+  action: string,
+  classification: PlatformRepositoryContext["classification"] = "financial",
+  extra?: Pick<PlatformRepositoryContext, "signal" | "trace" | "subsystem">,
+): PlatformRepositoryContext {
+  const isWrite = classification !== "readonly" && classification !== "eventual";
+  return {
+    action,
+    classification,
+    tenantScoped: true,
+    tenantId,
+    subsystem: isWrite ? "billing" : undefined,
+    ...extra,
+  };
+}
 
 const INVOICE_COLUMNS =
   "id, tenant_id, patient_id, invoice_code, service, amount, amount_paid, balance_due, invoice_date, due_date, paid_at, voided_at, void_reason, status, deleted_at, deleted_by, created_at, updated_at";
@@ -52,7 +71,8 @@ export interface BillingRepository {
     invoiceId: string,
     input: InvoicePaymentCreateInput,
     tenantId: string,
-    userId?: string | null
+    userId?: string | null,
+    trace?: PlatformRepositoryContext["trace"],
   ): Promise<InvoicePaymentCommandResult>;
   createPayment(invoiceId: string, patientId: string, input: InvoicePaymentCreateInput, tenantId: string, userId?: string | null): Promise<InvoicePayment>;
   archive(id: string, tenantId: string, userId: string): Promise<Invoice>;
@@ -67,8 +87,8 @@ export const billingRepository: BillingRepository = {
     const to = from + pageSize - 1;
     const searchTerm = params.search?.trim() ?? "";
 
-    let query = supabase
-      .from("invoices")
+    let query = platformRepository
+      .from("invoices", billingCtx(tenantId, "billing.invoice.listPaged", "readonly"))
       .select(INVOICE_COLUMNS, { count: "exact" })
       .eq("tenant_id", tenantId)
       .is("deleted_at", null);
@@ -113,8 +133,8 @@ export const billingRepository: BillingRepository = {
     const to = from + pageSize - 1;
     const searchTerm = params.search?.trim() ?? "";
 
-    let query = supabase
-      .from("invoices")
+    let query = platformRepository
+      .from("invoices", billingCtx(tenantId, "billing.invoice.listPagedWithRelations", "readonly"))
       .select(INVOICE_WITH_PATIENT_COLUMNS, { count: "exact" })
       .eq("tenant_id", tenantId)
       .is("deleted_at", null);
@@ -153,18 +173,24 @@ export const billingRepository: BillingRepository = {
     return { data: (data ?? []) as InvoiceWithPatient[], count: count ?? 0 };
   },
   async getById(id, tenantId) {
-    const result = await supabase
-      .from("invoices")
+    const result = await platformRepository
+      .from("invoices", billingCtx(tenantId, "billing.invoice.getById", "readonly"))
       .select(INVOICE_COLUMNS)
       .eq("id", id)
       .eq("tenant_id", tenantId)
       .is("deleted_at", null)
       .single();
 
-    return assertOk(result) as Invoice;
+    const invoice = assertOk(result) as Invoice;
+    assertInvoiceTenantScope(invoice.tenant_id, tenantId);
+    return invoice;
   },
   async getSummary(tenantId) {
-    const { data, error } = await (supabase.rpc as any)("get_invoice_summary", { _tenant_id: tenantId });
+    const { data, error } = await platformRepository.rpc(
+      "get_invoice_summary",
+      { _tenant_id: tenantId },
+      billingCtx(tenantId, "billing.invoice.getSummary", "readonly"),
+    );
     if (error) {
       throw new ServiceError(error.message ?? "Failed to load invoice summary", {
         code: error.code,
@@ -175,8 +201,8 @@ export const billingRepository: BillingRepository = {
     return ((data as any)?.[0] ?? { total_count: 0, paid_count: 0, paid_amount: 0, pending_amount: 0 }) as InvoiceSummary;
   },
   async countInRange(start, end, tenantId) {
-    const { count, error } = await supabase
-      .from("invoices")
+    const { count, error } = await platformRepository
+      .from("invoices", billingCtx(tenantId, "billing.invoice.countInRange", "readonly"))
       .select("id", { count: "exact", head: true })
       .eq("tenant_id", tenantId)
       .is("deleted_at", null)
@@ -195,8 +221,8 @@ export const billingRepository: BillingRepository = {
   async listByDateRange(start, end, tenantId, params) {
     const limit = params?.limit ?? 50;
     const offset = params?.offset ?? 0;
-    const { data, error } = await supabase
-      .from("invoices")
+    const { data, error } = await platformRepository
+      .from("invoices", billingCtx(tenantId, "billing.invoice.listByDateRange", "readonly"))
       .select(INVOICE_COLUMNS)
       .eq("tenant_id", tenantId)
       .is("deleted_at", null)
@@ -217,8 +243,8 @@ export const billingRepository: BillingRepository = {
   async listByPatient(patientId, tenantId, params) {
     const limit = params?.limit ?? 50;
     const offset = params?.offset ?? 0;
-    const { data, error } = await supabase
-      .from("invoices")
+    const { data, error } = await platformRepository
+      .from("invoices", billingCtx(tenantId, "billing.invoice.listByPatient", "readonly"))
       .select(INVOICE_COLUMNS)
       .eq("tenant_id", tenantId)
       .is("deleted_at", null)
@@ -236,8 +262,8 @@ export const billingRepository: BillingRepository = {
     return (data ?? []) as Invoice[];
   },
   async listPayments(invoiceId, tenantId) {
-    const { data, error } = await supabase
-      .from("invoice_payments")
+    const { data, error } = await platformRepository
+      .from("invoice_payments", billingCtx(tenantId, "billing.payment.list", "readonly"))
       .select(PAYMENT_COLUMNS)
       .eq("tenant_id", tenantId)
       .eq("invoice_id", invoiceId)
@@ -271,8 +297,8 @@ export const billingRepository: BillingRepository = {
     if (input.voided_at !== undefined) payload.voided_at = input.voided_at;
     if (input.void_reason !== undefined) payload.void_reason = input.void_reason;
 
-    const result = await supabase
-      .from("invoices")
+    const result = await platformRepository
+      .from("invoices", billingCtx(tenantId, "billing.invoice.create"))
       .insert(payload as never)
       .select(INVOICE_COLUMNS)
       .single();
@@ -296,8 +322,8 @@ export const billingRepository: BillingRepository = {
     if (input.status !== undefined) payload.status = input.status;
 
     if (Object.keys(payload).length === 0) {
-      const result = await supabase
-        .from("invoices")
+      const result = await platformRepository
+        .from("invoices", billingCtx(tenantId, "billing.invoice.getForUpdate", "readonly"))
         .select(INVOICE_COLUMNS)
         .eq("id", id)
         .eq("tenant_id", tenantId)
@@ -305,8 +331,8 @@ export const billingRepository: BillingRepository = {
       return assertOk(result) as Invoice;
     }
 
-    let query = supabase
-      .from("invoices")
+    let query = platformRepository
+      .from("invoices", billingCtx(tenantId, "billing.invoice.update"))
       .update(payload)
       .eq("id", id)
       .eq("tenant_id", tenantId);
@@ -322,7 +348,8 @@ export const billingRepository: BillingRepository = {
     }
     return (data ?? null) as Invoice | null;
   },
-  async postPaymentAtomic(invoiceId, input, tenantId, userId) {
+  async postPaymentAtomic(invoiceId, input, tenantId, userId, trace?: PlatformRepositoryContext["trace"]) {
+    assertBillingMoneyNonNegative(Number(input.amount), "payment.amount");
     const requestHash = [
       invoiceId,
       tenantId,
@@ -333,7 +360,7 @@ export const billingRepository: BillingRepository = {
       input.notes ?? "",
     ].join("|");
 
-    const { data, error } = await (supabase.rpc as any)("post_invoice_payment", {
+    const { data, error } = await platformRepository.rpc("post_invoice_payment", {
       p_invoice_id: invoiceId,
       p_tenant_id: tenantId,
       p_amount: input.amount,
@@ -344,7 +371,7 @@ export const billingRepository: BillingRepository = {
       p_idempotency_key: input.idempotency_key ?? null,
       p_request_hash: requestHash,
       p_user_id: userId ?? null,
-    });
+    }, billingCtx(tenantId, "billing.payment.postAtomic", "financial", trace ? { trace } : undefined));
     if (error) {
       throw new ServiceError(error.message ?? "Failed to post invoice payment", {
         code: error.code,
@@ -380,8 +407,8 @@ export const billingRepository: BillingRepository = {
     if (input.reference !== undefined) payload.reference = input.reference;
     if (input.notes !== undefined) payload.notes = input.notes;
 
-    const result = await supabase
-      .from("invoice_payments")
+    const result = await platformRepository
+      .from("invoice_payments", billingCtx(tenantId, "billing.payment.create"))
       .insert(payload as never)
       .select(PAYMENT_COLUMNS)
       .single();
@@ -389,8 +416,8 @@ export const billingRepository: BillingRepository = {
     return assertOk(result) as InvoicePayment;
   },
   async archive(id, tenantId, userId) {
-    const result = await supabase
-      .from("invoices")
+    const result = await platformRepository
+      .from("invoices", billingCtx(tenantId, "billing.invoice.archive"))
       .update({ deleted_at: new Date().toISOString(), deleted_by: userId })
       .eq("id", id)
       .eq("tenant_id", tenantId)
@@ -400,8 +427,8 @@ export const billingRepository: BillingRepository = {
     return assertOk(result) as Invoice;
   },
   async restore(id, tenantId) {
-    const result = await supabase
-      .from("invoices")
+    const result = await platformRepository
+      .from("invoices", billingCtx(tenantId, "billing.invoice.restore"))
       .update({ deleted_at: null, deleted_by: null })
       .eq("id", id)
       .eq("tenant_id", tenantId)

@@ -9,6 +9,8 @@ interface ImportMetaEnv {
   readonly VITE_APP_VERSION?: string;
   readonly VITE_AUTH_KILL_SWITCH?: string;
   readonly VITE_AUTH_RUNTIME_INVARIANTS?: "off" | "report" | "throw";
+  /** Enable super-admin runtime governance console outside local dev. */
+  readonly VITE_RUNTIME_OPS_CONSOLE?: string;
 }
 
 interface ImportMeta {

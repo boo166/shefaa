@@ -1,8 +1,8 @@
-import { useEffect } from "react";
+import { useEffect, useId } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { realtimeService } from "@/services/realtime/realtime.service";
+import { registerRealtimeSubscriptionIntent } from "@/platform/realtime/realtimeRuntime";
 import type { RealtimeTable } from "@/services/realtime/realtime.repository";
-import { useAuth } from "@/core/auth/authStore";
+import { isSuperAdmin, useAuth } from "@/core/auth/authStore";
 import { queryKeys } from "@/services/queryKeys";
 
 const reportKeyFactories: Array<(tenantId: string) => readonly unknown[]> = [
@@ -63,20 +63,22 @@ const INVALIDATION_MAP: Record<RealtimeTable, Array<(tenantId: string) => readon
 
 export function useRealtimeSubscription(tables: RealtimeTable[]) {
   const queryClient = useQueryClient();
-  const { user } = useAuth();
-  const tenantId = user?.tenantId;
+  const subscriberKey = useId();
+  const { user, sessionVersion, tenantOverride } = useAuth();
+  const tenantId = user ? (isSuperAdmin(user) ? tenantOverride?.id ?? null : user.tenantId) : null;
+  const userId = user?.id;
   const tablesKey = [...new Set(tables)].sort().join("|");
 
   useEffect(() => {
-    if (!tenantId) return;
+    if (!tenantId || !userId) return;
 
     const watchedTables = tablesKey.split("|").filter(Boolean) as RealtimeTable[];
     if (watchedTables.length === 0) return;
 
-    const subscription = realtimeService.subscribeToTenantTables(
-      tenantId,
-      watchedTables,
-      () => {
+    return registerRealtimeSubscriptionIntent(subscriberKey, {
+      ctx: { tenantId, sessionVersion, userId },
+      tables: watchedTables,
+      onEvent: () => {
         const keys: Array<readonly unknown[]> = [];
         for (const table of watchedTables) {
           const factories = INVALIDATION_MAP[table] ?? [];
@@ -97,10 +99,6 @@ export function useRealtimeSubscription(tables: RealtimeTable[]) {
           queryClient.invalidateQueries({ queryKey });
         });
       },
-    );
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [tenantId, tablesKey, queryClient]);
+    });
+  }, [subscriberKey, tenantId, userId, sessionVersion, tablesKey, queryClient]);
 }

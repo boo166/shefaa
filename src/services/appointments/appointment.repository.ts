@@ -7,7 +7,9 @@ import type {
   AppointmentWithPatientDoctor,
 } from "@/domain/appointment/appointment.types";
 import type { LimitOffsetParams, PagedResult } from "@/domain/shared/pagination.types";
-import { supabase } from "@/services/supabase/client";
+import { Capabilities } from "@/platform/authorization/capabilities";
+import { platformRepository } from "@/platform/data/platformRepository";
+import type { PlatformRepositoryContext } from "@/platform/data/platformRepository.context";
 import { ServiceError } from "@/services/supabase/errors";
 import { assertOk } from "@/services/supabase/query";
 
@@ -29,6 +31,18 @@ function escapeSearchTerm(term: string) {
   return term.replace(/[%_]/g, "\\$&").replace(/,/g, "\\,");
 }
 
+const APPT_READ_CAPS = [Capabilities.appointments.view, Capabilities.appointments.manage] as const;
+const APPT_WRITE_CAPS = [Capabilities.appointments.manage] as const;
+
+function appointmentCtx(
+  tenantId: string,
+  action: string,
+  classification: PlatformRepositoryContext["classification"] = "tenant-critical",
+  requiredCapabilities?: string[],
+): PlatformRepositoryContext {
+  return { action, classification, tenantScoped: true, tenantId, requiredCapabilities };
+}
+
 export interface AppointmentRepository {
   listPaged(params: AppointmentListParams, tenantId: string): Promise<PagedResult<Appointment>>;
   listPagedWithRelations(params: AppointmentListParams, tenantId: string): Promise<PagedResult<AppointmentWithPatientDoctor>>;
@@ -46,6 +60,14 @@ export interface AppointmentRepository {
   update(id: string, input: AppointmentUpdateInput, tenantId: string, expectedUpdatedAt?: string): Promise<Appointment | null>;
   archive(id: string, tenantId: string, userId: string): Promise<Appointment>;
   restore(id: string, tenantId: string): Promise<Appointment>;
+  describe?(): {
+    certified: boolean;
+    tenantBound: boolean;
+    retryAware: boolean;
+    staleContextSafe: boolean;
+    metricsEnabled: boolean;
+    requiredCapabilities: string[];
+  };
 }
 
 export const appointmentRepository: AppointmentRepository = {
@@ -56,8 +78,8 @@ export const appointmentRepository: AppointmentRepository = {
     const to = from + pageSize - 1;
     const searchTerm = params.search?.trim() ?? "";
 
-    let query = supabase
-      .from("appointments")
+    let query = platformRepository
+      .from("appointments", appointmentCtx(tenantId, "appointments.listPaged", "readonly", [...APPT_READ_CAPS]))
       .select(APPOINTMENT_COLUMNS, { count: "exact" })
       .eq("tenant_id", tenantId)
       .is("deleted_at", null);
@@ -111,8 +133,8 @@ export const appointmentRepository: AppointmentRepository = {
     const to = from + pageSize - 1;
     const searchTerm = params.search?.trim() ?? "";
 
-    let query = supabase
-      .from("appointments")
+    let query = platformRepository
+      .from("appointments", appointmentCtx(tenantId, "appointments.listPagedWithRelations", "readonly", [...APPT_READ_CAPS]))
       .select(APPOINTMENT_WITH_PATIENT_DOCTOR_COLUMNS, { count: "exact" })
       .eq("tenant_id", tenantId)
       .is("deleted_at", null);
@@ -162,8 +184,8 @@ export const appointmentRepository: AppointmentRepository = {
   async listByDateRange(start, end, tenantId, params) {
     const limit = params?.limit ?? 50;
     const offset = params?.offset ?? 0;
-    const { data, error } = await supabase
-      .from("appointments")
+    const { data, error } = await platformRepository
+      .from("appointments", appointmentCtx(tenantId, "appointments.listByDateRange", "readonly", [...APPT_READ_CAPS]))
       .select(APPOINTMENT_WITH_PATIENT_DOCTOR_COLUMNS)
       .eq("tenant_id", tenantId)
       .is("deleted_at", null)
@@ -184,8 +206,8 @@ export const appointmentRepository: AppointmentRepository = {
   async listByPatient(patientId, tenantId, params) {
     const limit = params?.limit ?? 50;
     const offset = params?.offset ?? 0;
-    const { data, error } = await supabase
-      .from("appointments")
+    const { data, error } = await platformRepository
+      .from("appointments", appointmentCtx(tenantId, "appointments.listByPatient", "readonly", [...APPT_READ_CAPS]))
       .select(APPOINTMENT_WITH_DOCTOR_COLUMNS)
       .eq("tenant_id", tenantId)
       .is("deleted_at", null)
@@ -206,8 +228,8 @@ export const appointmentRepository: AppointmentRepository = {
     const statuses = ["scheduled", "in_progress", "completed", "cancelled", "no_show"] as const;
     const results = await Promise.all(
       statuses.map(async (status) => {
-        const { count, error } = await supabase
-          .from("appointments")
+        const { count, error } = await platformRepository
+          .from("appointments", appointmentCtx(tenantId, `appointments.countByStatus.${status}`, "readonly", [...APPT_READ_CAPS]))
           .select("id", { count: "exact", head: true })
           .eq("tenant_id", tenantId)
           .is("deleted_at", null)
@@ -228,8 +250,8 @@ export const appointmentRepository: AppointmentRepository = {
     }, {});
   },
   async getById(id, tenantId) {
-    const result = await supabase
-      .from("appointments")
+    const result = await platformRepository
+      .from("appointments", appointmentCtx(tenantId, "appointments.getById", "readonly", [...APPT_READ_CAPS]))
       .select(APPOINTMENT_COLUMNS)
       .eq("id", id)
       .eq("tenant_id", tenantId)
@@ -239,8 +261,8 @@ export const appointmentRepository: AppointmentRepository = {
     return assertOk(result) as Appointment;
   },
   async hasConflict(doctorId, appointmentDate, tenantId, excludeId) {
-    let query = supabase
-      .from("appointments")
+    let query = platformRepository
+      .from("appointments", appointmentCtx(tenantId, "appointments.hasConflict", "readonly", [...APPT_READ_CAPS]))
       .select("id", { count: "exact", head: true })
       .eq("tenant_id", tenantId)
       .is("deleted_at", null)
@@ -275,8 +297,8 @@ export const appointmentRepository: AppointmentRepository = {
     if (input.status !== undefined) payload.status = input.status;
     if (input.notes !== undefined) payload.notes = input.notes;
 
-    const result = await supabase
-      .from("appointments")
+    const result = await platformRepository
+      .from("appointments", appointmentCtx(tenantId, "appointments.create", "critical", [...APPT_WRITE_CAPS]))
       .insert(payload as any)
       .select(APPOINTMENT_COLUMNS)
       .single();
@@ -295,8 +317,8 @@ export const appointmentRepository: AppointmentRepository = {
     if (input.notes !== undefined) payload.notes = input.notes;
 
     if (Object.keys(payload).length === 0) {
-      const result = await supabase
-        .from("appointments")
+      const result = await platformRepository
+        .from("appointments", appointmentCtx(tenantId, "appointments.getForUpdate", "readonly", [...APPT_READ_CAPS]))
         .select(APPOINTMENT_COLUMNS)
         .eq("id", id)
         .eq("tenant_id", tenantId)
@@ -304,8 +326,8 @@ export const appointmentRepository: AppointmentRepository = {
       return assertOk(result) as Appointment;
     }
 
-    let query = supabase
-      .from("appointments")
+    let query = platformRepository
+      .from("appointments", appointmentCtx(tenantId, "appointments.update", "critical", [...APPT_WRITE_CAPS]))
       .update(payload)
       .eq("id", id)
       .eq("tenant_id", tenantId);
@@ -322,8 +344,8 @@ export const appointmentRepository: AppointmentRepository = {
     return (data ?? null) as Appointment | null;
   },
   async archive(id, tenantId, userId) {
-    const result = await supabase
-      .from("appointments")
+    const result = await platformRepository
+      .from("appointments", appointmentCtx(tenantId, "appointments.archive", "critical", [...APPT_WRITE_CAPS]))
       .update({ deleted_at: new Date().toISOString(), deleted_by: userId })
       .eq("id", id)
       .eq("tenant_id", tenantId)
@@ -333,8 +355,8 @@ export const appointmentRepository: AppointmentRepository = {
     return assertOk(result) as Appointment;
   },
   async restore(id, tenantId) {
-    const result = await supabase
-      .from("appointments")
+    const result = await platformRepository
+      .from("appointments", appointmentCtx(tenantId, "appointments.restore", "critical", [...APPT_WRITE_CAPS]))
       .update({ deleted_at: null, deleted_by: null })
       .eq("id", id)
       .eq("tenant_id", tenantId)
@@ -342,5 +364,15 @@ export const appointmentRepository: AppointmentRepository = {
       .single();
 
     return assertOk(result) as Appointment;
+  },
+  describe() {
+    return {
+      certified: false,
+      tenantBound: true,
+      retryAware: true,
+      staleContextSafe: true,
+      metricsEnabled: true,
+      requiredCapabilities: [...APPT_READ_CAPS],
+    };
   },
 };

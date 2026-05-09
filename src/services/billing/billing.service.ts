@@ -30,7 +30,11 @@ import { getTenantContext } from "@/services/supabase/tenant";
 import { withAuthStaleGuard } from "@/services/auth/authContextSnapshot";
 import { auditLogService } from "@/services/settings/audit.service";
 import { rateLimitService } from "@/services/security/rateLimit.service";
+import { buildTracePayload } from "@/platform/observability/traceContext";
+import { createAsyncOperation } from "@/platform/runtime/async/createAsyncOperation";
 import { billingRepository } from "./billing.repository";
+import { runBillingPostPaymentWorkflow } from "./billingPostPayment.workflow";
+import { emitBillingReconciliationTick } from "./billingReconciliation";
 
 const todayDateKey = () => new Date().toISOString().slice(0, 10);
 
@@ -341,14 +345,40 @@ export const billingService = {
 
       await rateLimitService.assertAllowed("invoice_payment_post", [tenantId, userId]);
 
-      const command = invoicePaymentCommandResultSchema.parse(
-        await billingRepository.postPaymentAtomic(parsedId, {
-          ...parsed,
-          amount: paymentAmount,
-          paid_at: parsed.paid_at ?? new Date().toISOString(),
-          idempotency_key: parsed.idempotency_key ?? crypto.randomUUID(),
-        }, tenantId, userId),
-      );
+      const idempotencyKey = parsed.idempotency_key ?? crypto.randomUUID();
+      const trace = buildTracePayload({ tenantId, actorId: userId ?? undefined });
+
+      const { command: rawCommand, workflowTraceId } = await runBillingPostPaymentWorkflow({
+        invoiceId: parsedId,
+        tenantId,
+        userId,
+        idempotencyKey,
+        postAtomic: () =>
+          createAsyncOperation(
+            "billing.payment.postAtomic",
+            async (ctx) =>
+              billingRepository.postPaymentAtomic(
+                parsedId,
+                {
+                  ...parsed,
+                  amount: paymentAmount,
+                  paid_at: parsed.paid_at ?? new Date().toISOString(),
+                  idempotency_key: idempotencyKey,
+                },
+                tenantId,
+                userId,
+                {
+                  requestTraceId: trace.requestTraceId,
+                  operationTraceId: ctx.operationTraceId,
+                  tenantId,
+                  actorId: userId ?? undefined,
+                },
+              ),
+            { maxRetries: 2, timeoutMs: 120_000, retryDelayMs: 500, parentTrace: trace },
+          ),
+      });
+
+      const command = invoicePaymentCommandResultSchema.parse(rawCommand);
 
       if (command.result_code === "IDEMPOTENCY_MISMATCH") {
         throw new BusinessRuleError(command.message ?? "Idempotency key mismatch", {
@@ -364,6 +394,15 @@ export const billingService = {
 
       const invoice = invoiceSchema.parse(command.invoice);
       const payment = invoicePaymentSchema.parse(command.payment);
+
+      emitBillingReconciliationTick({
+        tenantId,
+        invoiceId: parsedId,
+        resultCode: command.result_code,
+        idempotencyReplay: command.idempotency_replay,
+        workflowTraceId,
+        requestTraceId: trace.requestTraceId,
+      });
 
       try {
         await auditLogService.logEvent({

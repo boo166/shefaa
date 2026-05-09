@@ -24,6 +24,53 @@ const futureDueDate = "2099-04-20";
 
 const emitDomainEvent = vi.hoisted(() => vi.fn());
 
+const billingAuthExtras = vi.hoisted(() => ({
+  getStateExtras: () => ({} as Record<string, unknown>),
+}));
+
+vi.mock("@/platform/runtime/mode/runtimeModeController", () => ({
+  runtimeModeController: {
+    getSnapshot: () => ({
+      effective: { effectiveMode: "NORMAL", version: 0, freezes: undefined },
+      global: null,
+      tenant: null,
+    }),
+    subscribe: () => () => {},
+    startAutoRefresh: () => () => {},
+    refresh: async () => {},
+  },
+}));
+
+vi.mock("@/core/auth/authStore", () => ({
+  useAuth: {
+    getState: () => {
+      const priv = {
+        currentLevel: "aal1" as const,
+        nextLevel: "aal2" as const,
+        verifiedFactorCount: 0,
+        unverifiedFactorCount: 0,
+        loadedAt: new Date().toISOString(),
+      };
+      return {
+        hasPermission: () => true,
+        user: {
+          id: userId,
+          tenantId,
+          tenantRoles: ["clinic_admin"],
+          globalRoles: [] as string[],
+          tenantStatus: "active" as const,
+        },
+        tenantOverride: null,
+        sessionVersion: `${userId}:${tenantId}:1`,
+        privilegedAuth: priv,
+        ...billingAuthExtras.getStateExtras(),
+      };
+    },
+  },
+  selectEffectiveTenantId: (s: { user?: { tenantId?: string | null }; tenantOverride?: { id: string } | null }) =>
+    s.user?.tenantId ?? s.tenantOverride?.id ?? null,
+}));
+
 vi.mock("@/services/billing/billing.repository", () => ({
   billingRepository: {
     listPaged: vi.fn(),
@@ -95,38 +142,27 @@ const buildInvoice = (overrides: Partial<InvoiceRow> = {}): InvoiceRow =>
     ...overrides,
   });
 
+import { billingService } from "@/services/billing/billing.service";
+
 describe("billingService permissions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.resetModules();
+    billingAuthExtras.getStateExtras = () => ({});
     emitDomainEvent.mockResolvedValue(undefined);
     vi.mocked(featureAccessService, true).assertFeatureAccess.mockResolvedValue(billingEntitlementSnapshot);
   });
 
   it("blocks list when lacking billing permissions", async () => {
-    vi.doMock("@/core/auth/authStore", () => ({
-      useAuth: {
-        getState: () => ({ hasPermission: () => false }),
-      },
-    }));
-    const { billingService } = await import("@/services/billing/billing.service");
-
+    billingAuthExtras.getStateExtras = () => ({ hasPermission: () => false });
     await expect(
       billingService.listPaged({ page: 1, pageSize: 10 }),
     ).rejects.toThrow("Not authorized");
   });
 
   it("blocks billing access when the subscription does not include billing", async () => {
-    vi.doMock("@/core/auth/authStore", () => ({
-      useAuth: {
-        getState: () => ({ hasPermission: () => true }),
-      },
-    }));
     vi.mocked(featureAccessService, true).assertFeatureAccess.mockRejectedValue(
       new Error("Billing is not available on the current subscription."),
     );
-
-    const { billingService } = await import("@/services/billing/billing.service");
 
     await expect(
       billingService.listPaged({ page: 1, pageSize: 10 }),
@@ -136,16 +172,8 @@ describe("billingService permissions", () => {
   });
 
   it("creates a pending invoice with derived balances", async () => {
-    vi.doMock("@/core/auth/authStore", () => ({
-      useAuth: {
-        getState: () => ({ hasPermission: () => true }),
-      },
-    }));
-
     const repo = vi.mocked(billingRepository, true);
     repo.create.mockResolvedValue(buildInvoice());
-
-    const { billingService } = await import("@/services/billing/billing.service");
 
     await billingService.create({
       patient_id: patientId,
@@ -169,24 +197,6 @@ describe("billingService permissions", () => {
   });
 
   it("posts a partial payment and keeps the invoice partially paid", async () => {
-    vi.doMock("@/core/auth/authStore", () => ({
-      useAuth: {
-        getState: () => ({
-          hasPermission: () => true,
-          user: { id: userId, tenantId, tenantRoles: ["clinic_admin"], globalRoles: [] },
-          tenantOverride: null,
-          sessionVersion: `${userId}:${tenantId}:1`,
-          privilegedAuth: {
-            currentLevel: "aal1",
-            nextLevel: "aal2",
-            verifiedFactorCount: 0,
-            unverifiedFactorCount: 0,
-            loadedAt: new Date().toISOString(),
-          },
-        }),
-      },
-    }));
-
     const repo = vi.mocked(billingRepository, true);
     repo.getById.mockResolvedValue(buildInvoice());
     repo.postPaymentAtomic.mockResolvedValue({
@@ -215,7 +225,6 @@ describe("billingService permissions", () => {
       },
     });
 
-    const { billingService } = await import("@/services/billing/billing.service");
     const result = await billingService.postPayment(invoiceId, {
       amount: 40,
       payment_method: "cash",
@@ -231,6 +240,7 @@ describe("billingService permissions", () => {
       }),
       tenantId,
       userId,
+      expect.any(Object),
     );
     expect(result.invoice.status).toBe("partially_paid");
     expect(result.invoice.balance_due).toBe(80);
@@ -238,24 +248,6 @@ describe("billingService permissions", () => {
   });
 
   it("emits InvoicePaid when a posted payment settles the invoice", async () => {
-    vi.doMock("@/core/auth/authStore", () => ({
-      useAuth: {
-        getState: () => ({
-          hasPermission: () => true,
-          user: { id: userId, tenantId, tenantRoles: ["clinic_admin"], globalRoles: [] },
-          tenantOverride: null,
-          sessionVersion: `${userId}:${tenantId}:1`,
-          privilegedAuth: {
-            currentLevel: "aal1",
-            nextLevel: "aal2",
-            verifiedFactorCount: 0,
-            unverifiedFactorCount: 0,
-            loadedAt: new Date().toISOString(),
-          },
-        }),
-      },
-    }));
-
     const repo = vi.mocked(billingRepository, true);
     repo.getById.mockResolvedValue(buildInvoice({
       amount_paid: 30,
@@ -288,7 +280,6 @@ describe("billingService permissions", () => {
       },
     });
 
-    const { billingService } = await import("@/services/billing/billing.service");
     const result = await billingService.postPayment(invoiceId, {
       amount: 90,
       payment_method: "card",
@@ -310,20 +301,12 @@ describe("billingService permissions", () => {
   });
 
   it("blocks voiding an invoice that already has posted payments", async () => {
-    vi.doMock("@/core/auth/authStore", () => ({
-      useAuth: {
-        getState: () => ({ hasPermission: () => true }),
-      },
-    }));
-
     const repo = vi.mocked(billingRepository, true);
     repo.getById.mockResolvedValue(buildInvoice({
       amount_paid: 10,
       balance_due: 110,
       status: "partially_paid",
     }));
-
-    const { billingService } = await import("@/services/billing/billing.service");
 
     await expect(
       billingService.update(invoiceId, {
@@ -334,12 +317,6 @@ describe("billingService permissions", () => {
   });
 
   it("voids an unpaid invoice when a reason is provided", async () => {
-    vi.doMock("@/core/auth/authStore", () => ({
-      useAuth: {
-        getState: () => ({ hasPermission: () => true }),
-      },
-    }));
-
     const repo = vi.mocked(billingRepository, true);
     repo.getById.mockResolvedValue(buildInvoice({
       status: "pending",
@@ -354,7 +331,6 @@ describe("billingService permissions", () => {
       voided_at: "2026-04-16T11:00:00.000Z",
     }));
 
-    const { billingService } = await import("@/services/billing/billing.service");
     const result = await billingService.voidInvoice(
       invoiceId,
       "Duplicate invoice created at reception",

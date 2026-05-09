@@ -17,8 +17,19 @@ import type {
   AdminTenantUsage,
 } from "@/domain/admin/admin.types";
 import type { ProfileWithRoles } from "@/domain/settings/profile.types";
-import { supabase } from "@/services/supabase/client";
+import { platformRepository } from "@/platform/data/platformRepository";
+import type { PlatformRepositoryContext } from "@/platform/data/platformRepository.context";
 import { ServiceError } from "@/services/supabase/errors";
+
+function adminCtx(action: string, classification: PlatformRepositoryContext["classification"] = "critical", tenantId?: string | null): PlatformRepositoryContext {
+  return {
+    action,
+    classification,
+    tenantScoped: Boolean(tenantId),
+    tenantId: tenantId ?? null,
+    requiredCapabilities: ["platform.super_admin"],
+  };
+}
 
 const TENANT_COLUMNS =
   "id, name, slug, email, phone, address, pending_owner_email, status, status_reason, status_changed_at, created_at, subscriptions(plan, status)";
@@ -100,11 +111,19 @@ export interface AdminRepository {
   getAuthMetricTrend(bucketMinutes?: number, bucketCount?: number, tenantId?: string): Promise<AdminAuthMetricTrendPoint[]>;
   getTenantUsage(tenantId: string): Promise<AdminTenantUsage>;
   retryJobs(input: AdminJobRetryInput & AdminMutationContext): Promise<AdminRecentJobActivity[]>;
+  describe?(): {
+    certified: boolean;
+    tenantBound: boolean;
+    retryAware: boolean;
+    staleContextSafe: boolean;
+    metricsEnabled: boolean;
+    requiredCapabilities: string[];
+  };
 }
 
 async function selectTenantById(id: string) {
-  const { data, error } = await supabase
-    .from("tenants")
+  const { data, error } = await platformRepository
+    .from("tenants", adminCtx("admin.selectTenantById", "readonly"))
     .select(TENANT_COLUMNS)
     .eq("id", id)
     .single();
@@ -120,8 +139,8 @@ async function selectTenantById(id: string) {
 }
 
 async function selectPricingPlanById(id: string) {
-  const { data, error } = await supabase
-    .from("pricing_plans")
+  const { data, error } = await platformRepository
+    .from("pricing_plans", adminCtx("admin.selectPricingPlanById", "readonly"))
     .select(PRICING_PLAN_COLUMNS)
     .eq("id", id)
     .single();
@@ -133,12 +152,12 @@ async function selectPricingPlanById(id: string) {
     });
   }
 
-  return data as AdminPricingPlan;
+  return data as unknown as AdminPricingPlan;
 }
 
 async function selectSubscriptionById(id: string) {
-  const { data, error } = await supabase
-    .from("subscriptions")
+  const { data, error } = await platformRepository
+    .from("subscriptions", adminCtx("admin.selectSubscriptionById", "readonly"))
     .select(SUBSCRIPTION_COLUMNS)
     .eq("id", id)
     .single();
@@ -150,7 +169,7 @@ async function selectSubscriptionById(id: string) {
     });
   }
 
-  return data as AdminSubscription;
+  return data as unknown as AdminSubscription;
 }
 
 export const adminRepository: AdminRepository = {
@@ -160,8 +179,8 @@ export const adminRepository: AdminRepository = {
     const ascending = sort?.ascending ?? false;
 
     if (plan) {
-      let planQuery = supabase
-        .from("subscriptions")
+      let planQuery = platformRepository
+        .from("subscriptions", adminCtx("admin.listTenantsPaged.byPlan", "readonly"))
         .select("plan, status, tenants(id, name, slug, email, phone, address, pending_owner_email, status, status_reason, status_changed_at, created_at)", { count: "exact" })
         .eq("plan", plan)
         .range(offset, to);
@@ -199,8 +218,8 @@ export const adminRepository: AdminRepository = {
       return { data: mapped, count: count ?? 0 };
     }
 
-    let query = supabase
-      .from("tenants")
+    let query = platformRepository
+      .from("tenants", adminCtx("admin.listTenantsPaged", "readonly"))
       .select(TENANT_COLUMNS, { count: "exact" })
       .range(offset, to);
 
@@ -225,7 +244,7 @@ export const adminRepository: AdminRepository = {
     return { data: mapped, count: count ?? 0 };
   },
   async createTenant(input, context, reason) {
-    const { data, error } = await (supabase.rpc as any)("admin_create_tenant", {
+    const { data, error } = await platformRepository.rpc("admin_create_tenant", {
       _name: input.name,
       _slug: input.slug,
       _email: input.email ?? null,
@@ -236,7 +255,7 @@ export const adminRepository: AdminRepository = {
       _reason: reason ?? null,
       _idempotency_key: context?.idempotencyKey ?? null,
       _step_up_grant_id: context?.stepUpGrantId ?? null,
-    });
+    }, adminCtx("admin.createTenant", "critical"));
 
     if (error) {
       throw new ServiceError(error.message ?? "Failed to create tenant", {
@@ -249,7 +268,7 @@ export const adminRepository: AdminRepository = {
   },
   async updateTenant(id, input, context, reason) {
     const current = await selectTenantById(id);
-    const { data, error } = await (supabase.rpc as any)("admin_update_tenant", {
+    const { data, error } = await platformRepository.rpc("admin_update_tenant", {
       _tenant_id: id,
       _name: input.name ?? current.name,
       _slug: input.slug ?? current.slug,
@@ -261,7 +280,7 @@ export const adminRepository: AdminRepository = {
       _reason: reason ?? null,
       _idempotency_key: context?.idempotencyKey ?? null,
       _step_up_grant_id: context?.stepUpGrantId ?? null,
-    });
+    }, adminCtx("admin.updateTenant", "critical", null));
 
     if (error) {
       throw new ServiceError(error.message ?? "Failed to update tenant", {
@@ -273,14 +292,14 @@ export const adminRepository: AdminRepository = {
     return await selectTenantById(data as string);
   },
   async updateTenantStatus(id, input, context) {
-    const { data, error } = await (supabase.rpc as any)("admin_update_tenant_status", {
+    const { data, error } = await platformRepository.rpc("admin_update_tenant_status", {
       _tenant_id: id,
       _status: input.status,
       _status_reason: input.status_reason ?? null,
       _request_id: context?.requestId ?? null,
       _idempotency_key: context?.idempotencyKey ?? null,
       _step_up_grant_id: context?.stepUpGrantId ?? null,
-    });
+    }, adminCtx("admin.updateTenantStatus", "critical", null));
 
     if (error) {
       throw new ServiceError(error.message ?? "Failed to update tenant status", {
@@ -292,14 +311,14 @@ export const adminRepository: AdminRepository = {
     return await selectTenantById(data as string);
   },
   async updateTenantFeatureFlag(tenantId, featureKey, enabled, context) {
-    const { data, error } = await (supabase.rpc as any)("admin_upsert_tenant_feature_flag", {
+    const { data, error } = await platformRepository.rpc("admin_upsert_tenant_feature_flag", {
       _tenant_id: tenantId,
       _feature_key: featureKey,
       _enabled: enabled,
       _request_id: context?.requestId ?? null,
       _idempotency_key: context?.idempotencyKey ?? null,
       _step_up_grant_id: context?.stepUpGrantId ?? null,
-    });
+    }, adminCtx("admin.updateTenantFeatureFlag", "critical", null));
 
     if (error) {
       throw new ServiceError(error.message ?? "Failed to update tenant feature flag", {
@@ -308,8 +327,8 @@ export const adminRepository: AdminRepository = {
       });
     }
 
-    const { data: row, error: rowError } = await supabase
-      .from("feature_flags")
+    const { data: row, error: rowError } = await platformRepository
+      .from("feature_flags", adminCtx("admin.selectTenantFeatureFlag", "readonly", tenantId))
       .select("id, feature_key, enabled")
       .eq("id", data as string)
       .single();
@@ -321,14 +340,14 @@ export const adminRepository: AdminRepository = {
       });
     }
 
-    return row as { id: string; feature_key: string; enabled: boolean };
+    return row as unknown as { id: string; feature_key: string; enabled: boolean };
   },
   async listProfilesWithRolesPaged({ limit, offset, search, sort }) {
     const to = Math.max(0, offset + limit - 1);
     const sortColumn = sort?.column ?? "created_at";
     const ascending = sort?.ascending ?? false;
-    let profilesQuery = supabase
-      .from("profiles")
+    let profilesQuery = platformRepository
+      .from("profiles", adminCtx("admin.listProfilesWithRolesPaged", "readonly"))
       .select(PROFILE_COLUMNS, { count: "exact" })
       .range(offset, to);
     profilesQuery = profilesQuery.order(sortColumn, { ascending });
@@ -351,9 +370,9 @@ export const adminRepository: AdminRepository = {
       return { data: [], count: count ?? 0 };
     }
 
-    const userIds = profiles.map((profile) => profile.user_id);
-    const { data: roles, error: rolesError } = await supabase
-      .from("user_roles")
+    const userIds = profiles.map((profile: any) => profile.user_id);
+    const { data: roles, error: rolesError } = await platformRepository
+      .from("user_roles", adminCtx("admin.listProfilesWithRolesPaged.userRoles", "readonly"))
       .select("user_id, role")
       .in("user_id", userIds);
 
@@ -364,7 +383,10 @@ export const adminRepository: AdminRepository = {
       });
     }
 
-    const { data: globalRoles, error: globalRolesError } = await (supabase.from as any)("user_global_roles")
+    const { data: globalRoles, error: globalRolesError } = await (platformRepository.from as any)(
+      "user_global_roles",
+      adminCtx("admin.listProfilesWithRolesPaged.globalRoles", "readonly"),
+    )
       .select("user_id, role")
       .in("user_id", userIds)
       .is("revoked_at", null);
@@ -378,18 +400,18 @@ export const adminRepository: AdminRepository = {
 
     const rolesByUserId = new Map<string, ProfileWithRoles["user_roles"]>();
 
-    for (const role of roles ?? []) {
+    for (const role of (roles ?? []) as any[]) {
       const currentRoles = rolesByUserId.get(role.user_id) ?? [];
       rolesByUserId.set(role.user_id, [...currentRoles, { role: role.role }]);
     }
 
-    for (const role of globalRoles ?? []) {
+    for (const role of (globalRoles ?? []) as any[]) {
       const currentRoles = rolesByUserId.get(role.user_id) ?? [];
       rolesByUserId.set(role.user_id, [...currentRoles, { role: role.role }]);
     }
 
-    const data = profiles.map((profile) => ({
-      ...profile,
+    const data = (profiles as any[]).map((profile) => ({
+      ...(profile as any),
       user_roles: rolesByUserId.get(profile.user_id) ?? [],
     })) as ProfileWithRoles[];
 
@@ -399,8 +421,8 @@ export const adminRepository: AdminRepository = {
     const to = Math.max(0, offset + limit - 1);
     const sortColumn = sort?.column ?? "created_at";
     const ascending = sort?.ascending ?? false;
-    let query = supabase
-      .from("subscriptions")
+    let query = platformRepository
+      .from("subscriptions", adminCtx("admin.listSubscriptionsPaged", "readonly"))
       .select(SUBSCRIPTION_COLUMNS, { count: "exact" })
       .range(offset, to);
 
@@ -428,11 +450,11 @@ export const adminRepository: AdminRepository = {
       });
     }
 
-    return { data: (data ?? []) as AdminSubscription[], count: count ?? 0 };
+    return { data: (data ?? []) as unknown as AdminSubscription[], count: count ?? 0 };
   },
   async listPricingPlans() {
-    const { data, error } = await supabase
-      .from("pricing_plans")
+    const { data, error } = await platformRepository
+      .from("pricing_plans", adminCtx("admin.listPricingPlans", "readonly"))
       .select(PRICING_PLAN_COLUMNS)
       .is("deleted_at", null)
       .order("display_order", { ascending: true })
@@ -445,10 +467,10 @@ export const adminRepository: AdminRepository = {
       });
     }
 
-    return (data ?? []) as AdminPricingPlan[];
+    return (data ?? []) as unknown as AdminPricingPlan[];
   },
   async createPricingPlan(input, context) {
-    const { data, error } = await (supabase.rpc as any)("admin_create_pricing_plan", {
+    const { data, error } = await platformRepository.rpc("admin_create_pricing_plan", {
       _plan_code: input.plan_code,
       _name: input.name,
       _description: input.description ?? null,
@@ -465,7 +487,7 @@ export const adminRepository: AdminRepository = {
       _request_id: context?.requestId ?? null,
       _idempotency_key: context?.idempotencyKey ?? null,
       _step_up_grant_id: context?.stepUpGrantId ?? null,
-    });
+    }, adminCtx("admin.createPricingPlan", "critical"));
 
     if (error) {
       throw new ServiceError(error.message ?? "Failed to create pricing plan", {
@@ -481,7 +503,7 @@ export const adminRepository: AdminRepository = {
       return await selectPricingPlanById(id);
     }
 
-    const { data, error } = await (supabase.rpc as any)("admin_update_pricing_plan", {
+    const { data, error } = await platformRepository.rpc("admin_update_pricing_plan", {
       _plan_id: id,
       _name: input.name ?? null,
       _description: input.description ?? null,
@@ -498,7 +520,7 @@ export const adminRepository: AdminRepository = {
       _request_id: context?.requestId ?? null,
       _idempotency_key: context?.idempotencyKey ?? null,
       _step_up_grant_id: context?.stepUpGrantId ?? null,
-    });
+    }, adminCtx("admin.updatePricingPlan", "critical"));
 
     if (error) {
       throw new ServiceError(error.message ?? "Failed to update pricing plan", {
@@ -510,12 +532,12 @@ export const adminRepository: AdminRepository = {
     return await selectPricingPlanById(data as string);
   },
   async deletePricingPlan(id, context) {
-    const { error } = await (supabase.rpc as any)("admin_delete_pricing_plan", {
+    const { error } = await platformRepository.rpc("admin_delete_pricing_plan", {
       _plan_id: id,
       _request_id: context?.requestId ?? null,
       _idempotency_key: context?.idempotencyKey ?? null,
       _step_up_grant_id: context?.stepUpGrantId ?? null,
-    });
+    }, adminCtx("admin.deletePricingPlan", "critical"));
 
     if (error) {
       throw new ServiceError(error.message ?? "Failed to delete pricing plan", {
@@ -525,7 +547,11 @@ export const adminRepository: AdminRepository = {
     }
   },
   async getSubscriptionStats() {
-    const { data, error } = await supabase.rpc("admin_subscription_stats");
+    const { data, error } = await platformRepository.rpc(
+      "admin_subscription_stats",
+      {},
+      adminCtx("admin.subscriptionStats", "readonly"),
+    );
     if (error) {
       throw new ServiceError(error.message ?? "Failed to load subscription stats", {
         code: error.code,
@@ -536,9 +562,9 @@ export const adminRepository: AdminRepository = {
     return (data ?? {}) as AdminSubscriptionStats;
   },
   async getOperationsAlertSummary(tenantId?: string) {
-    const { data, error } = await (supabase.rpc as any)("admin_operations_alert_summary", {
+    const { data, error } = await platformRepository.rpc("admin_operations_alert_summary", {
       _tenant_id: tenantId ?? null,
-    });
+    }, adminCtx("admin.operationsAlertSummary", "readonly", tenantId ?? null));
     if (error) {
       throw new ServiceError(error.message ?? "Failed to load operations alert summary", {
         code: error.code,
@@ -553,10 +579,10 @@ export const adminRepository: AdminRepository = {
     return ((data ?? {}) as AdminOperationsAlertSummary);
   },
   async getRecentJobActivity(limit = 10, tenantId?: string) {
-    const { data, error } = await (supabase.rpc as any)("admin_recent_job_activity", {
+    const { data, error } = await platformRepository.rpc("admin_recent_job_activity", {
       _limit: limit,
       _tenant_id: tenantId ?? null,
-    });
+    }, adminCtx("admin.recentJobActivity", "readonly", tenantId ?? null));
     if (error) {
       throw new ServiceError(error.message ?? "Failed to load recent job activity", {
         code: error.code,
@@ -567,10 +593,10 @@ export const adminRepository: AdminRepository = {
     return (Array.isArray(data) ? data : []) as AdminRecentJobActivity[];
   },
   async getRecentActivity(limit = 20, tenantId?: string) {
-    const { data, error } = await (supabase.rpc as any)("admin_recent_activity", {
+    const { data, error } = await platformRepository.rpc("admin_recent_activity", {
       _limit: limit,
       _tenant_id: tenantId ?? null,
-    });
+    }, adminCtx("admin.recentActivity", "readonly", tenantId ?? null));
     if (error) {
       throw new ServiceError(error.message ?? "Failed to load recent admin activity", {
         code: error.code,
@@ -581,10 +607,10 @@ export const adminRepository: AdminRepository = {
     return (Array.isArray(data) ? data : []) as AdminRecentActivity[];
   },
   async getRecentSystemErrors(limit = 10, tenantId?: string) {
-    const { data, error } = await (supabase.rpc as any)("admin_recent_system_errors", {
+    const { data, error } = await platformRepository.rpc("admin_recent_system_errors", {
       _limit: limit,
       _tenant_id: tenantId ?? null,
-    });
+    }, adminCtx("admin.recentSystemErrors", "readonly", tenantId ?? null));
     if (error) {
       throw new ServiceError(error.message ?? "Failed to load recent system errors", {
         code: error.code,
@@ -595,11 +621,11 @@ export const adminRepository: AdminRepository = {
     return (Array.isArray(data) ? data : []) as AdminRecentSystemError[];
   },
   async getClientErrorTrend(bucketMinutes = 15, bucketCount = 6, tenantId?: string) {
-    const { data, error } = await (supabase.rpc as any)("admin_client_error_trend", {
+    const { data, error } = await platformRepository.rpc("admin_client_error_trend", {
       _bucket_minutes: bucketMinutes,
       _bucket_count: bucketCount,
       _tenant_id: tenantId ?? null,
-    });
+    }, adminCtx("admin.clientErrorTrend", "readonly", tenantId ?? null));
     if (error) {
       throw new ServiceError(error.message ?? "Failed to load client error trend", {
         code: error.code,
@@ -610,11 +636,11 @@ export const adminRepository: AdminRepository = {
     return (Array.isArray(data) ? data : []) as AdminClientErrorTrendPoint[];
   },
   async getAuthMetricTrend(bucketMinutes = 15, bucketCount = 6, tenantId?: string) {
-    const { data, error } = await (supabase.rpc as any)("admin_auth_metric_trend", {
+    const { data, error } = await platformRepository.rpc("admin_auth_metric_trend", {
       _bucket_minutes: bucketMinutes,
       _bucket_count: bucketCount,
       _tenant_id: tenantId ?? null,
-    });
+    }, adminCtx("admin.authMetricTrend", "readonly", tenantId ?? null));
     if (error) {
       throw new ServiceError(error.message ?? "Failed to load auth metric trend", {
         code: error.code,
@@ -629,7 +655,7 @@ export const adminRepository: AdminRepository = {
       return await selectSubscriptionById(id);
     }
 
-    const { data, error } = await (supabase.rpc as any)("admin_update_subscription", {
+    const { data, error } = await platformRepository.rpc("admin_update_subscription", {
       _subscription_id: id,
       _plan: input.plan ?? null,
       _status: input.status ?? null,
@@ -637,7 +663,7 @@ export const adminRepository: AdminRepository = {
       _request_id: context?.requestId ?? null,
       _idempotency_key: context?.idempotencyKey ?? null,
       _step_up_grant_id: context?.stepUpGrantId ?? null,
-    });
+    }, adminCtx("admin.updateSubscription", "critical"));
 
     if (error) {
       throw new ServiceError(error.message ?? "Failed to update subscription", {
@@ -649,9 +675,9 @@ export const adminRepository: AdminRepository = {
     return await selectSubscriptionById(data as string);
   },
   async getTenantUsage(tenantId) {
-    const { data, error } = await (supabase.rpc as any)("admin_tenant_usage_summary", {
+    const { data, error } = await platformRepository.rpc("admin_tenant_usage_summary", {
       _tenant_id: tenantId,
-    });
+    }, adminCtx("admin.tenantUsage", "tenant-critical", tenantId));
 
     if (error) {
       throw new ServiceError(error.message ?? "Failed to load tenant usage", {
@@ -663,13 +689,13 @@ export const adminRepository: AdminRepository = {
     return ((Array.isArray(data) ? data[0] : data) ?? {}) as AdminTenantUsage;
   },
   async retryJobs(input) {
-    const { data, error } = await (supabase.rpc as any)("admin_retry_jobs", {
+    const { data, error } = await platformRepository.rpc("admin_retry_jobs", {
       _job_ids: input.job_ids,
       _request_id: input.requestId,
       _reason: input.reason,
       _idempotency_key: input.idempotencyKey,
       _step_up_grant_id: input.stepUpGrantId ?? null,
-    });
+    }, adminCtx("admin.retryJobs", "critical", null));
 
     if (error) {
       throw new ServiceError(error.message ?? "Failed to retry jobs", {
@@ -679,5 +705,15 @@ export const adminRepository: AdminRepository = {
     }
 
     return (Array.isArray(data) ? data : []) as AdminRecentJobActivity[];
+  },
+  describe() {
+    return {
+      certified: false,
+      tenantBound: false,
+      retryAware: true,
+      staleContextSafe: true,
+      metricsEnabled: true,
+      requiredCapabilities: ["platform.super_admin"],
+    };
   },
 };

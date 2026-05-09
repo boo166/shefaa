@@ -1,8 +1,18 @@
 import type { Notification, NotificationCreateInput } from "@/domain/notifications/notification.types";
+import { platformRepository } from "@/platform/data/platformRepository";
+import type { PlatformRepositoryContext } from "@/platform/data/platformRepository.context";
 import { supabase } from "@/services/supabase/client";
 import { ServiceError } from "@/services/supabase/errors";
 
 const NOTIFICATION_COLUMNS = "id, tenant_id, user_id, title, body, type, read, created_at";
+
+function notificationCtx(
+  tenantId: string | null,
+  action: string,
+  classification: PlatformRepositoryContext["classification"] = "tenant-critical",
+): PlatformRepositoryContext {
+  return { action, classification, tenantScoped: Boolean(tenantId), tenantId };
+}
 
 export interface NotificationRepository {
   listByUserPaged(tenantId: string, userId: string, limit: number, offset: number): Promise<{ data: Notification[]; count: number }>;
@@ -14,13 +24,21 @@ export interface NotificationRepository {
     userId: string,
     onInsert: (payload: Notification) => void,
   ): { unsubscribe: () => void };
+  describe?(): {
+    certified: boolean;
+    tenantBound: boolean;
+    retryAware: boolean;
+    staleContextSafe: boolean;
+    metricsEnabled: boolean;
+    requiredCapabilities: string[];
+  };
 }
 
 export const notificationRepository: NotificationRepository = {
   async listByUserPaged(tenantId, userId, limit, offset) {
     const to = Math.max(0, offset + limit - 1);
-    const { data, error, count } = await supabase
-      .from("notifications")
+    const { data, error, count } = await platformRepository
+      .from("notifications", notificationCtx(tenantId, "notifications.listByUserPaged", "readonly"))
       .select(NOTIFICATION_COLUMNS, { count: "exact" })
       .eq("tenant_id", tenantId)
       .eq("user_id", userId)
@@ -32,8 +50,8 @@ export const notificationRepository: NotificationRepository = {
     return { data: (data ?? []) as Notification[], count: count ?? 0 };
   },
   async markRead(id, tenantId, userId) {
-    const { error } = await supabase
-      .from("notifications")
+    const { error } = await platformRepository
+      .from("notifications", notificationCtx(tenantId, "notifications.markRead", "critical"))
       .update({ read: true })
       .eq("id", id)
       .eq("tenant_id", tenantId)
@@ -44,8 +62,8 @@ export const notificationRepository: NotificationRepository = {
   },
   async markManyRead(ids, tenantId, userId) {
     if (ids.length === 0) return;
-    const { error } = await supabase
-      .from("notifications")
+    const { error } = await platformRepository
+      .from("notifications", notificationCtx(tenantId, "notifications.markManyRead", "critical"))
       .update({ read: true })
       .in("id", ids)
       .eq("tenant_id", tenantId)
@@ -55,8 +73,8 @@ export const notificationRepository: NotificationRepository = {
     }
   },
   async create(input) {
-    const { data, error } = await supabase
-      .from("notifications")
+    const { data, error } = await platformRepository
+      .from("notifications", notificationCtx(input.tenant_id, "notifications.create", "eventual"))
       .insert({
         tenant_id: input.tenant_id,
         user_id: input.user_id,
@@ -96,6 +114,16 @@ export const notificationRepository: NotificationRepository = {
       unsubscribe: () => {
         void supabase.removeChannel(channel).catch(() => undefined);
       },
+    };
+  },
+  describe() {
+    return {
+      certified: false,
+      tenantBound: true,
+      retryAware: true,
+      staleContextSafe: true,
+      metricsEnabled: true,
+      requiredCapabilities: ["notifications.read", "notifications.write"],
     };
   },
 };

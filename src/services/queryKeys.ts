@@ -1,6 +1,15 @@
+import { runtimeEpochManager } from "@/platform/runtime/coordination/runtimeEpochManager";
+import { RUNTIME_QUERY_SCOPE_MARKER } from "@/services/query/runtimeQueryConvergence";
+
 type TenantListArgs = { tenantId?: string; [key: string]: unknown };
 
-const tenantKey = (domain: string, tenantId?: string) => [domain, tenantId] as const;
+/**
+ * Tenant-scoped keys include the current runtime epoch so cache partitions cannot serve
+ * data hydrated under an obsolete causality boundary after epoch advances.
+ * @see RuntimeEpochQueryBridge — ensures React re-evaluates keys after bumps.
+ */
+const tenantKey = (domain: string, tenantId?: string) =>
+  [domain, RUNTIME_QUERY_SCOPE_MARKER, runtimeEpochManager.getCurrentEpoch(), tenantId] as const;
 const listKey = (domain: string, args?: TenantListArgs) =>
   [...tenantKey(domain, args?.tenantId), "list", args] as const;
 

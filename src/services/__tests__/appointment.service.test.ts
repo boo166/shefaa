@@ -50,13 +50,41 @@ vi.mock("@/services/settings/audit.service", () => ({
   },
 }));
 
+const tenantId = "00000000-0000-0000-0000-000000000111";
+const userId = "00000000-0000-0000-0000-000000000222";
+
+const authCfg = vi.hoisted(() => ({
+  allow: true,
+}));
+
+vi.mock("@/core/auth/authStore", () => ({
+  useAuth: {
+    getState: () => ({
+      user: {
+        id: userId,
+        tenantId,
+        globalRoles: [] as string[],
+        tenantRoles: ["clinic_admin"] as string[],
+        tenantStatus: "active" as const,
+      },
+      tenantOverride: null,
+      sessionVersion: "appointment-test-sv",
+      privilegedAuth: { currentLevel: null as const, verifiedFactorCount: 0, nextLevel: null as const },
+      hasPermission: () => authCfg.allow,
+    }),
+  },
+  selectEffectiveTenantId: (s: { user?: { tenantId?: string | null } }) => s.user?.tenantId ?? null,
+}));
+
+import { appointmentService } from "@/services/appointments/appointment.service";
+
 describe("appointmentService permissions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.resetModules();
+    authCfg.allow = true;
     vi.mocked(doctorRepository, true).getById.mockResolvedValue({
       id: "00000000-0000-0000-0000-000000000bbb",
-      tenant_id: "00000000-0000-0000-0000-000000000111",
+      tenant_id: tenantId,
       full_name: "Dr Ready",
       specialty: "General Practice",
       phone: null,
@@ -72,26 +100,12 @@ describe("appointmentService permissions", () => {
   });
 
   it("blocks list when lacking view permissions", async () => {
-    vi.doMock("@/core/auth/authStore", () => ({
-      useAuth: {
-        getState: () => ({ hasPermission: () => false }),
-      },
-    }));
-    const { appointmentService } = await import("@/services/appointments/appointment.service");
-
-    await expect(
-      appointmentService.listPaged({ page: 1, pageSize: 10 }),
-    ).rejects.toThrow("Not authorized");
+    authCfg.allow = false;
+    await expect(appointmentService.listPaged({ page: 1, pageSize: 10 })).rejects.toThrow("Not authorized");
   });
 
   it("blocks create when lacking manage permissions", async () => {
-    vi.doMock("@/core/auth/authStore", () => ({
-      useAuth: {
-        getState: () => ({ hasPermission: () => false }),
-      },
-    }));
-    const { appointmentService } = await import("@/services/appointments/appointment.service");
-
+    authCfg.allow = false;
     await expect(
       appointmentService.create({
         patient_id: "00000000-0000-0000-0000-000000000aaa",
@@ -103,15 +117,10 @@ describe("appointmentService permissions", () => {
   });
 
   it("passes tenant context when creating an appointment", async () => {
-    vi.doMock("@/core/auth/authStore", () => ({
-      useAuth: {
-        getState: () => ({ hasPermission: () => true }),
-      },
-    }));
     const repo = vi.mocked(appointmentRepository, true);
     repo.create.mockResolvedValue({
       id: "00000000-0000-0000-0000-000000000333",
-      tenant_id: "00000000-0000-0000-0000-000000000111",
+      tenant_id: tenantId,
       patient_id: "00000000-0000-0000-0000-000000000aaa",
       doctor_id: "00000000-0000-0000-0000-000000000bbb",
       appointment_date: "2026-03-14T10:00:00Z",
@@ -122,7 +131,6 @@ describe("appointmentService permissions", () => {
       updated_at: "2026-03-14T10:00:00Z",
     } as any);
 
-    const { appointmentService } = await import("@/services/appointments/appointment.service");
     await appointmentService.create({
       patient_id: "00000000-0000-0000-0000-000000000aaa",
       doctor_id: "00000000-0000-0000-0000-000000000bbb",
@@ -132,19 +140,14 @@ describe("appointmentService permissions", () => {
 
     expect(repo.create).toHaveBeenCalledWith(
       expect.objectContaining({ type: "checkup" }),
-      "00000000-0000-0000-0000-000000000111",
+      tenantId,
     );
   });
 
   it("rejects booking when the doctor is on leave", async () => {
-    vi.doMock("@/core/auth/authStore", () => ({
-      useAuth: {
-        getState: () => ({ hasPermission: () => true }),
-      },
-    }));
     vi.mocked(doctorRepository, true).getById.mockResolvedValue({
       id: "00000000-0000-0000-0000-000000000bbb",
-      tenant_id: "00000000-0000-0000-0000-000000000111",
+      tenant_id: tenantId,
       full_name: "Dr Away",
       specialty: "General Practice",
       phone: null,
@@ -156,7 +159,6 @@ describe("appointmentService permissions", () => {
       created_at: "2026-03-11T08:00:00Z",
       updated_at: "2026-03-11T08:00:00Z",
     } as any);
-    const { appointmentService } = await import("@/services/appointments/appointment.service");
 
     await expect(
       appointmentService.create({
@@ -170,15 +172,10 @@ describe("appointmentService permissions", () => {
   });
 
   it("rejects booking outside doctor working hours", async () => {
-    vi.doMock("@/core/auth/authStore", () => ({
-      useAuth: {
-        getState: () => ({ hasPermission: () => true }),
-      },
-    }));
     vi.mocked(doctorScheduleRepository, true).listByDoctor.mockResolvedValue([
       {
         id: "00000000-0000-0000-0000-000000000123",
-        tenant_id: "00000000-0000-0000-0000-000000000111",
+        tenant_id: tenantId,
         doctor_id: "00000000-0000-0000-0000-000000000bbb",
         day_of_week: 1,
         start_time: "09:00",
@@ -188,7 +185,6 @@ describe("appointmentService permissions", () => {
         updated_at: "2026-03-11T08:00:00Z",
       },
     ] as any);
-    const { appointmentService } = await import("@/services/appointments/appointment.service");
 
     await expect(
       appointmentService.create({
@@ -202,15 +198,10 @@ describe("appointmentService permissions", () => {
   });
 
   it("blocks invalid status transitions", async () => {
-    vi.doMock("@/core/auth/authStore", () => ({
-      useAuth: {
-        getState: () => ({ hasPermission: () => true }),
-      },
-    }));
     const repo = vi.mocked(appointmentRepository, true);
     repo.getById.mockResolvedValue({
       id: "00000000-0000-0000-0000-000000000999",
-      tenant_id: "00000000-0000-0000-0000-000000000111",
+      tenant_id: tenantId,
       patient_id: "00000000-0000-0000-0000-000000000aaa",
       doctor_id: "00000000-0000-0000-0000-000000000bbb",
       appointment_date: "2026-03-14T10:00:00Z",
@@ -221,8 +212,6 @@ describe("appointmentService permissions", () => {
       created_at: "2026-03-14T10:00:00Z",
       updated_at: "2026-03-14T10:00:00Z",
     } as any);
-
-    const { appointmentService } = await import("@/services/appointments/appointment.service");
 
     await expect(
       appointmentService.update("00000000-0000-0000-0000-000000000999", {

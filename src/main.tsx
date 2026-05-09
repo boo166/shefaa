@@ -12,6 +12,7 @@ import { initializePrivilegedSessionLifecycle } from "./services/auth/privileged
 import { initAuthMultiTabSync, startAuthDriftWatcher } from "./services/auth/authSessionOrchestrator";
 import { authRepository } from "./services/auth/auth.repository";
 import { initAuthRuntimeInvariants } from "./services/auth/authRuntimeInvariants";
+import { initializeRuntimeCoordination } from "./platform/runtime/coordination";
 
 // Apply theme class before anything renders (prevents flash)
 initTheme();
@@ -19,6 +20,7 @@ void initializeI18nStore();
 initSentry();
 
 initAuthMultiTabSync();
+initializeRuntimeCoordination();
 initAuthOperationalTelemetry();
 initAuthRuntimeInvariants();
 startAuthDriftWatcher({

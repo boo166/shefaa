@@ -14,8 +14,23 @@ vi.mock("@/core/auth/authStore", () => ({
   useAuth: {
     getState: () => ({
       hasPermission: () => true,
+      user: {
+        id: "00000000-0000-0000-0000-000000000222",
+        tenantId: "00000000-0000-0000-0000-000000000111",
+        globalRoles: [] as string[],
+        tenantRoles: ["clinic_admin"] as string[],
+        tenantStatus: "active" as const,
+      },
+      tenantOverride: null,
+      sessionVersion: "doc-test-sv",
+      privilegedAuth: { currentLevel: null as const, verifiedFactorCount: 0, nextLevel: null as const },
     }),
   },
+  selectEffectiveTenantId: (s: { user?: { tenantId?: string | null } }) => s.user?.tenantId ?? null,
+}));
+
+vi.mock("@/services/settings/audit.service", () => ({
+  auditLogService: { logEvent: vi.fn() },
 }));
 
 vi.mock("@/services/patients/patientDocuments.repository", () => ({

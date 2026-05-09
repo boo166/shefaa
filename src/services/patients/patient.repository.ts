@@ -1,6 +1,8 @@
 import type { Patient, PatientCreateInput, PatientUpdateInput, PatientListParams } from "@/domain/patient/patient.types";
 import type { PagedResult } from "@/domain/shared/pagination.types";
-import { supabase } from "@/services/supabase/client";
+import { Capabilities } from "@/platform/authorization/capabilities";
+import { platformRepository } from "@/platform/data/platformRepository";
+import type { PlatformRepositoryContext } from "@/platform/data/platformRepository.context";
 import { ServiceError } from "@/services/supabase/errors";
 import { assertOk } from "@/services/supabase/query";
 
@@ -21,6 +23,18 @@ function escapeSearchTerm(term: string) {
   return term.replace(/[%_]/g, "\\$&").replace(/,/g, "\\,");
 }
 
+const PATIENT_READ_CAPS = [Capabilities.patients.view, Capabilities.patients.manage] as const;
+const PATIENT_WRITE_CAPS = [Capabilities.patients.manage] as const;
+
+function patientCtx(
+  tenantId: string,
+  action: string,
+  classification: PlatformRepositoryContext["classification"] = "tenant-critical",
+  requiredCapabilities?: string[],
+): PlatformRepositoryContext {
+  return { action, classification, tenantScoped: true, tenantId, requiredCapabilities };
+}
+
 export interface PatientRepository {
   listPaged(params: PatientListParams, tenantId: string): Promise<PagedResult<Patient>>;
   getById(id: string, tenantId: string): Promise<Patient>;
@@ -36,6 +50,14 @@ export interface PatientRepository {
   archive(id: string, tenantId: string, userId: string): Promise<Patient>;
   restore(id: string, tenantId: string): Promise<Patient>;
   deleteBulk(ids: string[], tenantId: string, userId: string): Promise<void>;
+  describe?(): {
+    certified: boolean;
+    tenantBound: boolean;
+    retryAware: boolean;
+    staleContextSafe: boolean;
+    metricsEnabled: boolean;
+    requiredCapabilities: string[];
+  };
 }
 
 export const patientRepository: PatientRepository = {
@@ -46,8 +68,8 @@ export const patientRepository: PatientRepository = {
     const to = from + pageSize - 1;
     const searchTerm = params.search?.trim() ?? "";
 
-    let query = supabase
-      .from("patients")
+    let query = platformRepository
+      .from("patients", patientCtx(tenantId, "patients.listPaged", "readonly", [...PATIENT_READ_CAPS]))
       .select(PATIENT_COLUMNS, { count: "exact" })
       .eq("tenant_id", tenantId)
       .is("deleted_at", null);
@@ -83,8 +105,8 @@ export const patientRepository: PatientRepository = {
     return { data: (data ?? []) as Patient[], count: count ?? 0 };
   },
   async getById(id, tenantId) {
-    const result = await supabase
-      .from("patients")
+    const result = await platformRepository
+      .from("patients", patientCtx(tenantId, "patients.getById", "readonly", [...PATIENT_READ_CAPS]))
       .select(PATIENT_COLUMNS)
       .eq("id", id)
       .eq("tenant_id", tenantId)
@@ -108,8 +130,8 @@ export const patientRepository: PatientRepository = {
       status: input.status ?? "active",
     };
 
-    const result = await supabase
-      .from("patients")
+    const result = await platformRepository
+      .from("patients", patientCtx(tenantId, "patients.create", "critical", [...PATIENT_WRITE_CAPS]))
       .insert(payload)
       .select(PATIENT_COLUMNS)
       .single();
@@ -133,8 +155,8 @@ export const patientRepository: PatientRepository = {
       return patientRepository.getById(id, tenantId);
     }
 
-    let query = supabase
-      .from("patients")
+    let query = platformRepository
+      .from("patients", patientCtx(tenantId, "patients.update", "critical", [...PATIENT_WRITE_CAPS]))
       .update(payload)
       .eq("id", id)
       .eq("tenant_id", tenantId);
@@ -154,8 +176,8 @@ export const patientRepository: PatientRepository = {
     return (data ?? null) as Patient | null;
   },
   async findByNameAndDOB(fullName, dateOfBirth, tenantId) {
-    const { data, error } = await supabase
-      .from("patients")
+    const { data, error } = await platformRepository
+      .from("patients", patientCtx(tenantId, "patients.findByNameAndDOB", "readonly", [...PATIENT_READ_CAPS]))
       .select("id, patient_code, full_name, date_of_birth")
       .eq("tenant_id", tenantId)
       .eq("date_of_birth", dateOfBirth)
@@ -172,8 +194,8 @@ export const patientRepository: PatientRepository = {
     return (data ?? []) as Pick<Patient, "id" | "patient_code" | "full_name" | "date_of_birth">[];
   },
   async hasActiveAppointments(patientId, tenantId) {
-    const { count, error } = await supabase
-      .from("appointments")
+    const { count, error } = await platformRepository
+      .from("appointments", patientCtx(tenantId, "patients.hasActiveAppointments", "readonly", [...PATIENT_READ_CAPS]))
       .select("id", { count: "exact", head: true })
       .eq("tenant_id", tenantId)
       .eq("patient_id", patientId)
@@ -189,8 +211,8 @@ export const patientRepository: PatientRepository = {
     return (count ?? 0) > 0;
   },
   async archive(id, tenantId, userId) {
-    const result = await supabase
-      .from("patients")
+    const result = await platformRepository
+      .from("patients", patientCtx(tenantId, "patients.archive", "critical", [...PATIENT_WRITE_CAPS]))
       .update({ deleted_at: new Date().toISOString(), deleted_by: userId })
       .eq("id", id)
       .eq("tenant_id", tenantId)
@@ -200,8 +222,8 @@ export const patientRepository: PatientRepository = {
     return assertOk(result) as Patient;
   },
   async restore(id, tenantId) {
-    const result = await supabase
-      .from("patients")
+    const result = await platformRepository
+      .from("patients", patientCtx(tenantId, "patients.restore", "critical", [...PATIENT_WRITE_CAPS]))
       .update({ deleted_at: null, deleted_by: null })
       .eq("id", id)
       .eq("tenant_id", tenantId)
@@ -212,8 +234,8 @@ export const patientRepository: PatientRepository = {
   },
   async deleteBulk(ids, tenantId, userId) {
     if (ids.length === 0) return;
-    const { error } = await supabase
-      .from("patients")
+    const { error } = await platformRepository
+      .from("patients", patientCtx(tenantId, "patients.deleteBulk", "critical", [...PATIENT_WRITE_CAPS]))
       .update({ deleted_at: new Date().toISOString(), deleted_by: userId })
       .in("id", ids)
       .eq("tenant_id", tenantId);
@@ -224,5 +246,15 @@ export const patientRepository: PatientRepository = {
         details: error,
       });
     }
+  },
+  describe() {
+    return {
+      certified: false,
+      tenantBound: true,
+      retryAware: true,
+      staleContextSafe: true,
+      metricsEnabled: true,
+      requiredCapabilities: ["patients.record.manage", "patients.record.view"],
+    };
   },
 };

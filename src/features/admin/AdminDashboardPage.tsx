@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useI18n } from "@/core/i18n/i18nStore";
 import { useAuth } from "@/core/auth/authStore";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { StatCard } from "@/shared/components/StatCard";
 import { StatusBadge } from "@/shared/components/StatusBadge";
 import { Button } from "@/components/primitives/Button";
@@ -1253,6 +1253,9 @@ export const AdminDashboardPage = () => {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <Button variant="outline" size="sm" asChild>
+              <Link to="/admin/ops/runtime">Runtime ops</Link>
+            </Button>
             <LanguageSwitcher />
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted">
               <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold">

@@ -1,4 +1,6 @@
 import { useAuth } from "@/core/auth/authStore";
+import { platformRepository } from "@/platform/data/platformRepository";
+import { buildTracePayload } from "@/platform/observability/traceContext";
 import { supabase } from "@/services/supabase/client";
 import { ServiceError } from "@/services/supabase/errors";
 import { getTenantContext } from "@/services/supabase/tenant";
@@ -10,19 +12,38 @@ export interface JobRepository {
 
 async function enqueueJob(functionName: string, payload: Record<string, unknown>) {
   const { tenantId, userId } = getTenantContext();
-  const { user } = useAuth.getState();
+  const { user, sessionVersion } = useAuth.getState();
   const resolvedTenantId =
     (payload as { tenant_id?: string; tenantId?: string })?.tenant_id ??
     (payload as { tenantId?: string })?.tenantId ??
     tenantId;
   const initiatedAs = user?.globalRoles?.includes("super_admin") ? "super_admin" : "tenant_user";
 
-  const { data, error } = await supabase
-    .from("jobs")
+  const trace = buildTracePayload({
+    tenantId: resolvedTenantId,
+    actorId: userId,
+    sessionVersion,
+  });
+  const payloadWithTrace = {
+    ...payload,
+    _platform_trace: trace,
+  };
+
+  const { data, error } = await platformRepository
+    .from("jobs", {
+      action: `jobs.enqueue.${functionName}`,
+      tenantScoped: true,
+      tenantId: resolvedTenantId,
+      trace: buildTracePayload({
+        tenantId: resolvedTenantId,
+        actorId: userId,
+        sessionVersion,
+      }),
+    })
     .insert({
       tenant_id: resolvedTenantId,
       type: functionName,
-      payload,
+      payload: payloadWithTrace,
       initiated_by: userId,
       initiated_as: initiatedAs,
     })

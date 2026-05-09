@@ -112,6 +112,25 @@ const mockSupabase = vi.hoisted(() => ({
 }));
 
 vi.mock("@/services/supabase/client", () => ({ supabase: mockSupabase }));
+vi.mock("@/core/auth/authStore", async (importOriginal) => {
+  const mod = await importOriginal<typeof import("@/core/auth/authStore")>();
+  const smokeState = () => ({
+    user: {
+      id: mockTenant.userId,
+      tenantId: mockTenant.tenantId,
+      globalRoles: [] as const,
+      tenantRoles: ["clinic_admin"] as const,
+      tenantStatus: "active" as const,
+    },
+    tenantOverride: null,
+    sessionVersion: "smoke-test",
+    hasPermission: () => true,
+  });
+  Object.assign(mod.useAuth, {
+    getState: () => smokeState(),
+  });
+  return mod;
+});
 vi.mock("@/services/supabase/tenant", () => ({
   getTenantContext: () => ({ tenantId: mockTenant.tenantId, userId: mockTenant.userId }),
 }));
@@ -686,7 +705,11 @@ describe("repositories smoke", () => {
     await prescriptionRepository.archive(recordId, tenantId, userId);
     await prescriptionRepository.restore(recordId, tenantId);
 
-    const sub = realtimeRepository.subscribeToTenantTables(tenantId, ["patients", "appointments"], () => undefined);
+    const sub = realtimeRepository.subscribeToTenantTables(
+      { tenantId, sessionVersion: "test-sv", userId },
+      ["patients", "appointments"],
+      () => undefined,
+    );
     sub.unsubscribe();
 
     await reportRepository.assertAccess(tenantId);
