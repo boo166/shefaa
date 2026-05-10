@@ -801,7 +801,10 @@ authService.onAuthStateChange(async (event, sessionUser) => {
 
   if (event === "SIGNED_IN" && sessionUser) {
     setLoading(true);
-    setAuthMachineState("authenticating");
+    const currentAuthState = useAuth.getState().authMachineState;
+    if (currentAuthState !== "mfa_required" && currentAuthState !== "mfa_verifying") {
+      setAuthMachineState("authenticating");
+    }
     const active = await authService.getActiveSession();
     await loadUserProfile(sessionUser as SupaUser, { createdAt: active.createdAt ?? null });
     markSessionVerified();

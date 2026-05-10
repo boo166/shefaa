@@ -23,5 +23,5 @@ export async function runJob(def: JobDefinition) {
 }
 
 export function enqueueJob(def: JobDefinition) {
-  void runJob(def);
+  void runJob(def).catch(() => undefined);
 }

@@ -21,9 +21,20 @@ function subscribeRuntimeTopology(onChange: () => void) {
   };
 }
 
-function getRuntimeTopologySnapshot() {
+type RuntimeTopologySnapshot = {
+  mode: RuntimeMode;
+  epoch: number;
+  tenantBarrierDepth: number;
+  health: ReturnType<typeof runtimeHealthStore.getSnapshot>;
+  activeTransitionKind: string | null;
+  lastRejectionReason: string | null;
+};
+
+let lastRuntimeTopologySnapshot: RuntimeTopologySnapshot | null = null;
+
+export function getRuntimeTopologySnapshot() {
   const diag = coordinationDiagnostics.getSnapshot();
-  return {
+  const next: RuntimeTopologySnapshot = {
     mode: runtimeModeController.getSnapshot().effective.effectiveMode,
     epoch: runtimeEpochManager.getCurrentEpoch(),
     tenantBarrierDepth: consistencyBarrier.getDepth("tenant_transition"),
@@ -31,6 +42,21 @@ function getRuntimeTopologySnapshot() {
     activeTransitionKind: diag.activeTransitionKind,
     lastRejectionReason: diag.lastRejection?.reason ?? null,
   };
+
+  if (
+    lastRuntimeTopologySnapshot
+    && lastRuntimeTopologySnapshot.mode === next.mode
+    && lastRuntimeTopologySnapshot.epoch === next.epoch
+    && lastRuntimeTopologySnapshot.tenantBarrierDepth === next.tenantBarrierDepth
+    && lastRuntimeTopologySnapshot.health === next.health
+    && lastRuntimeTopologySnapshot.activeTransitionKind === next.activeTransitionKind
+    && lastRuntimeTopologySnapshot.lastRejectionReason === next.lastRejectionReason
+  ) {
+    return lastRuntimeTopologySnapshot;
+  }
+
+  lastRuntimeTopologySnapshot = next;
+  return next;
 }
 
 /**

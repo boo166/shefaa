@@ -9,6 +9,7 @@ const LIMITS: Record<string, RateLimitConfig> = {
   lab_upload: { maxHits: 20, windowSeconds: 600 },
   document_upload: { maxHits: 10, windowSeconds: 600 },
   invoice_create: { maxHits: 20, windowSeconds: 600 },
+  invoice_payment_post: { maxHits: 40, windowSeconds: 600 },
   super_admin_tenant_create: { maxHits: 5, windowSeconds: 3600 },
   super_admin_tenant_lifecycle: { maxHits: 15, windowSeconds: 3600 },
   super_admin_subscription_update: { maxHits: 20, windowSeconds: 3600 },

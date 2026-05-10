@@ -1,4 +1,4 @@
-import { randomUUID } from "crypto";
+import { createRequestId } from "@/core/observability/requestId";
 import { ASYNC_POLICY_PROFILES } from "./asyncPolicyProfiles";
 import type { ResolveRuntimePolicyInput, ResolvedRuntimePolicy, RuntimeMode } from "./runtimePolicy";
 
@@ -28,7 +28,7 @@ export function resolveRuntimePolicy(input: ResolveRuntimePolicyInput): Resolved
   }
 
   const resolved: ResolvedRuntimePolicy = {
-    decisionId: randomUUID(),
+    decisionId: createRequestId(),
     decisionReasons,
     writeAllowed,
     retryPolicy: { maxRetries: asyncPolicy.maxRetries, retryDelayMs: asyncPolicy.retryDelayMs },
@@ -47,4 +47,3 @@ export function resolveRuntimePolicy(input: ResolveRuntimePolicyInput): Resolved
 export function simulateRuntimePolicy(input: ResolveRuntimePolicyInput): ResolvedRuntimePolicy {
   return resolveRuntimePolicy(input);
 }
-
