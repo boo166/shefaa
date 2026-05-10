@@ -1,4 +1,5 @@
 import { emitPlatformMetric } from "@/platform/observability/runtimeAnalytics";
+import { runtimeHealthStore, type RuntimeHealth } from "@/platform/runtime/recovery/runtimeHealthStore";
 import {
   billingReconciliationFindingSchema,
   billingReconciliationRunSchema,
@@ -11,7 +12,10 @@ import type {
 } from "@/domain/billing/billing.types";
 import { getTenantContext } from "@/services/supabase/tenant";
 import { toServiceError } from "@/services/supabase/errors";
-import { billingReconciliationRepository } from "./billingReconciliation.repository";
+import {
+  billingReconciliationRepository,
+  type BillingReconciliationFindingStatus,
+} from "./billingReconciliation.repository";
 
 /** Emitted after a successful payment command for ops dashboards (no PII). */
 export function emitBillingReconciliationTick(input: {
@@ -47,6 +51,24 @@ function defaultWindow(days = 30) {
   };
 }
 
+export function scoreBillingReconciliationHealth(input: {
+  latestRun?: BillingReconciliationRun | null;
+  openFindings?: BillingReconciliationFinding[];
+}): RuntimeHealth {
+  if (input.latestRun?.status === "failed") return "RECOVERING";
+  const criticalCount = (input.openFindings ?? []).filter((finding) => finding.severity === "critical").length;
+  if (criticalCount >= 2) return "CONTAINED";
+  if (criticalCount >= 1) return "DEGRADED";
+  return "HEALTHY";
+}
+
+function applyBillingReconciliationHealth(input: {
+  latestRun?: BillingReconciliationRun | null;
+  openFindings?: BillingReconciliationFinding[];
+}) {
+  runtimeHealthStore.setHealth(scoreBillingReconciliationHealth(input));
+}
+
 export const billingReconciliationService = {
   async runDry(input?: { windowStart?: string; windowEnd?: string }): Promise<BillingReconciliationSummary> {
     try {
@@ -74,9 +96,44 @@ export const billingReconciliationService = {
         tenantId,
         count: summary.critical_count,
       });
+      applyBillingReconciliationHealth({
+        latestRun: null,
+        openFindings: summary.critical_count > 0
+          ? [{ severity: "critical" } as BillingReconciliationFinding]
+          : [],
+      });
       return summary;
     } catch (err) {
+      runtimeHealthStore.setHealth("RECOVERING");
       throw toServiceError(err, "Failed to run billing reconciliation");
+    }
+  },
+
+  async runLive(input?: { windowStart?: string; windowEnd?: string }): Promise<BillingReconciliationSummary> {
+    try {
+      const { tenantId } = getTenantContext();
+      const window = defaultWindow();
+      const summary = billingReconciliationSummarySchema.parse(
+        await billingReconciliationRepository.run({
+          tenantId,
+          windowStart: input?.windowStart ?? window.windowStart,
+          windowEnd: input?.windowEnd ?? window.windowEnd,
+          dryRun: false,
+        }),
+      );
+      emitPlatformMetric("billing.reconciliation_run.completed", {
+        tenantId,
+        dryRun: false,
+        findingCount: summary.finding_count,
+        criticalCount: summary.critical_count,
+      });
+      if (summary.critical_count > 0) {
+        runtimeHealthStore.setHealth(summary.critical_count >= 2 ? "CONTAINED" : "DEGRADED");
+      }
+      return summary;
+    } catch (err) {
+      runtimeHealthStore.setHealth("RECOVERING");
+      throw toServiceError(err, "Failed to run live billing reconciliation");
     }
   },
 
@@ -111,12 +168,49 @@ export const billingReconciliationService = {
         billingReconciliationRepository.getLatestRun(tenantId),
         billingReconciliationRepository.listOpenFindings(tenantId, 8),
       ]);
+      const parsedLatestRun = latestRun ? billingReconciliationRunSchema.parse(latestRun) : null;
+      const parsedFindings = billingReconciliationFindingSchema.array().parse(openFindings);
+      applyBillingReconciliationHealth({ latestRun: parsedLatestRun, openFindings: parsedFindings });
       return {
-        latestRun: latestRun ? billingReconciliationRunSchema.parse(latestRun) : null,
-        openFindings: billingReconciliationFindingSchema.array().parse(openFindings),
+        latestRun: parsedLatestRun,
+        openFindings: parsedFindings,
       };
     } catch (err) {
+      runtimeHealthStore.setHealth("RECOVERING");
       throw toServiceError(err, "Failed to load billing reconciliation operations snapshot");
     }
+  },
+
+  async updateFindingStatus(
+    findingId: string,
+    status: BillingReconciliationFindingStatus,
+  ): Promise<BillingReconciliationFinding> {
+    try {
+      const { tenantId } = getTenantContext();
+      const finding = billingReconciliationFindingSchema.parse(
+        await billingReconciliationRepository.updateFindingStatus(tenantId, findingId, status),
+      );
+      emitPlatformMetric("billing.reconciliation_finding.status_changed", {
+        tenantId,
+        findingId,
+        status,
+      });
+      return finding;
+    } catch (err) {
+      throw toServiceError(err, "Failed to update billing reconciliation finding");
+    }
+  },
+
+  exportFindingBundle(input: {
+    latestRun: BillingReconciliationRun | null;
+    openFindings: BillingReconciliationFinding[];
+  }): Blob {
+    return new Blob([
+      JSON.stringify({
+        exported_at: new Date().toISOString(),
+        latest_run: input.latestRun,
+        findings: input.openFindings,
+      }, null, 2),
+    ], { type: "application/json" });
   },
 };

@@ -18,6 +18,8 @@ export const CAPABILITY_TO_PERMISSION: Record<string, Permission> = {
   "pharmacy.manage": "manage_pharmacy",
   "laboratory.manage": "manage_laboratory",
   "reports.analytics.view": "view_reports",
+  "notifications.read": "view_dashboard",
+  "notifications.write": "view_dashboard",
   "platform.super_admin": "super_admin",
 };
 

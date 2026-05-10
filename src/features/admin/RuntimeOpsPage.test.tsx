@@ -51,11 +51,39 @@ vi.mock("@/platform/runtime/recovery/runtimeHealthStore", () => ({
   },
 }));
 
+vi.mock("@/platform/runtime/recovery/recoveryOrchestrator", () => ({
+  recoveryOrchestrator: {
+    subscribe: () => () => {},
+    getTrustLevel: () => "OBSERVED",
+    getAuditTrail: () => [{
+      id: "recovery-1",
+      occurredAt: new Date("2026-05-10T10:00:00.000Z").getTime(),
+      tenantId: "00000000-0000-0000-0000-000000000111",
+      actorId: "user-1",
+      reason: "test recovery",
+      failure: "realtime_partition",
+      recoveryClass: "rebuild",
+      automatic: true,
+      requiresOperator: false,
+      runtimeHealth: "CONTAINED",
+      trustLevel: "CONTAINED",
+      traceId: "trace-recovery-1",
+      workflowSnapshot: [],
+      action: "applied",
+    }],
+  },
+}));
+
 vi.mock("@/platform/realtime/realtimeRuntime", () => ({
   getRealtimeRegistryDiagnostics: () => ({
     intentCount: 2,
     activeChannelCount: 1,
     churnThrottledRecently: false,
+    connectionState: "CONNECTED",
+    maxReplayDriftMs: 30_000,
+    staleSubscriptionThresholdMs: 60_000,
+    replayDriftMs: 1000,
+    lastRecoveryAt: null,
   }),
 }));
 
@@ -79,7 +107,7 @@ vi.mock("@/services/runtime/runtimeTransitionLog.repository", () => ({
     transition_id: "tx-1",
     runtime_epoch: 7,
     transition_type: "tenant_switch",
-    tenant_id: tenantId,
+    tenant_id: "00000000-0000-0000-0000-000000000111",
     actor_id: "user-1",
     started_at: "2026-05-10T10:00:00.000Z",
     completed_at: "2026-05-10T10:00:01.000Z",
@@ -88,6 +116,36 @@ vi.mock("@/services/runtime/runtimeTransitionLog.repository", () => ({
     trace_id: "req-1",
     runtime_transition_trace_id: "rtx-1",
     status: "completed",
+    created_at: "2026-05-10T10:00:00.000Z",
+  }]),
+}));
+
+vi.mock("@/services/runtime/runtimeIncidentLedger.repository", () => ({
+  listRecentRuntimeIncidents: vi.fn(async () => [{
+    id: "incident-1",
+    tenant_id: "00000000-0000-0000-0000-000000000111",
+    actor_id: "user-1",
+    incident_type: "realtime_partition",
+    runtime_health: "CONTAINED",
+    runtime_mode: "RECOVERY",
+    severity: "critical",
+    trace_ids: { trace_id: "trace-recovery-1" },
+    metadata: { trust_level: "CONTAINED" },
+    detected_at: "2026-05-10T10:00:00.000Z",
+    created_at: "2026-05-10T10:00:00.000Z",
+  }]),
+  listRecentRuntimeRecoveryActions: vi.fn(async () => [{
+    id: "action-1",
+    incident_id: "incident-1",
+    tenant_id: tenantId,
+    actor_id: "user-1",
+    recovery_class: "rebuild",
+    action_status: "completed",
+    triggered_by: "automatic",
+    trace_ids: { trace_id: "trace-recovery-1" },
+    action_metadata: { failure: "realtime_partition" },
+    started_at: "2026-05-10T10:00:00.000Z",
+    completed_at: "2026-05-10T10:00:00.000Z",
     created_at: "2026-05-10T10:00:00.000Z",
   }]),
 }));
@@ -122,7 +180,7 @@ vi.mock("@/services/billing/billingReconciliation", () => ({
         idempotency_id: null,
         finding_code: "INVOICE_PAYMENT_TOTAL_MISMATCH",
         severity: "critical",
-        status: "open",
+        status: "OPEN",
         evidence: { delta: 10 },
         request_trace_id: "req-1",
         operation_trace_id: "op-1",
@@ -132,6 +190,9 @@ vi.mock("@/services/billing/billingReconciliation", () => ({
       }],
     })),
     runDry: vi.fn(),
+    runLive: vi.fn(),
+    updateFindingStatus: vi.fn(),
+    exportFindingBundle: vi.fn(() => new Blob(["{}"], { type: "application/json" })),
   },
 }));
 
@@ -154,7 +215,14 @@ describe("RuntimeOpsPage", () => {
       expect(screen.getByText("INVOICE_PAYMENT_TOTAL_MISMATCH")).toBeInTheDocument();
     });
     expect(screen.getByText("Billing reconciliation")).toBeInTheDocument();
+    expect(screen.getByText("OPEN")).toBeInTheDocument();
+    expect(screen.getByText("Trigger live reconciliation")).toBeInTheDocument();
+    expect(screen.getByText("Export finding bundle")).toBeInTheDocument();
     expect(screen.getByText("Mutation freeze")).toBeInTheDocument();
+    expect(screen.getByText("Recovery timeline")).toBeInTheDocument();
+    expect(screen.getAllByText(/realtime_partition/).length).toBeGreaterThan(0);
+    expect(screen.getByText("Incident ledger")).toBeInTheDocument();
+    expect(screen.getAllByText(/rebuild/).length).toBeGreaterThan(0);
     expect(screen.getByText("Runtime mode history")).toBeInTheDocument();
     expect(screen.getByText(/billing-payment:inv-1:key-1/)).toBeInTheDocument();
     expect(screen.getByText(/rtx-1/)).toBeInTheDocument();

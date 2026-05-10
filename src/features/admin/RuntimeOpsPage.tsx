@@ -12,6 +12,7 @@ import { coordinationDiagnostics } from "@/platform/runtime/coordination/coordin
 import { runtimeEpochManager } from "@/platform/runtime/coordination/runtimeEpochManager";
 import { runtimeMutationGate } from "@/platform/runtime/coordination/runtimeMutationGate";
 import { runtimeModeController } from "@/platform/runtime/mode/runtimeModeController";
+import { recoveryOrchestrator } from "@/platform/runtime/recovery/recoveryOrchestrator";
 import { runtimeHealthStore } from "@/platform/runtime/recovery/runtimeHealthStore";
 import { getRealtimeRegistryDiagnostics } from "@/platform/realtime/realtimeRuntime";
 import { workflowRuntimeRegistry } from "@/platform/runtime/workflows/workflowRuntimeRegistry";
@@ -22,6 +23,12 @@ import {
   listRecentRuntimeTransitionLogRows,
   type RuntimeTransitionLogRow,
 } from "@/services/runtime/runtimeTransitionLog.repository";
+import {
+  listRecentRuntimeIncidents,
+  listRecentRuntimeRecoveryActions,
+  type RuntimeIncidentTimelineRow,
+  type RuntimeRecoveryActionRow,
+} from "@/services/runtime/runtimeIncidentLedger.repository";
 
 const OPS_FLAG = import.meta.env.VITE_RUNTIME_OPS_CONSOLE === "1" || import.meta.env.DEV;
 
@@ -57,9 +64,22 @@ function buildClientOpsSnapshot() {
     },
     realtime: typeof window !== "undefined"
       ? getRealtimeRegistryDiagnostics()
-      : { intentCount: 0, activeChannelCount: 0, churnThrottledRecently: false },
+      : {
+        intentCount: 0,
+        activeChannelCount: 0,
+        churnThrottledRecently: false,
+        connectionState: "CONNECTED" as const,
+        maxReplayDriftMs: 30_000,
+        staleSubscriptionThresholdMs: 60_000,
+        replayDriftMs: 0,
+        lastRecoveryAt: null,
+      },
     workflows: workflowRuntimeRegistry.listActive(),
     billingTick: getBillingTick(),
+    recovery: {
+      trustLevel: recoveryOrchestrator.getTrustLevel(),
+      timeline: recoveryOrchestrator.getAuditTrail().slice(0, 8),
+    },
   };
 }
 
@@ -70,9 +90,19 @@ const serverOpsSnapshot = {
   health: runtimeHealthStore.getSnapshot(),
   barriers: { tenant: 0, auth: 0, readonly: 0 },
   mutationFreeze: { frozen: false, reason: null },
-  realtime: { intentCount: 0, activeChannelCount: 0, churnThrottledRecently: false },
+  realtime: {
+    intentCount: 0,
+    activeChannelCount: 0,
+    churnThrottledRecently: false,
+    connectionState: "CONNECTED" as const,
+    maxReplayDriftMs: 30_000,
+    staleSubscriptionThresholdMs: 60_000,
+    replayDriftMs: 0,
+    lastRecoveryAt: null,
+  },
   workflows: [] as string[],
   billingTick: null,
+  recovery: { trustLevel: "HEALTHY" as const, timeline: [] },
 };
 
 let cachedOpsSnapshot = buildClientOpsSnapshot();
@@ -96,12 +126,14 @@ function useOpsStore() {
       const u3 = coordinationDiagnostics.subscribe(() => cb());
       const u4 = runtimeHealthStore.subscribe(() => cb());
       const u5 = subscribeBillingTick(() => cb());
+      const u6 = recoveryOrchestrator.subscribe(() => cb());
       return () => {
         u1();
         u2();
         u3();
         u4();
         u5();
+        u6();
       };
     },
     getClientOpsSnapshot,
@@ -117,27 +149,37 @@ export function RuntimeOpsPage() {
   const [openFindings, setOpenFindings] = useState<BillingReconciliationFinding[]>([]);
   const [dryRunSummary, setDryRunSummary] = useState<BillingReconciliationSummary | null>(null);
   const [transitionRows, setTransitionRows] = useState<RuntimeTransitionLogRow[]>([]);
+  const [incidentRows, setIncidentRows] = useState<RuntimeIncidentTimelineRow[]>([]);
+  const [recoveryActionRows, setRecoveryActionRows] = useState<RuntimeRecoveryActionRow[]>([]);
   const [opsError, setOpsError] = useState<string | null>(null);
   const [loadingOps, setLoadingOps] = useState(false);
   const [runningDry, setRunningDry] = useState(false);
+  const [runningLive, setRunningLive] = useState(false);
+  const [actionFindingId, setActionFindingId] = useState<string | null>(null);
 
   const refreshOps = useCallback(async () => {
     if (!effectiveTenantId) {
       setLatestRun(null);
       setOpenFindings([]);
       setTransitionRows([]);
+      setIncidentRows([]);
+      setRecoveryActionRows([]);
       return;
     }
     setLoadingOps(true);
     setOpsError(null);
     try {
-      const [reconciliation, transitions] = await Promise.all([
+      const [reconciliation, transitions, incidents, recoveryActions] = await Promise.all([
         billingReconciliationService.getOpsSnapshot(),
         listRecentRuntimeTransitionLogRows(6),
+        listRecentRuntimeIncidents(6),
+        listRecentRuntimeRecoveryActions(8),
       ]);
       setLatestRun(reconciliation.latestRun);
       setOpenFindings(reconciliation.openFindings);
       setTransitionRows(transitions);
+      setIncidentRows(incidents);
+      setRecoveryActionRows(recoveryActions);
     } catch (error) {
       setOpsError(error instanceof Error ? error.message : "Failed to load operations snapshot");
     } finally {
@@ -159,6 +201,42 @@ export function RuntimeOpsPage() {
     } finally {
       setRunningDry(false);
     }
+  };
+
+  const runLiveReconciliation = async () => {
+    setRunningLive(true);
+    setOpsError(null);
+    try {
+      await billingReconciliationService.runLive();
+      await refreshOps();
+    } catch (error) {
+      setOpsError(error instanceof Error ? error.message : "Failed to run live billing reconciliation");
+    } finally {
+      setRunningLive(false);
+    }
+  };
+
+  const markFindingAcknowledged = async (findingId: string) => {
+    setActionFindingId(findingId);
+    setOpsError(null);
+    try {
+      await billingReconciliationService.updateFindingStatus(findingId, "ACKNOWLEDGED");
+      await refreshOps();
+    } catch (error) {
+      setOpsError(error instanceof Error ? error.message : "Failed to acknowledge finding");
+    } finally {
+      setActionFindingId(null);
+    }
+  };
+
+  const exportFindingBundle = () => {
+    const blob = billingReconciliationService.exportFindingBundle({ latestRun, openFindings });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `billing-reconciliation-${effectiveTenantId ?? "tenant"}-${new Date().toISOString()}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   if (!OPS_FLAG) {
@@ -207,6 +285,7 @@ export function RuntimeOpsPage() {
           <h2 className="mb-2 font-medium">Runtime stability</h2>
           <ul className="space-y-1 text-xs text-muted-foreground">
             <li>Health: {snap.health}</li>
+            <li>Trust: {snap.recovery.trustLevel}</li>
             <li>Epoch: {snap.epoch}</li>
             <li>Mode: {snap.effective.effectiveMode}</li>
           </ul>
@@ -249,11 +328,61 @@ export function RuntimeOpsPage() {
         <div className="rounded-lg border bg-card p-4 text-sm">
           <h2 className="mb-2 font-medium">Realtime registry</h2>
           <ul className="space-y-1 text-xs text-muted-foreground">
+            <li>State: {snap.realtime.connectionState}</li>
             <li>Intents: {snap.realtime.intentCount}</li>
             <li>Active channels: {snap.realtime.activeChannelCount}</li>
+            <li>Replay drift: {Math.round(snap.realtime.replayDriftMs / 1000)}s</li>
             <li>Churn warn: {snap.realtime.churnThrottledRecently ? "yes" : "no"}</li>
           </ul>
         </div>
+      </section>
+
+      <section className="rounded-lg border bg-card p-4 text-sm">
+        <h2 className="mb-2 font-medium">Recovery timeline</h2>
+        {snap.recovery.timeline.length === 0 ? (
+          <p className="text-xs text-muted-foreground">No recovery actions recorded in this session.</p>
+        ) : (
+          <ul className="space-y-2 text-xs text-muted-foreground">
+            {snap.recovery.timeline.map((entry) => (
+              <li key={`${entry.id}:${entry.action}:${entry.occurredAt}`} className="rounded border p-2">
+                <span className="font-medium text-foreground">{entry.failure}</span>
+                {" "}{entry.action} via {entry.recoveryClass} at {new Date(entry.occurredAt).toLocaleString()}
+                <span className="block">Trust: {entry.trustLevel}; Health: {entry.runtimeHealth}</span>
+                {entry.traceId ? <span className="block break-all">Trace: {entry.traceId}</span> : null}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="rounded-lg border bg-card p-4 text-sm">
+        <h2 className="mb-2 font-medium">Incident ledger</h2>
+        {incidentRows.length === 0 ? (
+          <p className="text-xs text-muted-foreground">No persisted runtime incidents visible for this operator.</p>
+        ) : (
+          <ul className="space-y-2 text-xs text-muted-foreground">
+            {incidentRows.map((row) => (
+              <li key={row.id} className="rounded border p-2">
+                <span className="font-medium text-foreground">{row.incident_type}</span>
+                {" "}{row.severity} at {new Date(row.detected_at).toLocaleString()}
+                <span className="block">Health: {row.runtime_health}; Mode: {row.runtime_mode}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+        {recoveryActionRows.length > 0 ? (
+          <div className="mt-4">
+            <h3 className="mb-2 text-xs font-medium uppercase text-muted-foreground">Recovery actions</h3>
+            <ul className="space-y-2 text-xs text-muted-foreground">
+              {recoveryActionRows.map((row) => (
+                <li key={row.id} className="rounded border p-2">
+                  <span className="font-medium text-foreground">{row.recovery_class}</span>
+                  {" "}{row.action_status} by {row.triggered_by} at {new Date(row.started_at).toLocaleString()}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
       </section>
 
       <section className="rounded-lg border bg-card p-4 text-sm">
@@ -277,6 +406,12 @@ export function RuntimeOpsPage() {
           </div>
           <Button size="sm" variant="outline" onClick={() => void runDryReconciliation()} disabled={runningDry || !effectiveTenantId}>
             {runningDry ? "Running" : "Run dry reconciliation"}
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => void runLiveReconciliation()} disabled={runningLive || !effectiveTenantId}>
+            {runningLive ? "Running" : "Trigger live reconciliation"}
+          </Button>
+          <Button size="sm" variant="outline" onClick={exportFindingBundle} disabled={!effectiveTenantId || (!latestRun && openFindings.length === 0)}>
+            Export finding bundle
           </Button>
         </div>
         <div className="mt-4 grid gap-4 md:grid-cols-2">
@@ -321,8 +456,10 @@ export function RuntimeOpsPage() {
                     <th className="py-2 pr-3 font-medium">Code</th>
                     <th className="py-2 pr-3 font-medium">Invoice</th>
                     <th className="py-2 pr-3 font-medium">Payment</th>
+                    <th className="py-2 pr-3 font-medium">State</th>
                     <th className="py-2 pr-3 font-medium">Trace</th>
                     <th className="py-2 pr-3 font-medium">Detected</th>
+                    <th className="py-2 pr-3 font-medium">Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -332,8 +469,19 @@ export function RuntimeOpsPage() {
                       <td className="py-2 pr-3 font-medium">{finding.finding_code}</td>
                       <td className="py-2 pr-3">{finding.invoice_id ?? "-"}</td>
                       <td className="py-2 pr-3">{finding.payment_id ?? "-"}</td>
+                      <td className="py-2 pr-3">{finding.status}</td>
                       <td className="py-2 pr-3">{finding.workflow_trace_id ?? finding.operation_trace_id ?? finding.request_trace_id ?? "-"}</td>
                       <td className="py-2 pr-3">{new Date(finding.detected_at).toLocaleString()}</td>
+                      <td className="py-2 pr-3">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void markFindingAcknowledged(finding.id)}
+                          disabled={actionFindingId === finding.id || finding.status === "ACKNOWLEDGED"}
+                        >
+                          Acknowledge
+                        </Button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

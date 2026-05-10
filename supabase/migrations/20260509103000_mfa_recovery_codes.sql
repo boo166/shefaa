@@ -18,6 +18,14 @@ CREATE INDEX IF NOT EXISTS ix_mfa_recovery_user_unused
 
 ALTER TABLE public.mfa_recovery_code_hashes ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "mfa_recovery_code_hashes_no_direct_access" ON public.mfa_recovery_code_hashes;
+CREATE POLICY "mfa_recovery_code_hashes_no_direct_access"
+  ON public.mfa_recovery_code_hashes
+  FOR ALL
+  TO authenticated
+  USING (false)
+  WITH CHECK (false);
+
 REVOKE ALL ON TABLE public.mfa_recovery_code_hashes FROM PUBLIC;
 REVOKE ALL ON TABLE public.mfa_recovery_code_hashes FROM anon;
 REVOKE ALL ON TABLE public.mfa_recovery_code_hashes FROM authenticated;

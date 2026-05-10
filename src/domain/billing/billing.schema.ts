@@ -124,7 +124,13 @@ export const invoiceSummarySchema = z.object({
 });
 
 export const billingReconciliationSeveritySchema = z.enum(["critical", "warning"]);
-export const billingReconciliationFindingStatusSchema = z.enum(["open", "acknowledged", "resolved"]);
+export const billingReconciliationFindingStatusSchema = z.enum([
+  "OPEN",
+  "ACKNOWLEDGED",
+  "INVESTIGATING",
+  "RESOLVED",
+  "FALSE_POSITIVE",
+]);
 
 export const billingReconciliationRunSchema = z.object({
   id: uuidSchema,

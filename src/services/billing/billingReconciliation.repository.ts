@@ -58,6 +58,13 @@ const FINDING_COLUMNS = [
   "resolved_at",
 ].join(", ");
 
+export type BillingReconciliationFindingStatus =
+  | "OPEN"
+  | "ACKNOWLEDGED"
+  | "INVESTIGATING"
+  | "RESOLVED"
+  | "FALSE_POSITIVE";
+
 export const billingReconciliationRepository = {
   async run(input: {
     tenantId: string;
@@ -116,7 +123,7 @@ export const billingReconciliationRepository = {
       .from("billing_reconciliation_findings", reconciliationCtx(tenantId, "billing.reconciliation.openFindings"))
       .select(FINDING_COLUMNS)
       .eq("tenant_id", tenantId)
-      .eq("status", "open")
+      .in("status", ["OPEN", "ACKNOWLEDGED", "INVESTIGATING"])
       .order("severity", { ascending: true })
       .order("detected_at", { ascending: false })
       .limit(limit);
@@ -129,5 +136,31 @@ export const billingReconciliationRepository = {
     }
 
     return (data ?? []) as BillingReconciliationFinding[];
+  },
+
+  async updateFindingStatus(
+    tenantId: string,
+    findingId: string,
+    status: BillingReconciliationFindingStatus,
+  ): Promise<BillingReconciliationFinding> {
+    const resolvedAt = status === "RESOLVED" || status === "FALSE_POSITIVE"
+      ? new Date().toISOString()
+      : null;
+    const { data, error } = await platformRepository
+      .from("billing_reconciliation_findings", reconciliationCtx(tenantId, "billing.reconciliation.updateFindingStatus", "financial"))
+      .update({ status, resolved_at: resolvedAt })
+      .eq("tenant_id", tenantId)
+      .eq("id", findingId)
+      .select(FINDING_COLUMNS)
+      .single();
+
+    if (error) {
+      throw new ServiceError(error.message ?? "Failed to update billing reconciliation finding", {
+        code: error.code,
+        details: error,
+      });
+    }
+
+    return data as BillingReconciliationFinding;
   },
 };

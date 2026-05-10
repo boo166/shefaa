@@ -41,6 +41,18 @@ function filterTablesForRuntimePolicy(tables: RealtimeTable[]): RealtimeTable[] 
 
 /** Bounded backoff schedule for internal resubscribe hooks (future worker retries). */
 export const REALTIME_RECONNECT_BACKOFF_MS = [0, 1_000, 3_000, 10_000] as const;
+export type RealtimeConnectionState =
+  | "CONNECTED"
+  | "DEGRADED"
+  | "PARTITIONED"
+  | "RECOVERING"
+  | "RESYNCING";
+
+const MAX_REPLAY_DRIFT_MS = 30_000;
+const STALE_SUBSCRIPTION_MS = 60_000;
+let realtimeConnectionState: RealtimeConnectionState = "CONNECTED";
+let lastRealtimeChangeAt = Date.now();
+let lastRealtimeRecoveryAt: number | null = null;
 
 export type SubscribeEntityParams = {
   ctx: RealtimePrincipalContext;
@@ -107,6 +119,7 @@ function openChannel(params: SubscribeEntityParams): { unsubscribe: () => void }
   });
 
   const inner = realtimeRepository.subscribeToTenantTables(params.ctx, tables, () => {
+    lastRealtimeChangeAt = Date.now();
     emitPlatformMetric("realtime_change", { tenantId: params.ctx.tenantId, tablesKey });
     params.onEvent();
   });
@@ -144,6 +157,7 @@ function reconcileAllInternal() {
   churnCount++;
   if (churnCount > MAX_CHURN_PER_SEC) {
     emitPlatformMetric("realtime_reconcile_throttled", { churnCount });
+    realtimeConnectionState = churnCount > MAX_CHURN_PER_SEC * 2 ? "PARTITIONED" : "DEGRADED";
     churnCount = 0;
     churnWindowStart = now;
     scheduleReconcile();
@@ -153,10 +167,12 @@ function reconcileAllInternal() {
   for (const entry of registry.values()) {
     attachIfNeeded(entry);
   }
+  realtimeConnectionState = "CONNECTED";
 }
 
 /** Tear down all active channels; registry entries remain and will reconnect on next reconcile. */
 export function disconnectAllRegisteredRealtime() {
+  realtimeConnectionState = "RECOVERING";
   for (const e of registry.values()) {
     e.activeUnsubscribe?.();
     e.activeUnsubscribe = null;
@@ -169,10 +185,12 @@ export function disconnectAllRegisteredRealtime() {
  */
 export function reconcileAll(opts?: { force?: boolean }) {
   if (opts?.force) {
+    realtimeConnectionState = "RESYNCING";
     for (const e of registry.values()) {
       e.lastIdentity = "";
     }
   }
+  lastRealtimeRecoveryAt = Date.now();
   reconcileAllInternal();
 }
 
@@ -211,14 +229,30 @@ export function getRealtimeRegistryDiagnostics(): {
   intentCount: number;
   activeChannelCount: number;
   churnThrottledRecently: boolean;
+  connectionState: RealtimeConnectionState;
+  maxReplayDriftMs: number;
+  staleSubscriptionThresholdMs: number;
+  replayDriftMs: number;
+  lastRecoveryAt: number | null;
 } {
   let activeChannelCount = 0;
   for (const e of registry.values()) {
     if (e.activeUnsubscribe) activeChannelCount++;
   }
+  const replayDriftMs = Date.now() - lastRealtimeChangeAt;
+  if (registry.size > 0 && activeChannelCount === 0) {
+    realtimeConnectionState = "PARTITIONED";
+  } else if (registry.size > 0 && replayDriftMs > STALE_SUBSCRIPTION_MS) {
+    realtimeConnectionState = "DEGRADED";
+  }
   return {
     intentCount: registry.size,
     activeChannelCount,
     churnThrottledRecently: churnCount > MAX_CHURN_PER_SEC / 2,
+    connectionState: realtimeConnectionState,
+    maxReplayDriftMs: MAX_REPLAY_DRIFT_MS,
+    staleSubscriptionThresholdMs: STALE_SUBSCRIPTION_MS,
+    replayDriftMs,
+    lastRecoveryAt: lastRealtimeRecoveryAt,
   };
 }

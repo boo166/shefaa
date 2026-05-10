@@ -1,4 +1,5 @@
 import type { Notification, NotificationCreateInput } from "@/domain/notifications/notification.types";
+import { Capabilities } from "@/platform/authorization/capabilities";
 import { platformRepository } from "@/platform/data/platformRepository";
 import type { PlatformRepositoryContext } from "@/platform/data/platformRepository.context";
 import { supabase } from "@/services/supabase/client";
@@ -10,8 +11,16 @@ function notificationCtx(
   tenantId: string | null,
   action: string,
   classification: PlatformRepositoryContext["classification"] = "tenant-critical",
+  requiredCapabilities: string[] = [],
 ): PlatformRepositoryContext {
-  return { action, classification, tenantScoped: Boolean(tenantId), tenantId };
+  return {
+    action,
+    classification,
+    tenantScoped: Boolean(tenantId),
+    tenantId,
+    subsystem: "notifications",
+    requiredCapabilities,
+  };
 }
 
 export interface NotificationRepository {
@@ -38,7 +47,7 @@ export const notificationRepository: NotificationRepository = {
   async listByUserPaged(tenantId, userId, limit, offset) {
     const to = Math.max(0, offset + limit - 1);
     const { data, error, count } = await platformRepository
-      .from("notifications", notificationCtx(tenantId, "notifications.listByUserPaged", "readonly"))
+      .from("notifications", notificationCtx(tenantId, "notifications.listByUserPaged", "readonly", [Capabilities.notifications.read]))
       .select(NOTIFICATION_COLUMNS, { count: "exact" })
       .eq("tenant_id", tenantId)
       .eq("user_id", userId)
@@ -51,7 +60,7 @@ export const notificationRepository: NotificationRepository = {
   },
   async markRead(id, tenantId, userId) {
     const { error } = await platformRepository
-      .from("notifications", notificationCtx(tenantId, "notifications.markRead", "critical"))
+      .from("notifications", notificationCtx(tenantId, "notifications.markRead", "critical", [Capabilities.notifications.write]))
       .update({ read: true })
       .eq("id", id)
       .eq("tenant_id", tenantId)
@@ -63,7 +72,7 @@ export const notificationRepository: NotificationRepository = {
   async markManyRead(ids, tenantId, userId) {
     if (ids.length === 0) return;
     const { error } = await platformRepository
-      .from("notifications", notificationCtx(tenantId, "notifications.markManyRead", "critical"))
+      .from("notifications", notificationCtx(tenantId, "notifications.markManyRead", "critical", [Capabilities.notifications.write]))
       .update({ read: true })
       .in("id", ids)
       .eq("tenant_id", tenantId)
@@ -74,7 +83,7 @@ export const notificationRepository: NotificationRepository = {
   },
   async create(input) {
     const { data, error } = await platformRepository
-      .from("notifications", notificationCtx(input.tenant_id, "notifications.create", "eventual"))
+      .from("notifications", notificationCtx(input.tenant_id, "notifications.create", "eventual", [Capabilities.notifications.write]))
       .insert({
         tenant_id: input.tenant_id,
         user_id: input.user_id,
@@ -158,7 +167,7 @@ export const notificationRepository: NotificationRepository = {
       retryAware: true,
       staleContextSafe: true,
       metricsEnabled: true,
-      requiredCapabilities: ["notifications.read", "notifications.write"],
+      requiredCapabilities: [Capabilities.notifications.read, Capabilities.notifications.write],
     };
   },
 };

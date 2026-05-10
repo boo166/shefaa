@@ -19,6 +19,7 @@ export const Capabilities = {
   pharmacy: { manage: "pharmacy.manage" },
   laboratory: { manage: "laboratory.manage" },
   reports: { view: "reports.analytics.view" },
+  notifications: { read: "notifications.read", write: "notifications.write" },
   admin: { super: "platform.super_admin" },
 } as const;
 

@@ -22,7 +22,11 @@ vi.mock("@/platform/data/platformRepository", () => ({
 
 import { platformRepository } from "@/platform/data/platformRepository";
 import { billingReconciliationRepository } from "../billingReconciliation.repository";
-import { billingReconciliationService, emitBillingReconciliationTick } from "../billingReconciliation";
+import {
+  billingReconciliationService,
+  emitBillingReconciliationTick,
+  scoreBillingReconciliationHealth,
+} from "../billingReconciliation";
 
 describe("billing reconciliation", () => {
   beforeEach(() => {
@@ -135,5 +139,19 @@ describe("billing reconciliation", () => {
       }),
     ]);
     expect(JSON.stringify(received)).not.toContain("evidence");
+  });
+
+  it("scores runtime health from reconciliation severity and failures", () => {
+    expect(scoreBillingReconciliationHealth({ openFindings: [] })).toBe("HEALTHY");
+    expect(scoreBillingReconciliationHealth({
+      openFindings: [{ severity: "critical" } as never],
+    })).toBe("DEGRADED");
+    expect(scoreBillingReconciliationHealth({
+      openFindings: [{ severity: "critical" } as never, { severity: "critical" } as never],
+    })).toBe("CONTAINED");
+    expect(scoreBillingReconciliationHealth({
+      latestRun: { status: "failed" } as never,
+      openFindings: [],
+    })).toBe("RECOVERING");
   });
 });

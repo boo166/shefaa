@@ -11,19 +11,36 @@ export type RecoveryStrategy =
   | "containment"
   | "safe_mode";
 
+export type RecoveryClass =
+  | "reconcile"
+  | "rollback"
+  | "invalidate"
+  | "abort"
+  | "rebuild"
+  | "contain"
+  | "manual_operator_action";
+
 /** Subset of {@link RuntimeFailureKind} handled by {@link resolveRecoveryPolicy}. */
 export type RecoveryFailureKind =
   | "stale_epoch"
   | "realtime_drift"
+  | "realtime_partition"
   | "workflow_mismatch"
+  | "workflow_divergence"
   | "readonly_transition"
   | "tenant_mismatch"
   | "auth_invalidation"
   | "barrier_stall"
-  | "transition_incomplete";
+  | "transition_incomplete"
+  | "mutation_freeze_violation"
+  | "duplicate_committed_command";
 
 export type RecoveryPolicyResolution = {
   strategy: RecoveryStrategy;
+  recoveryClass: RecoveryClass;
+  orderedClasses: readonly RecoveryClass[];
+  automatic: boolean;
+  requiresOperator: boolean;
 };
 
 /**
@@ -36,6 +53,7 @@ export type RuntimeFailureKind =
   | "policy_denied"
   | "runtime_mode_block"
   | "realtime_drift"
+  | "realtime_partition"
   | "workflow_divergence"
   | "barrier_timeout"
   | "coordination_partition"
@@ -44,7 +62,9 @@ export type RuntimeFailureKind =
   | "auth_invalidation"
   | "barrier_stall"
   | "transition_incomplete"
-  | "workflow_mismatch";
+  | "workflow_mismatch"
+  | "mutation_freeze_violation"
+  | "duplicate_committed_command";
 
 /** Canonical reactions the kernel and participants may execute (ordering is transition-specific). */
 export type SemanticAction =

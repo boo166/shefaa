@@ -1,4 +1,4 @@
-import type { RecoveryStrategy, RuntimeFailureKind, SemanticAction } from "./runtimeSemanticTypes";
+import type { RecoveryClass, RecoveryStrategy, RuntimeFailureKind, SemanticAction } from "./runtimeSemanticTypes";
 
 /** Runtime law: failure kind → ordered semantic actions. */
 export const RUNTIME_SEMANTIC_REGISTRY: Record<RuntimeFailureKind, readonly SemanticAction[]> = {
@@ -6,6 +6,7 @@ export const RUNTIME_SEMANTIC_REGISTRY: Record<RuntimeFailureKind, readonly Sema
   /** Teardown leads recovery strategy; later steps converge tenant/query state. */
   tenant_mismatch: ["TEARDOWN", "ABORT", "INVALIDATE_QUERY_SCOPES", "RECONCILE"],
   realtime_drift: ["RECONCILE"],
+  realtime_partition: ["CONTAIN", "RECONCILE", "ESCALATE"],
   policy_denied: ["DENY"],
   runtime_mode_block: ["DENY", "CONTAIN"],
   barrier_timeout: ["CONTAIN", "FAIL_SAFE"],
@@ -17,6 +18,8 @@ export const RUNTIME_SEMANTIC_REGISTRY: Record<RuntimeFailureKind, readonly Sema
   barrier_stall: ["FAIL_SAFE", "CONTAIN"],
   transition_incomplete: ["RECONCILE", "RETRY"],
   workflow_mismatch: ["COMPENSATE", "ABORT"],
+  mutation_freeze_violation: ["CONTAIN", "ESCALATE"],
+  duplicate_committed_command: ["CONTAIN", "ESCALATE"],
 };
 
 const ACTION_TO_RECOVERY: Partial<Record<SemanticAction, RecoveryStrategy>> = {
@@ -42,12 +45,37 @@ export function deriveRecoveryStrategy(actions: readonly SemanticAction[]): Reco
   return "reconcile";
 }
 
+const FAILURE_TO_RECOVERY_CLASSES: Record<RuntimeFailureKind, readonly RecoveryClass[]> = {
+  stale_epoch: ["abort", "invalidate", "reconcile"],
+  tenant_mismatch: ["rollback", "abort", "invalidate", "reconcile"],
+  policy_denied: ["abort"],
+  runtime_mode_block: ["contain"],
+  realtime_drift: ["reconcile"],
+  realtime_partition: ["rebuild", "invalidate", "reconcile"],
+  workflow_divergence: ["reconcile", "abort"],
+  barrier_timeout: ["contain"],
+  coordination_partition: ["contain"],
+  recovery_required: ["reconcile"],
+  readonly_transition: ["contain", "invalidate"],
+  auth_invalidation: ["contain", "rollback"],
+  barrier_stall: ["contain"],
+  transition_incomplete: ["reconcile"],
+  workflow_mismatch: ["reconcile", "abort"],
+  mutation_freeze_violation: ["contain"],
+  duplicate_committed_command: ["manual_operator_action"],
+};
+
+export function recoveryClassesForFailure(kind: RuntimeFailureKind): readonly RecoveryClass[] {
+  return FAILURE_TO_RECOVERY_CLASSES[kind];
+}
+
 const SEVERITY: Record<RuntimeFailureKind, "info" | "warning" | "critical"> = {
   stale_epoch: "warning",
   tenant_mismatch: "critical",
   policy_denied: "info",
   runtime_mode_block: "warning",
   realtime_drift: "warning",
+  realtime_partition: "critical",
   workflow_divergence: "critical",
   barrier_timeout: "critical",
   coordination_partition: "critical",
@@ -57,6 +85,8 @@ const SEVERITY: Record<RuntimeFailureKind, "info" | "warning" | "critical"> = {
   barrier_stall: "critical",
   transition_incomplete: "warning",
   workflow_mismatch: "critical",
+  mutation_freeze_violation: "critical",
+  duplicate_committed_command: "critical",
 };
 
 export function semanticSeverity(kind: RuntimeFailureKind): "info" | "warning" | "critical" {

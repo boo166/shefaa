@@ -2,6 +2,7 @@ export type {
   CoordinationEventContract,
   EffectiveRuntimeState,
   RecoveryFailureKind,
+  RecoveryClass,
   RecoveryPolicyResolution,
   RecoveryStrategy,
   RuntimeFailureKind,
@@ -10,7 +11,12 @@ export type {
   SemanticResolution,
 } from "./runtimeSemanticTypes";
 export { COORDINATION_CONTRACTS } from "./runtimeSemanticTypes";
-export { RUNTIME_SEMANTIC_REGISTRY, deriveRecoveryStrategy, semanticSeverity } from "./runtimeSemanticRegistry";
+export {
+  RUNTIME_SEMANTIC_REGISTRY,
+  deriveRecoveryStrategy,
+  recoveryClassesForFailure,
+  semanticSeverity,
+} from "./runtimeSemanticRegistry";
 export { resolveSemanticAction } from "./resolveSemanticAction";
 export { resolveEffectiveRuntimeState } from "./resolveEffectiveRuntimeState";
 export { RUNTIME_TRANSITION_DAG_TENANT_SWITCH, type RuntimeTransitionDagStep } from "./runtimeTransitionDag";
