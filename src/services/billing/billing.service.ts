@@ -34,7 +34,7 @@ import { buildTracePayload } from "@/platform/observability/traceContext";
 import { createAsyncOperation } from "@/platform/runtime/async/createAsyncOperation";
 import { billingRepository } from "./billing.repository";
 import { runBillingPostPaymentWorkflow } from "./billingPostPayment.workflow";
-import { emitBillingReconciliationTick } from "./billingReconciliation";
+import { billingReconciliationService, emitBillingReconciliationTick } from "./billingReconciliation";
 
 const todayDateKey = () => new Date().toISOString().slice(0, 10);
 
@@ -347,16 +347,19 @@ export const billingService = {
 
       const idempotencyKey = parsed.idempotency_key ?? crypto.randomUUID();
       const trace = buildTracePayload({ tenantId, actorId: userId ?? undefined });
+      let atomicOperationTraceId: string | undefined;
 
       const { command: rawCommand, workflowTraceId } = await runBillingPostPaymentWorkflow({
         invoiceId: parsedId,
         tenantId,
         userId,
         idempotencyKey,
-        postAtomic: () =>
+        postAtomic: (workflowCtx) =>
           createAsyncOperation(
             "billing.payment.postAtomic",
-            async (ctx) =>
+            async (ctx) => {
+              atomicOperationTraceId = ctx.operationTraceId;
+              return (
               billingRepository.postPaymentAtomic(
                 parsedId,
                 {
@@ -370,11 +373,19 @@ export const billingService = {
                 {
                   requestTraceId: trace.requestTraceId,
                   operationTraceId: ctx.operationTraceId,
+                  workflowTraceId: workflowCtx.workflowTraceId,
                   tenantId,
                   actorId: userId ?? undefined,
                 },
-              ),
-            { maxRetries: 2, timeoutMs: 120_000, retryDelayMs: 500, parentTrace: trace },
+              )
+              );
+            },
+            {
+              maxRetries: 2,
+              timeoutMs: 120_000,
+              retryDelayMs: 500,
+              parentTrace: { ...trace, workflowTraceId: workflowCtx.workflowTraceId },
+            },
           ),
       });
 
@@ -394,6 +405,7 @@ export const billingService = {
 
       const invoice = invoiceSchema.parse(command.invoice);
       const payment = invoicePaymentSchema.parse(command.payment);
+      const latestReconciliation = await billingReconciliationService.getLatestRun().catch(() => null);
 
       emitBillingReconciliationTick({
         tenantId,
@@ -401,7 +413,10 @@ export const billingService = {
         resultCode: command.result_code,
         idempotencyReplay: command.idempotency_replay,
         workflowTraceId,
+        operationTraceId: atomicOperationTraceId,
         requestTraceId: trace.requestTraceId,
+        latestFindingCount: latestReconciliation?.finding_count,
+        latestCriticalCount: latestReconciliation?.critical_count,
       });
 
       try {
@@ -419,6 +434,9 @@ export const billingService = {
             balance_due: invoice.balance_due,
             status: invoice.status,
             idempotency_replay: command.idempotency_replay,
+            request_trace_id: trace.requestTraceId,
+            operation_trace_id: atomicOperationTraceId,
+            workflow_trace_id: workflowTraceId,
           },
         });
       } catch (auditError) {

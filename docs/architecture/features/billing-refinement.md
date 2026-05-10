@@ -21,7 +21,7 @@ Apply [refinement-protocol.md](../refinement-protocol.md) plus:
 
 - [x] `platformRepository` for invoices / invoice_payments / RPC gateway (`ADR-004`)
 - [x] `createAsyncOperation` around `postPayment` RPC path
-- [ ] Reconciliation job + admin view
+- [x] Reconciliation authority + runtime ops view
 - [ ] Adversarial tests for RPC result codes
 - [ ] Cache invalidation policy documented
 - [ ] **Financial Critical** tier per [module-certification.md](../module-certification.md)

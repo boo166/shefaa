@@ -19,6 +19,7 @@ const mockState = vi.hoisted(() => ({
   } as MockResponse,
   responseFunctions: { data: {}, error: null } as MockResponse,
   responseStorage: { data: { signedUrl: "https://example.com/file" }, error: null } as MockResponse,
+  realtimeStatusCallback: null as null | ((status: string) => void),
 }));
 
 function createQueryBuilder() {
@@ -104,7 +105,10 @@ const mockSupabase = vi.hoisted(() => ({
   channel: vi.fn(() => {
     const channel = {
       on: vi.fn().mockReturnThis(),
-      subscribe: vi.fn().mockReturnThis(),
+      subscribe: vi.fn((callback?: (status: string) => void) => {
+        mockState.realtimeStatusCallback = callback ?? null;
+        return channel;
+      }),
     };
     return channel;
   }),
@@ -549,6 +553,9 @@ describe("repositories smoke", () => {
     });
     const notificationSub = notificationRepository.subscribeToUser(tenantId, userId, () => undefined);
     notificationSub.unsubscribe();
+    expect(mockSupabase.removeChannel).not.toHaveBeenCalled();
+    mockState.realtimeStatusCallback?.("SUBSCRIBED");
+    expect(mockSupabase.removeChannel).toHaveBeenCalledTimes(1);
 
     await clientErrorLogRepository.insert({
       tenant_id: tenantId,

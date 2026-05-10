@@ -93,6 +93,21 @@ export const notificationRepository: NotificationRepository = {
     return data as Notification;
   },
   subscribeToUser(tenantId, userId, onInsert) {
+    let channelState: "joining" | "subscribed" | "closed" = "joining";
+    let unsubscribeRequested = false;
+    let watchdog: ReturnType<typeof setTimeout> | null = null;
+    let removed = false;
+    const removeWhenSafe = () => {
+      if (removed || channelState === "closed") return;
+      if (channelState === "joining") return;
+      removed = true;
+      channelState = "closed";
+      if (watchdog) {
+        clearTimeout(watchdog);
+        watchdog = null;
+      }
+      void supabase.removeChannel(channel).catch(() => undefined);
+    };
     const channel = supabase
       .channel(`user-notifications:${userId}`)
       .on(
@@ -109,10 +124,30 @@ export const notificationRepository: NotificationRepository = {
           onInsert(row);
         },
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          channelState = "subscribed";
+          if (unsubscribeRequested) removeWhenSafe();
+          return;
+        }
+        if (status === "CLOSED" || status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          channelState = "closed";
+          if (watchdog) {
+            clearTimeout(watchdog);
+            watchdog = null;
+          }
+        }
+      });
     return {
       unsubscribe: () => {
-        void supabase.removeChannel(channel).catch(() => undefined);
+        unsubscribeRequested = true;
+        removeWhenSafe();
+        if (channelState === "joining" && !watchdog) {
+          watchdog = setTimeout(() => {
+            channelState = "subscribed";
+            removeWhenSafe();
+          }, 10_000);
+        }
       },
     };
   },

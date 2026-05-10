@@ -366,12 +366,15 @@ export const billingRepository: BillingRepository = {
       p_amount: input.amount,
       p_payment_method: input.payment_method,
       p_paid_at: input.paid_at ?? null,
-      p_reference: input.reference ?? null,
-      p_notes: input.notes ?? null,
-      p_idempotency_key: input.idempotency_key ?? null,
-      p_request_hash: requestHash,
-      p_user_id: userId ?? null,
-    }, billingCtx(tenantId, "billing.payment.postAtomic", "financial", trace ? { trace } : undefined));
+    p_reference: input.reference ?? null,
+    p_notes: input.notes ?? null,
+    p_idempotency_key: input.idempotency_key ?? null,
+    p_request_hash: requestHash,
+    p_user_id: userId ?? null,
+    p_request_trace_id: trace?.requestTraceId ?? null,
+    p_operation_trace_id: trace?.operationTraceId ?? null,
+    p_workflow_trace_id: trace?.workflowTraceId ?? null,
+  }, billingCtx(tenantId, "billing.payment.postAtomic", "financial", trace ? { trace } : undefined));
     if (error) {
       throw new ServiceError(error.message ?? "Failed to post invoice payment", {
         code: error.code,

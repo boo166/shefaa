@@ -4,7 +4,7 @@
 
 | Area | SLI | Notes |
 |------|-----|--------|
-| Billing | `billing.reconciliation_tick` success rate vs payment attempts | Alert on drop |
+| Billing | `billing.reconciliation_tick` success rate vs payment attempts; `billing.reconciliation_findings.critical` | Alert on drop or any critical finding |
 | Realtime | `realtime_reconnect_throttled` rate | Storm detection |
 | Runtime | `policy.runtime_blocked` by mode | Expected in drills only |
 | Auth | `stale_context_rejected` | Tenant-switch stress |
@@ -25,7 +25,7 @@ Wire dashboards to `emitPlatformMetric` / existing analytics sinks.
 ## Incident handling
 
 1. Confirm **runtime mode** and **health** (`RuntimeOpsPage` at `/admin/ops/runtime` for super-admins).
-2. Capture **trace IDs** from `async_operation_*` and `billing.reconciliation_tick` metrics.
+2. Capture **trace IDs** from `async_operation_*`, `billing.reconciliation_tick`, and reconciliation findings.
 3. Freeze billing writes if ledger integrity uncertain (`SAFE_MODE` / subsystem freeze per policy).
 
 ## Recovery drills

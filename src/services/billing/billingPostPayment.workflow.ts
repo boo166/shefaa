@@ -3,7 +3,7 @@ import { emitPlatformMetric } from "@/platform/observability/runtimeAnalytics";
 import { buildTracePayload } from "@/platform/observability/traceContext";
 import { runtimeModeController } from "@/platform/runtime/mode/runtimeModeController";
 import { resolveRuntimePolicy } from "@/platform/runtime/policy";
-import { createWorkflow } from "@/platform/runtime/workflows/createWorkflow";
+import { createWorkflow, type WorkflowStepContext } from "@/platform/runtime/workflows/createWorkflow";
 import type { InvoicePaymentCommandResult } from "@/domain/billing/billing.types";
 
 export type BillingPostPaymentWorkflowInput = {
@@ -11,7 +11,7 @@ export type BillingPostPaymentWorkflowInput = {
   tenantId: string;
   userId: string | null;
   idempotencyKey: string;
-  postAtomic: () => Promise<InvoicePaymentCommandResult>;
+  postAtomic: (ctx: WorkflowStepContext) => Promise<InvoicePaymentCommandResult>;
 };
 
 /**
@@ -45,8 +45,8 @@ export async function runBillingPostPaymentWorkflow(
     steps: [
       {
         id: "post_atomic",
-        run: async () => {
-          command = await input.postAtomic();
+        run: async (ctx) => {
+          command = await input.postAtomic(ctx);
         },
         compensate: async () => {
           emitPlatformMetric("billing.workflow.compensate_post", {

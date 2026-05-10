@@ -9,6 +9,9 @@ import {
   invoicePaymentCommandResultSchema,
   invoiceListParamsSchema,
   invoiceSummarySchema,
+  billingReconciliationRunSchema,
+  billingReconciliationFindingSchema,
+  billingReconciliationSummarySchema,
 } from "./billing.schema";
 
 export type Invoice = z.infer<typeof invoiceSchema>;
@@ -20,3 +23,6 @@ export type InvoicePaymentCreateInput = z.infer<typeof invoicePaymentCreateSchem
 export type InvoicePaymentCommandResult = z.infer<typeof invoicePaymentCommandResultSchema>;
 export type InvoiceListParams = z.infer<typeof invoiceListParamsSchema>;
 export type InvoiceSummary = z.infer<typeof invoiceSummarySchema>;
+export type BillingReconciliationRun = z.infer<typeof billingReconciliationRunSchema>;
+export type BillingReconciliationFinding = z.infer<typeof billingReconciliationFindingSchema>;
+export type BillingReconciliationSummary = z.infer<typeof billingReconciliationSummarySchema>;

@@ -15,6 +15,11 @@ export type RuntimeTransitionLogInsert = {
   status: string;
 };
 
+export type RuntimeTransitionLogRow = RuntimeTransitionLogInsert & {
+  id: string;
+  created_at: string;
+};
+
 /** Best-effort persistence; ignores failures (offline, RLS, missing table in local DB). */
 export async function persistRuntimeTransitionLogRow(row: RuntimeTransitionLogInsert): Promise<void> {
   if (typeof window === "undefined") return;
@@ -27,4 +32,33 @@ export async function persistRuntimeTransitionLogRow(row: RuntimeTransitionLogIn
   } catch {
     /* ignore */
   }
+}
+
+export async function listRecentRuntimeTransitionLogRows(limit = 6): Promise<RuntimeTransitionLogRow[]> {
+  if (typeof window === "undefined") return [];
+  const sb = supabase as unknown as {
+    from: (name: string) => {
+      select: (columns: string) => {
+        order: (
+          column: string,
+          options: { ascending: boolean },
+        ) => {
+          limit: (count: number) => Promise<{
+            data: RuntimeTransitionLogRow[] | null;
+            error: { message: string } | null;
+          }>;
+        };
+      };
+    };
+  };
+  const { data, error } = await sb
+    .from("runtime_transition_log")
+    .select("id, transition_id, runtime_epoch, transition_type, tenant_id, actor_id, started_at, completed_at, failed_at, rollback_triggered, trace_id, runtime_transition_trace_id, status, created_at")
+    .order("started_at", { ascending: false })
+    .limit(limit);
+  if (error) {
+    console.warn("[runtime_transition_log]", error.message);
+    return [];
+  }
+  return data ?? [];
 }

@@ -36,7 +36,7 @@ Authoritative map of primitives, standards, module maturity, ownership, and roll
 |--------|---------------|-----------------|---------------|----------------|--------------|-------|-------|
 | Auth / session | A | A | A | Partial (staging-auth) | Yes | Platform | Baseline template |
 | Authorization (capability graph) | B | B | B | Low | Partial | Platform | Engine in `src/platform/authorization` |
-| Billing | B | B | B | Low | Partial | Domain | Idempotent RPC + tenant invariant on read |
+| Billing | B | B | B | Low | Partial | Domain | Idempotent RPC + reconciliation authority in progress |
 | Realtime | B | B | B | Low | Partial | Platform | Channel bound to `sessionVersion` + `userId` |
 | Jobs / queues | C | B | C | Low | No | Platform | Trace payload injected |
 | Notifications | C | B | C | Low | No | Domain | TBD convergence |
@@ -61,7 +61,7 @@ Authoritative map of primitives, standards, module maturity, ownership, and roll
 |------|-------|--------|
 | 1 | Governance + CI | In progress |
 | 2 | Capability graph + authz telemetry | In progress |
-| 3 | Billing ledger + reconciliation | Planned |
+| 3 | Billing ledger + reconciliation | Implemented (initial authority) |
 | 4 | Realtime lifecycle + chaos | In progress |
 | 5 | Storage / jobs / notifications | Planned |
 | 6 | Operational UI shell | In progress |

@@ -122,3 +122,55 @@ export const invoiceSummarySchema = z.object({
   paid_amount: z.coerce.number().min(0),
   pending_amount: z.coerce.number().min(0),
 });
+
+export const billingReconciliationSeveritySchema = z.enum(["critical", "warning"]);
+export const billingReconciliationFindingStatusSchema = z.enum(["open", "acknowledged", "resolved"]);
+
+export const billingReconciliationRunSchema = z.object({
+  id: uuidSchema,
+  tenant_id: uuidSchema,
+  window_start: dateTimeStringSchema,
+  window_end: dateTimeStringSchema,
+  checked_invoice_count: z.coerce.number().int().min(0),
+  checked_payment_count: z.coerce.number().int().min(0),
+  finding_count: z.coerce.number().int().min(0),
+  critical_count: z.coerce.number().int().min(0),
+  warning_count: z.coerce.number().int().min(0),
+  status: z.enum(["completed", "failed"]),
+  request_trace_id: z.string().optional().nullable(),
+  operation_trace_id: z.string().optional().nullable(),
+  workflow_trace_id: z.string().optional().nullable(),
+  started_at: dateTimeStringSchema,
+  completed_at: dateTimeStringSchema,
+  created_at: dateTimeStringSchema,
+});
+
+export const billingReconciliationFindingSchema = z.object({
+  id: uuidSchema,
+  run_id: uuidSchema,
+  tenant_id: uuidSchema,
+  invoice_id: uuidSchema.optional().nullable(),
+  payment_id: uuidSchema.optional().nullable(),
+  idempotency_id: uuidSchema.optional().nullable(),
+  finding_code: z.string().trim().min(1),
+  severity: billingReconciliationSeveritySchema,
+  status: billingReconciliationFindingStatusSchema,
+  evidence: z.record(z.unknown()).default({}),
+  request_trace_id: z.string().optional().nullable(),
+  operation_trace_id: z.string().optional().nullable(),
+  workflow_trace_id: z.string().optional().nullable(),
+  detected_at: dateTimeStringSchema,
+  resolved_at: dateTimeStringSchema.optional().nullable(),
+});
+
+export const billingReconciliationSummarySchema = z.object({
+  run_id: uuidSchema.optional().nullable(),
+  tenant_id: uuidSchema,
+  checked_invoice_count: z.coerce.number().int().min(0),
+  checked_payment_count: z.coerce.number().int().min(0),
+  finding_count: z.coerce.number().int().min(0),
+  critical_count: z.coerce.number().int().min(0),
+  warning_count: z.coerce.number().int().min(0),
+  dry_run: z.boolean(),
+  completed_at: dateTimeStringSchema,
+});
