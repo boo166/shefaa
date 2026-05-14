@@ -33,14 +33,15 @@ select is(
         'invoices', 'patient_documents', 'notifications', 'insurance_claims',
         'appointment_queue', 'reminder_queue', 'appointment_reminder_log',
         'patient_accounts', 'appointment_reminder_config', 'patient_contact_preferences',
-        'domain_events', 'jobs', 'system_logs', 'video_sessions',
+        'domain_events', 'event_outbox', 'event_delivery_attempts', 'dead_letter_events',
+        'jobs', 'system_logs', 'video_sessions',
         'suppliers', 'purchase_orders', 'purchase_order_items', 'stock_receipts',
         'medication_batches', 'inventory_movements',
         'lab_test_mappings', 'external_lab_connections', 'external_lab_events',
         'integration_api_keys'
       )
   ),
-  28::bigint,
+  31::bigint,
   'Required tables include tenant_id'
 );
 

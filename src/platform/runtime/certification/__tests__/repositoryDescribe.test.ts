@@ -24,5 +24,16 @@ describe("repository.describe metadata", () => {
       expect(() => assertRepositoryDescribe(meta)).not.toThrow();
     }
   });
-});
 
+  it("documents notification realtime as the remaining repository exception", () => {
+    expect(notificationRepository.describe?.()).toMatchObject({
+      certified: true,
+      tenantBound: true,
+      staleContextSafe: true,
+      metricsEnabled: true,
+      exceptions: [
+        expect.stringContaining("direct Supabase channel"),
+      ],
+    });
+  });
+});

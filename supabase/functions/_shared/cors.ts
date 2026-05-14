@@ -6,7 +6,7 @@ export type CorsConfig = {
 };
 
 const DEFAULT_ALLOWED_HEADERS =
-  "authorization, x-client-info, apikey, content-type, x-cron-secret, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version";
+  "authorization, x-client-info, apikey, content-type, x-cron-secret, x-worker-secret, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version";
 
 const DEFAULT_ALLOWED_METHODS = ["GET", "POST", "OPTIONS"];
 

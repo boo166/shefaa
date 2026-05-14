@@ -7,6 +7,7 @@ import {
 import { initSentry } from "../_shared/sentry.ts";
 import { logError, logInfo } from "../_shared/logger.ts";
 import { createRequestId, getClientIp } from "../_shared/request.ts";
+import { checkRateLimit } from "../_shared/rate-limit.ts";
 
 const allowedOrigins = getAllowedOriginsFromEnv();
 
@@ -64,36 +65,25 @@ Deno.serve(async (req) => {
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
-    const { data: allowed, error: rateError } = await adminClient.rpc(
-      "check_rate_limit",
-      {
-        _key: `invite-staff:${clientIp}`,
-        _max_hits: RATE_LIMIT_MAX,
-        _window_seconds: RATE_LIMIT_WINDOW_SECONDS,
-      },
-    );
+    const rateLimit = await checkRateLimit({
+      client: adminClient,
+      key: `invite-staff:${clientIp}`,
+      maxHits: RATE_LIMIT_MAX,
+      windowSeconds: RATE_LIMIT_WINDOW_SECONDS,
+      requestId,
+      actionType: "invite_staff",
+      resourceType: "user_invite",
+      failOpen: true,
+    });
 
-    if (rateError) {
-      logError("invite_staff_rate_limit_error", {
-        request_id: requestId,
-        action_type: "invite_staff",
-        resource_type: "user_invite",
-        metadata: { error: rateError.message },
-      });
-      return new Response(JSON.stringify({ error: "Rate limiter unavailable" }), {
-        status: 503,
-        headers: baseHeaders,
-      });
-    }
-
-    if (!allowed) {
+    if (!rateLimit.allowed) {
       return new Response(
         JSON.stringify({ error: "Too many requests. Please try again later." }),
         {
           status: 429,
           headers: {
             ...baseHeaders,
-            "Retry-After": "15",
+            "Retry-After": String(rateLimit.retryAfter ?? 15),
           },
         },
       );

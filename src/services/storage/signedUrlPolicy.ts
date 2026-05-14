@@ -1,0 +1,5 @@
+export const STORAGE_SIGNED_URL_TTLS = {
+  PATIENT_DOCUMENT: 60 * 15,
+  INSURANCE_EXPORT: 60 * 5,
+  AVATAR: 60 * 60,
+} as const;

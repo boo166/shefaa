@@ -5,6 +5,7 @@ export type RepositoryDescribe = {
   staleContextSafe: boolean;
   metricsEnabled: boolean;
   requiredCapabilities: string[];
+  exceptions?: string[];
 };
 
 export function assertRepositoryDescribe(value: unknown): asserts value is RepositoryDescribe {
@@ -16,5 +17,8 @@ export function assertRepositoryDescribe(value: unknown): asserts value is Repos
   }
   if (!Array.isArray(v.requiredCapabilities) || !v.requiredCapabilities.every((x: any) => typeof x === "string")) {
     throw new Error("repository.describe().requiredCapabilities must be string[]");
+  }
+  if (v.exceptions !== undefined && (!Array.isArray(v.exceptions) || !v.exceptions.every((x: any) => typeof x === "string"))) {
+    throw new Error("repository.describe().exceptions must be string[] when provided");
   }
 }

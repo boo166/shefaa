@@ -69,6 +69,13 @@ function applyBillingReconciliationHealth(input: {
   runtimeHealthStore.setHealth(scoreBillingReconciliationHealth(input));
 }
 
+function activeCriticalFindingsFromSummary(summary: BillingReconciliationSummary): BillingReconciliationFinding[] {
+  return Array.from({ length: summary.critical_count }, () => ({
+    severity: "critical",
+    status: "OPEN",
+  } as BillingReconciliationFinding));
+}
+
 export const billingReconciliationService = {
   async runDry(input?: { windowStart?: string; windowEnd?: string }): Promise<BillingReconciliationSummary> {
     try {
@@ -98,9 +105,7 @@ export const billingReconciliationService = {
       });
       applyBillingReconciliationHealth({
         latestRun: null,
-        openFindings: summary.critical_count > 0
-          ? [{ severity: "critical" } as BillingReconciliationFinding]
-          : [],
+        openFindings: activeCriticalFindingsFromSummary(summary),
       });
       return summary;
     } catch (err) {
@@ -127,9 +132,10 @@ export const billingReconciliationService = {
         findingCount: summary.finding_count,
         criticalCount: summary.critical_count,
       });
-      if (summary.critical_count > 0) {
-        runtimeHealthStore.setHealth(summary.critical_count >= 2 ? "CONTAINED" : "DEGRADED");
-      }
+      applyBillingReconciliationHealth({
+        latestRun: null,
+        openFindings: activeCriticalFindingsFromSummary(summary),
+      });
       return summary;
     } catch (err) {
       runtimeHealthStore.setHealth("RECOVERING");

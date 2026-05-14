@@ -20,6 +20,21 @@ vi.mock("@/platform/data/platformRepository", () => ({
   },
 }));
 
+const healthStoreState = vi.hoisted(() => ({
+  value: "HEALTHY",
+  setHealth: vi.fn((next: string) => {
+    healthStoreState.value = next;
+  }),
+}));
+
+vi.mock("@/platform/runtime/recovery/runtimeHealthStore", () => ({
+  runtimeHealthStore: {
+    getSnapshot: () => healthStoreState.value,
+    subscribe: () => () => {},
+    setHealth: healthStoreState.setHealth,
+  },
+}));
+
 import { platformRepository } from "@/platform/data/platformRepository";
 import { billingReconciliationRepository } from "../billingReconciliation.repository";
 import {
@@ -31,6 +46,7 @@ import {
 describe("billing reconciliation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    healthStoreState.value = "HEALTHY";
   });
 
   it("runs the DB-owned reconciliation RPC through platformRepository", async () => {
@@ -153,5 +169,47 @@ describe("billing reconciliation", () => {
       latestRun: { status: "failed" } as never,
       openFindings: [],
     })).toBe("RECOVERING");
+  });
+
+  it("applies contained health for repeated dry-run critical findings", async () => {
+    vi.mocked(platformRepository.rpc).mockResolvedValue({
+      data: [{
+        run_id: null,
+        tenant_id: tenantId,
+        checked_invoice_count: 3,
+        checked_payment_count: 2,
+        finding_count: 2,
+        critical_count: 2,
+        warning_count: 0,
+        dry_run: true,
+        completed_at: "2026-05-10T10:00:00.000Z",
+      }],
+      error: null,
+    } as never);
+
+    await billingReconciliationService.runDry();
+
+    expect(healthStoreState.setHealth).toHaveBeenLastCalledWith("CONTAINED");
+  });
+
+  it("restores healthy runtime health after a clean live reconciliation", async () => {
+    vi.mocked(platformRepository.rpc).mockResolvedValue({
+      data: [{
+        run_id: "00000000-0000-0000-0000-000000000901",
+        tenant_id: tenantId,
+        checked_invoice_count: 3,
+        checked_payment_count: 2,
+        finding_count: 0,
+        critical_count: 0,
+        warning_count: 0,
+        dry_run: false,
+        completed_at: "2026-05-10T10:00:00.000Z",
+      }],
+      error: null,
+    } as never);
+
+    await billingReconciliationService.runLive();
+
+    expect(healthStoreState.setHealth).toHaveBeenLastCalledWith("HEALTHY");
   });
 });

@@ -1,6 +1,6 @@
 begin;
 
-select plan(7);
+select plan(16);
 
 set local role postgres;
 set local session_replication_role = replica;
@@ -247,6 +247,107 @@ select ok(
       and workflow_trace_id = 'wf-recon'
   ),
   'Reconciliation findings carry available trace ids'
+);
+
+select ok(
+  exists (
+    select 1
+    from pg_constraint c
+    where c.conrelid = 'public.billing_reconciliation_findings'::regclass
+      and c.conname = 'billing_reconciliation_findings_status_check'
+      and pg_get_constraintdef(c.oid) like '%OPEN%'
+      and pg_get_constraintdef(c.oid) like '%ACKNOWLEDGED%'
+      and pg_get_constraintdef(c.oid) like '%INVESTIGATING%'
+      and pg_get_constraintdef(c.oid) like '%RESOLVED%'
+      and pg_get_constraintdef(c.oid) like '%FALSE_POSITIVE%'
+  ),
+  'Reconciliation finding lifecycle states are constrained to the operational workflow'
+);
+
+set local role postgres;
+
+select is(
+  (select command from cron.job where jobname = 'billing-reconciliation-hot'),
+  $$select public.run_scheduled_billing_reconciliation('hot', interval '30 days', 25, interval '15 minutes');$$,
+  'Hot tenant reconciliation runs every 15 minutes with bounded tenant concurrency'
+);
+
+select is(
+  (select command from cron.job where jobname = 'billing-reconciliation-hourly'),
+  $$select public.run_scheduled_billing_reconciliation('all', interval '30 days', 100, interval '45 minutes');$$,
+  'All tenant reconciliation runs hourly with a minimum interval guard'
+);
+
+select is(
+  (select command from cron.job where jobname = 'billing-reconciliation-full-daily'),
+  $$select public.run_scheduled_billing_reconciliation('full', interval '3650 days', 500, interval '20 hours');$$,
+  'Daily full reconciliation keeps a full-history window and bounded concurrency'
+);
+
+select is(
+  has_function_privilege(
+    'authenticated',
+    'public.run_scheduled_billing_reconciliation(text, interval, integer, interval)',
+    'EXECUTE'
+  ),
+  false,
+  'Authenticated users cannot execute the scheduled reconciliation wrapper'
+);
+
+select is(
+  has_function_privilege(
+    'service_role',
+    'public.run_scheduled_billing_reconciliation(text, interval, integer, interval)',
+    'EXECUTE'
+  ),
+  true,
+  'Service role can execute the scheduled reconciliation wrapper'
+);
+
+select is(
+  (
+    select count(*)
+    from public.run_scheduled_billing_reconciliation('all', interval '1 day', 1, interval '0 seconds')
+  ),
+  1::bigint,
+  'Scheduled reconciliation respects the tenant limit'
+);
+
+select is(
+  (
+    select result
+    from public.run_scheduled_billing_reconciliation('all', interval '1 day', 1, interval '1 day')
+    where tenant_id = '00000000-0000-0000-0000-000000000011'
+  ),
+  'minimum_interval',
+  'Scheduled reconciliation skips tenants inside the minimum completed-run interval'
+);
+
+insert into public.billing_reconciliation_runs (
+  id,
+  tenant_id,
+  window_start,
+  window_end,
+  status,
+  completed_at
+)
+values (
+  '00000000-0000-0000-0000-000000000701',
+  '00000000-0000-0000-0000-000000000011',
+  now() - interval '1 day',
+  now(),
+  'failed',
+  now() + interval '1 second'
+);
+
+select is(
+  (
+    select result
+    from public.run_scheduled_billing_reconciliation('all', interval '1 day', 1, interval '1 day')
+    where tenant_id = '00000000-0000-0000-0000-000000000011'
+  ),
+  'recent_failure',
+  'Scheduled reconciliation detects recent failed runs instead of thrashing the tenant'
 );
 
 set local role postgres;

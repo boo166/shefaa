@@ -7,7 +7,12 @@ export type DomainEventRecord = {
   entity_type: string;
   entity_id: string | null;
   tenant_id: string;
+  user_id?: string | null;
   payload: Record<string, unknown>;
+  request_trace_id?: string | null;
+  operation_trace_id?: string | null;
+  workflow_trace_id?: string | null;
+  runtime_transition_trace_id?: string | null;
   created_at?: string;
   processed_at?: string | null;
 };

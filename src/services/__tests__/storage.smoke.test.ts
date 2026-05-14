@@ -27,6 +27,7 @@ import {
   uploadPatientDocument,
 } from "@/services/patients/patientDocuments.storage";
 import { profileStorage } from "@/services/settings/profile.storage";
+import { STORAGE_SIGNED_URL_TTLS } from "@/services/storage/signedUrlPolicy";
 
 const tenantId = "00000000-0000-0000-0000-000000000111";
 const patientId = "00000000-0000-0000-0000-000000000222";
@@ -57,7 +58,16 @@ describe("storage helpers", () => {
     const file = new File(["avatar"], "avatar.png", { type: "image/png" });
     const uploaded = await profileStorage.uploadAvatar("user-1", file);
     expect(uploaded.signedUrl).toContain("https://");
+    expect(profileStorageRepository.createSignedUrl).toHaveBeenCalledWith(
+      "user-1/avatar.png",
+      STORAGE_SIGNED_URL_TTLS.AVATAR,
+    );
     await profileStorage.getSignedAvatarUrl("user-1/avatar.png", 120);
+    await profileStorage.refreshSignedUrl("user-1/avatar.png");
+    expect(profileStorageRepository.createSignedUrl).toHaveBeenLastCalledWith(
+      "user-1/avatar.png",
+      STORAGE_SIGNED_URL_TTLS.AVATAR,
+    );
     await profileStorage.removeAvatar("user-1");
   });
 });

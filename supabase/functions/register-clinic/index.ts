@@ -4,6 +4,7 @@ import { verifyCaptcha } from "../_shared/captcha.ts";
 import { initSentry } from "../_shared/sentry.ts";
 import { logError, logInfo } from "../_shared/logger.ts";
 import { createRequestId, getClientIp } from "../_shared/request.ts";
+import { checkRateLimit } from "../_shared/rate-limit.ts";
 
 const allowedOrigins = getAllowedOriginsFromEnv();
 
@@ -62,36 +63,25 @@ Deno.serve(async (req) => {
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? Deno.env.get("SUPABASE_PUBLISHABLE_KEY")!;
     const client = createClient(supabaseUrl, anonKey);
 
-    const { data: allowed, error: rateError } = await client.rpc(
-      "check_rate_limit",
-      {
-        _key: `register-clinic:${clientIp}`,
-        _max_hits: RATE_LIMIT_MAX,
-        _window_seconds: RATE_LIMIT_WINDOW_SECONDS,
-      },
-    );
+    const rateLimit = await checkRateLimit({
+      client,
+      key: `register-clinic:${clientIp}`,
+      maxHits: RATE_LIMIT_MAX,
+      windowSeconds: RATE_LIMIT_WINDOW_SECONDS,
+      requestId,
+      actionType: "register_clinic",
+      resourceType: "tenant",
+      failOpen: true,
+    });
 
-    if (rateError) {
-      logError("register_clinic_rate_limit_error", {
-        request_id: requestId,
-        action_type: "register_clinic",
-        resource_type: "tenant",
-        metadata: { error: rateError.message },
-      });
-      return new Response(JSON.stringify({ error: "Rate limiter unavailable" }), {
-        status: 503,
-        headers: baseHeaders,
-      });
-    }
-
-    if (!allowed) {
+    if (!rateLimit.allowed) {
       return new Response(
         JSON.stringify({ error: "Too many requests. Please try again later." }),
         {
           status: 429,
           headers: {
             ...baseHeaders,
-            "Retry-After": "30",
+            "Retry-After": String(rateLimit.retryAfter ?? 30),
           },
         },
       );
@@ -128,36 +118,25 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { data: emailAllowed, error: emailRateError } = await client.rpc(
-      "check_rate_limit",
-      {
-        _key: `register-clinic-email:${normalizedEmail}`,
-        _max_hits: EMAIL_RATE_LIMIT_MAX,
-        _window_seconds: EMAIL_RATE_LIMIT_WINDOW_SECONDS,
-      },
-    );
+    const emailRateLimit = await checkRateLimit({
+      client,
+      key: `register-clinic-email:${normalizedEmail}`,
+      maxHits: EMAIL_RATE_LIMIT_MAX,
+      windowSeconds: EMAIL_RATE_LIMIT_WINDOW_SECONDS,
+      requestId,
+      actionType: "register_clinic_email",
+      resourceType: "tenant",
+      failOpen: true,
+    });
 
-    if (emailRateError) {
-      logError("register_clinic_email_rate_limit_error", {
-        request_id: requestId,
-        action_type: "register_clinic",
-        resource_type: "tenant",
-        metadata: { error: emailRateError.message },
-      });
-      return new Response(JSON.stringify({ error: "Rate limiter unavailable" }), {
-        status: 503,
-        headers: baseHeaders,
-      });
-    }
-
-    if (!emailAllowed) {
+    if (!emailRateLimit.allowed) {
       return new Response(
         JSON.stringify({ error: "Too many requests for this email. Please try again later." }),
         {
           status: 429,
           headers: {
             ...baseHeaders,
-            "Retry-After": "3600",
+            "Retry-After": String(emailRateLimit.retryAfter ?? 3600),
           },
         },
       );

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
@@ -196,11 +196,57 @@ vi.mock("@/services/billing/billingReconciliation", () => ({
   },
 }));
 
+vi.mock("@/services/events/eventOutbox.repository", () => ({
+  eventOutboxRepository: {
+    getSummary: vi.fn(async () => ({
+      backlog_count: 2,
+      processing_count: 1,
+      retry_count: 1,
+      failed_count: 0,
+      delivered_count: 9,
+      dead_letter_count: 1,
+      oldest_undelivered_at: "2026-05-10T09:45:00.000Z",
+      oldest_undelivered_age_seconds: 900,
+      avg_delivery_latency_ms: 42,
+    })),
+    listRecent: vi.fn(async () => [{
+      id: "00000000-0000-0000-0000-000000000777",
+      tenant_id: tenantId,
+      tenant_name: "Tenant One",
+      event_type: "InvoicePaid",
+      aggregate_type: "invoice",
+      aggregate_id: "00000000-0000-0000-0000-000000000444",
+      handler_name: "audit",
+      delivery_guarantee: "exactly_once_persistence",
+      status: "DEAD_LETTER",
+      attempts: 7,
+      max_attempts: 7,
+      next_retry_at: "2026-05-10T09:45:00.000Z",
+      processed_at: null,
+      last_error: "audit failed",
+      request_trace_id: "req-1",
+      operation_trace_id: "op-1",
+      workflow_trace_id: "wf-1",
+      created_at: "2026-05-10T09:45:00.000Z",
+      updated_at: "2026-05-10T10:00:00.000Z",
+    }]),
+    replay: vi.fn(async () => []),
+  },
+}));
+
 import { RuntimeOpsPage } from "./RuntimeOpsPage";
 
 describe("RuntimeOpsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: vi.fn(() => "blob:runtime-ops-forensic"),
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      value: vi.fn(),
+    });
   });
 
   it("renders reconciliation findings and runtime command-center panels", async () => {
@@ -212,12 +258,15 @@ describe("RuntimeOpsPage", () => {
 
     expect(screen.getByText("Runtime operations")).toBeInTheDocument();
     await waitFor(() => {
-      expect(screen.getByText("INVOICE_PAYMENT_TOTAL_MISMATCH")).toBeInTheDocument();
+      expect(screen.getAllByText("INVOICE_PAYMENT_TOTAL_MISMATCH").length).toBeGreaterThan(0);
     });
     expect(screen.getByText("Billing reconciliation")).toBeInTheDocument();
     expect(screen.getByText("OPEN")).toBeInTheDocument();
     expect(screen.getByText("Trigger live reconciliation")).toBeInTheDocument();
     expect(screen.getByText("Export finding bundle")).toBeInTheDocument();
+    expect(screen.getByText("Investigate")).toBeInTheDocument();
+    expect(screen.getByText("Resolve")).toBeInTheDocument();
+    expect(screen.getByText("False positive")).toBeInTheDocument();
     expect(screen.getByText("Mutation freeze")).toBeInTheDocument();
     expect(screen.getByText("Recovery timeline")).toBeInTheDocument();
     expect(screen.getAllByText(/realtime_partition/).length).toBeGreaterThan(0);
@@ -225,6 +274,102 @@ describe("RuntimeOpsPage", () => {
     expect(screen.getAllByText(/rebuild/).length).toBeGreaterThan(0);
     expect(screen.getByText("Runtime mode history")).toBeInTheDocument();
     expect(screen.getByText(/billing-payment:inv-1:key-1/)).toBeInTheDocument();
-    expect(screen.getByText(/rtx-1/)).toBeInTheDocument();
+    expect(screen.getAllByText(/rtx-1/).length).toBeGreaterThan(0);
+    expect(screen.getByText("Durable event delivery")).toBeInTheDocument();
+    expect(screen.getByText("Incident timeline")).toBeInTheDocument();
+    expect(screen.getByText("Grouped incident sessions")).toBeInTheDocument();
+    expect(screen.getByText("Evidence drill-down")).toBeInTheDocument();
+    expect(screen.getByText("Reconciliation trends")).toBeInTheDocument();
+    expect(screen.getByText("Open critical: 1")).toBeInTheDocument();
+    expect(screen.getByText(/Repeated finding codes:/)).toBeInTheDocument();
+    expect(screen.getByText("Show related transitions")).toBeInTheDocument();
+    expect(screen.getByText("Show affected workflows")).toBeInTheDocument();
+    expect(screen.getByText("Show reconciliation lineage")).toBeInTheDocument();
+    expect(screen.getByText("Show delivery attempts")).toBeInTheDocument();
+    expect(screen.getByText("Export forensic bundle")).toBeInTheDocument();
+    expect(screen.getAllByText(/Primary cause:/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Billing finding").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Runtime transition").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Event outbox").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Event outbox").length).toBeGreaterThan(0);
+    expect(screen.getByText("InvoicePaid")).toBeInTheDocument();
+    expect(screen.getByText("exactly_once_persistence")).toBeInTheDocument();
+    expect(screen.getByText("Replay")).toBeInTheDocument();
+  });
+
+  it("exports the selected forensic evidence bundle", async () => {
+    const click = vi.fn();
+    const originalCreateElement = document.createElement.bind(document);
+    vi.spyOn(document, "createElement").mockImplementation((tagName: string) => {
+      const element = originalCreateElement(tagName);
+      if (tagName === "a") {
+        Object.defineProperty(element, "click", {
+          configurable: true,
+          value: click,
+        });
+      }
+      return element;
+    });
+
+    render(
+      <MemoryRouter>
+        <RuntimeOpsPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Export forensic bundle")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText("Export forensic bundle"));
+
+    expect(URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+    expect(click).toHaveBeenCalled();
+  });
+
+  it("sends every reconciliation finding lifecycle action through the service", async () => {
+    const { billingReconciliationService } = await import("@/services/billing/billingReconciliation");
+
+    render(
+      <MemoryRouter>
+        <RuntimeOpsPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByText("INVOICE_PAYMENT_TOTAL_MISMATCH").length).toBeGreaterThan(0);
+    });
+
+    fireEvent.click(screen.getByText("Acknowledge"));
+    await waitFor(() => {
+      expect(billingReconciliationService.updateFindingStatus).toHaveBeenCalledWith(
+        "00000000-0000-0000-0000-000000000902",
+        "ACKNOWLEDGED",
+      );
+    });
+
+    fireEvent.click(screen.getByText("Investigate"));
+    await waitFor(() => {
+      expect(billingReconciliationService.updateFindingStatus).toHaveBeenCalledWith(
+        "00000000-0000-0000-0000-000000000902",
+        "INVESTIGATING",
+      );
+    });
+
+    fireEvent.click(screen.getByText("Resolve"));
+    await waitFor(() => {
+      expect(billingReconciliationService.updateFindingStatus).toHaveBeenCalledWith(
+        "00000000-0000-0000-0000-000000000902",
+        "RESOLVED",
+      );
+    });
+
+    fireEvent.click(screen.getByText("False positive"));
+    await waitFor(() => {
+      expect(billingReconciliationService.updateFindingStatus).toHaveBeenCalledWith(
+        "00000000-0000-0000-0000-000000000902",
+        "FALSE_POSITIVE",
+      );
+    });
   });
 });

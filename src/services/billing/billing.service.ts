@@ -419,46 +419,6 @@ export const billingService = {
         latestCriticalCount: latestReconciliation?.critical_count,
       });
 
-      try {
-        await auditLogService.logEvent({
-          tenant_id: tenantId,
-          user_id: userId,
-          action: "invoice_payment_posted",
-          action_type: "invoice_payment_create",
-          entity_type: "invoice_payment",
-          entity_id: payment.id,
-          details: {
-            invoice_id: invoice.id,
-            amount: payment.amount,
-            payment_method: payment.payment_method,
-            balance_due: invoice.balance_due,
-            status: invoice.status,
-            idempotency_replay: command.idempotency_replay,
-            request_trace_id: trace.requestTraceId,
-            operation_trace_id: atomicOperationTraceId,
-            workflow_trace_id: workflowTraceId,
-          },
-        });
-      } catch (auditError) {
-        console.error("Failed to persist billing audit event", auditError);
-      }
-
-      if (existing.status !== "paid" && invoice.status === "paid") {
-        try {
-          await emitDomainEvent(
-            "InvoicePaid",
-            {
-              invoiceId: invoice.id,
-              patientId: invoice.patient_id,
-              amount: Number(payment.amount),
-            },
-            { tenantId, userId },
-          );
-        } catch (eventError) {
-          console.error("Failed to emit InvoicePaid event", eventError);
-        }
-      }
-
       return { invoice, payment };
       });
     } catch (err) {

@@ -172,6 +172,7 @@ import { userInviteRepository } from "@/services/settings/userInvite.repository"
 import { userPreferencesRepository } from "@/services/settings/userPreferences.repository";
 import { settingsUsersRepository } from "@/services/settings/users.repository";
 import { subscriptionRepository } from "@/services/subscription/subscription.repository";
+import { STORAGE_SIGNED_URL_TTLS } from "@/services/storage/signedUrlPolicy";
 
 const tenantId = mockTenant.tenantId;
 const userId = mockTenant.userId;
@@ -758,7 +759,7 @@ describe("repositories smoke", () => {
 
     const avatarFile = new File(["avatar"], "avatar.png", { type: "image/png" });
     await profileStorageRepository.upload(`${userId}/avatar.png`, avatarFile);
-    await profileStorageRepository.createSignedUrl(`${userId}/avatar.png`, 60);
+    await profileStorageRepository.createSignedUrl(`${userId}/avatar.png`, STORAGE_SIGNED_URL_TTLS.AVATAR);
     await profileStorageRepository.remove([`${userId}/avatar.png`]);
 
     await securityRepository.updatePassword("password123");

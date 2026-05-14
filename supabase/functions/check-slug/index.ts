@@ -4,6 +4,7 @@ import { verifyCaptcha } from "../_shared/captcha.ts";
 import { initSentry } from "../_shared/sentry.ts";
 import { logError, logInfo } from "../_shared/logger.ts";
 import { createRequestId, getClientIp } from "../_shared/request.ts";
+import { checkRateLimit } from "../_shared/rate-limit.ts";
 
 const allowedOrigins = getAllowedOriginsFromEnv();
 
@@ -75,36 +76,25 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_ANON_KEY") ?? Deno.env.get("SUPABASE_PUBLISHABLE_KEY")!,
     );
 
-    const { data: allowed, error: rateError } = await client.rpc(
-      "check_rate_limit",
-      {
-        _key: `check-slug:${clientIp}`,
-        _max_hits: RATE_LIMIT_MAX,
-        _window_seconds: RATE_LIMIT_WINDOW_SECONDS,
-      },
-    );
+    const rateLimit = await checkRateLimit({
+      client,
+      key: `check-slug:${clientIp}`,
+      maxHits: RATE_LIMIT_MAX,
+      windowSeconds: RATE_LIMIT_WINDOW_SECONDS,
+      requestId,
+      actionType: "check_slug",
+      resourceType: "tenant",
+      failOpen: true,
+    });
 
-    if (rateError) {
-      logError("check_slug_rate_limit_error", {
-        request_id: requestId,
-        action_type: "check_slug",
-        resource_type: "tenant",
-        metadata: { error: rateError.message },
-      });
-      return new Response(JSON.stringify({ error: "Rate limiter unavailable" }), {
-        status: 503,
-        headers: baseHeaders,
-      });
-    }
-
-    if (!allowed) {
+    if (!rateLimit.allowed) {
       return new Response(
         JSON.stringify({ error: "Too many requests. Please slow down." }),
         {
           status: 429,
           headers: {
             ...baseHeaders,
-            "Retry-After": "10",
+            "Retry-After": String(rateLimit.retryAfter ?? 10),
           },
         },
       );

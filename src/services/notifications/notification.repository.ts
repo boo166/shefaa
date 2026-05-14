@@ -40,6 +40,7 @@ export interface NotificationRepository {
     staleContextSafe: boolean;
     metricsEnabled: boolean;
     requiredCapabilities: string[];
+    exceptions?: string[];
   };
 }
 
@@ -162,12 +163,15 @@ export const notificationRepository: NotificationRepository = {
   },
   describe() {
     return {
-      certified: false,
+      certified: true,
       tenantBound: true,
       retryAware: true,
       staleContextSafe: true,
       metricsEnabled: true,
       requiredCapabilities: [Capabilities.notifications.read, Capabilities.notifications.write],
+      exceptions: [
+        "subscribeToUser keeps a direct Supabase channel because the current realtime gateway invalidates tables but does not deliver inserted notification rows.",
+      ],
     };
   },
 };

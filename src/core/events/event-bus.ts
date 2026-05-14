@@ -50,6 +50,9 @@ export async function emitDomainEvent<TName extends DomainEventName>(
       tenantId: metadata.tenantId,
       userId: metadata.userId ?? null,
       requestId: metadata.requestId ?? createRequestId(),
+      operationTraceId: metadata.operationTraceId ?? null,
+      workflowTraceId: metadata.workflowTraceId ?? null,
+      runtimeTransitionTraceId: metadata.runtimeTransitionTraceId ?? null,
       occurredAt: metadata.occurredAt ?? new Date().toISOString(),
     },
   };
@@ -63,11 +66,15 @@ export async function emitDomainEvent<TName extends DomainEventName>(
       entity_type: mapping?.entityType ?? name,
       entity_id: entityId,
       tenant_id: event.metadata.tenantId,
+      user_id: event.metadata.userId ?? null,
       payload: payload as Record<string, unknown>,
+      request_trace_id: event.metadata.requestId ?? null,
+      operation_trace_id: event.metadata.operationTraceId ?? null,
+      workflow_trace_id: event.metadata.workflowTraceId ?? null,
+      runtime_transition_trace_id: event.metadata.runtimeTransitionTraceId ?? null,
     });
   } catch (err) {
     await reportError(err, { action: "event_store_failed", resourceType: name });
+    throw err;
   }
-
-  await eventBus.emit(event);
 }

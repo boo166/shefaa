@@ -48,6 +48,9 @@ export type DomainEventMetadata = {
   tenantId: string;
   userId?: string | null;
   requestId?: string | null;
+  operationTraceId?: string | null;
+  workflowTraceId?: string | null;
+  runtimeTransitionTraceId?: string | null;
   occurredAt: string;
 };
 

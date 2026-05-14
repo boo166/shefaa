@@ -1,5 +1,6 @@
 import { supabase } from "@/services/supabase/client";
 import { ServiceError } from "@/services/supabase/errors";
+import { STORAGE_SIGNED_URL_TTLS } from "@/services/storage/signedUrlPolicy";
 
 const BUCKET = "insurance-attachments";
 
@@ -25,7 +26,7 @@ export const insuranceAttachmentsStorageRepository: InsuranceAttachmentsStorageR
   async download(filePath) {
     const { data: signed, error: signError } = await supabase.storage
       .from(BUCKET)
-      .createSignedUrl(filePath, 60);
+      .createSignedUrl(filePath, STORAGE_SIGNED_URL_TTLS.INSURANCE_EXPORT);
     if (signError || !signed?.signedUrl) {
       throw new ServiceError(signError?.message ?? "Failed to create signed URL", {
         code: signError?.code,
