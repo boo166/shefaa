@@ -239,30 +239,30 @@ export const labRepository: LabRepository = {
     return assertOk(result) as LabResult;
   },
   async create(input, tenantId) {
-    const payload: Record<string, unknown> = {
-      tenant_id: tenantId,
-      patient_id: input.patient_id,
-      doctor_id: input.doctor_id,
-      test_name: input.test_name,
-    };
-
-    if (input.order_date !== undefined) payload.order_date = input.order_date;
-    if (input.status !== undefined) payload.status = input.status;
-    if (input.result !== undefined) payload.result = input.result;
-    if (input.result_value !== undefined) payload.result_value = input.result_value;
-    if (input.result_unit !== undefined) payload.result_unit = input.result_unit;
-    if (input.reference_range !== undefined) payload.reference_range = input.reference_range;
-    if (input.abnormal_flag !== undefined) payload.abnormal_flag = input.abnormal_flag;
-    if (input.result_notes !== undefined) payload.result_notes = input.result_notes;
-    if (input.resulted_at !== undefined) payload.resulted_at = input.resulted_at;
-
-    const result = await platformRepository
-      .from("lab_orders", labCtx(tenantId, "lab.create"))
-      .insert(payload)
-      .select(LAB_COLUMNS)
-      .single();
-
-    return assertOk(result) as LabResult;
+    const { data, error } = await platformRepository.rpc("command_lab_order", {
+      p_operation: "create",
+      p_lab_order_id: null,
+      p_tenant_id: tenantId,
+      p_payload: input,
+      p_expected_updated_at: null,
+      p_idempotency_key: null,
+      p_request_hash: ["create", tenantId, input.patient_id, input.doctor_id, input.test_name].join("|"),
+      p_user_id: null,
+      p_request_trace_id: null,
+      p_operation_trace_id: null,
+      p_workflow_trace_id: null,
+    }, labCtx(tenantId, "lab.create", "critical"));
+    if (error) {
+      throw new ServiceError(error.message ?? "Failed to create lab order", {
+        code: error.code,
+        details: error,
+      });
+    }
+    const row = (data as any)?.[0];
+    if (!row?.lab_order) {
+      throw new ServiceError("Lab order command returned no result", { code: "LAB_ORDER_COMMAND_EMPTY_RESULT" });
+    }
+    return row.lab_order as LabResult;
   },
   async update(id, input, tenantId, expectedUpdatedAt) {
     const payload: Record<string, unknown> = {};
@@ -290,22 +290,31 @@ export const labRepository: LabRepository = {
       return assertOk(result) as LabResult;
     }
 
-    let query = platformRepository
-      .from("lab_orders", labCtx(tenantId, "lab.update"))
-      .update(payload)
-      .eq("id", id)
-      .eq("tenant_id", tenantId);
-    if (expectedUpdatedAt) {
-      query = query.eq("updated_at", expectedUpdatedAt);
-    }
-    const { data, error } = await query.select(LAB_COLUMNS).maybeSingle();
+    const { data, error } = await platformRepository.rpc("command_lab_order", {
+      p_operation: "update",
+      p_lab_order_id: id,
+      p_tenant_id: tenantId,
+      p_payload: payload,
+      p_expected_updated_at: expectedUpdatedAt ?? null,
+      p_idempotency_key: null,
+      p_request_hash: ["update", id, tenantId, JSON.stringify(payload), expectedUpdatedAt ?? ""].join("|"),
+      p_user_id: null,
+      p_request_trace_id: null,
+      p_operation_trace_id: null,
+      p_workflow_trace_id: null,
+    }, labCtx(tenantId, "lab.update", "critical"));
     if (error) {
       throw new ServiceError(error.message ?? "Failed to update lab order", {
         code: error.code,
         details: error,
       });
     }
-    return (data ?? null) as LabResult | null;
+    const row = (data as any)?.[0];
+    if (!row) {
+      throw new ServiceError("Lab order command returned no result", { code: "LAB_ORDER_COMMAND_EMPTY_RESULT" });
+    }
+    if (row.result_code === "CONFLICT") return null;
+    return (row.lab_order ?? null) as LabResult | null;
   },
   async finalizeResult(id, input, tenantId, userId, expectedUpdatedAt, trace) {
     const requestHash = [
@@ -353,44 +362,71 @@ export const labRepository: LabRepository = {
     return (row.lab_order ?? null) as LabResult | null;
   },
   async archive(id, tenantId, userId) {
-    const result = await platformRepository
-      .from("lab_orders", labCtx(tenantId, "lab.archive"))
-      .update({ deleted_at: new Date().toISOString(), deleted_by: userId })
-      .eq("id", id)
-      .eq("tenant_id", tenantId)
-      .select(LAB_COLUMNS)
-      .single();
-
-    return assertOk(result) as LabResult;
+    const { data, error } = await platformRepository.rpc("command_lab_order", {
+      p_operation: "archive",
+      p_lab_order_id: id,
+      p_tenant_id: tenantId,
+      p_payload: {},
+      p_expected_updated_at: null,
+      p_idempotency_key: null,
+      p_request_hash: ["archive", id, tenantId].join("|"),
+      p_user_id: userId,
+      p_request_trace_id: null,
+      p_operation_trace_id: null,
+      p_workflow_trace_id: null,
+    }, labCtx(tenantId, "lab.archive", "critical"));
+    if (error) {
+      throw new ServiceError(error.message ?? "Failed to archive lab order", {
+        code: error.code,
+        details: error,
+      });
+    }
+    const row = (data as any)?.[0];
+    if (!row?.lab_order) {
+      throw new ServiceError("Lab order command returned no result", { code: "LAB_ORDER_COMMAND_EMPTY_RESULT" });
+    }
+    return row.lab_order as LabResult;
   },
   async restore(id, tenantId) {
-    const result = await platformRepository
-      .from("lab_orders", labCtx(tenantId, "lab.restore"))
-      .update({ deleted_at: null, deleted_by: null })
-      .eq("id", id)
-      .eq("tenant_id", tenantId)
-      .select(LAB_COLUMNS)
-      .single();
-
-    return assertOk(result) as LabResult;
+    const { data, error } = await platformRepository.rpc("command_lab_order", {
+      p_operation: "restore",
+      p_lab_order_id: id,
+      p_tenant_id: tenantId,
+      p_payload: {},
+      p_expected_updated_at: null,
+      p_idempotency_key: null,
+      p_request_hash: ["restore", id, tenantId].join("|"),
+      p_user_id: null,
+      p_request_trace_id: null,
+      p_operation_trace_id: null,
+      p_workflow_trace_id: null,
+    }, labCtx(tenantId, "lab.restore", "critical"));
+    if (error) {
+      throw new ServiceError(error.message ?? "Failed to restore lab order", {
+        code: error.code,
+        details: error,
+      });
+    }
+    const row = (data as any)?.[0];
+    if (!row?.lab_order) {
+      throw new ServiceError("Lab order command returned no result", { code: "LAB_ORDER_COMMAND_EMPTY_RESULT" });
+    }
+    return row.lab_order as LabResult;
   },
   describe() {
     return {
-      certified: false,
+      certified: true,
       tenantBound: true,
       traceAware: true,
       runtimeAware: true,
       capabilityAware: true,
-      reconciliationAware: false,
-      recoveryAware: false,
+      reconciliationAware: true,
+      recoveryAware: true,
       evidenceAware: true,
       retryAware: true,
       staleContextSafe: true,
       metricsEnabled: true,
       requiredCapabilities: [Capabilities.records.manage, Capabilities.laboratory.manage],
-      exceptions: [
-        "Lab result finalization is DB-authoritative, but create/archive/restore and non-result updates are not yet fully recovery-aware.",
-      ],
     };
   },
 };

@@ -65,7 +65,181 @@ const mockTenant = vi.hoisted(() => ({
 
 const mockSupabase = vi.hoisted(() => ({
   from: vi.fn(() => createQueryBuilder()),
-  rpc: vi.fn(async () => mockState.responseRpc),
+  rpc: vi.fn(async (fn: string) => {
+    if (fn === "command_medication" || fn === "adjust_medication_stock") {
+      return {
+        data: [{
+          result_code: "OK",
+          medication: {
+            id: "00000000-0000-0000-0000-000000000333",
+            tenant_id: "00000000-0000-0000-0000-000000000111",
+            name: "Medication",
+            category: "General",
+            stock: 10,
+            unit: "tabs",
+            price: 1,
+            status: "in_stock",
+            created_at: "2026-03-01T00:00:00.000Z",
+            updated_at: "2026-03-01T00:00:00.000Z",
+          },
+        }],
+        error: null,
+      };
+    }
+    if (fn === "command_supplier") {
+      return {
+        data: [{
+          result_code: "OK",
+          supplier: {
+            id: "00000000-0000-0000-0000-000000000333",
+            tenant_id: "00000000-0000-0000-0000-000000000111",
+            name: "Supplier",
+            contact_name: "Contact",
+            phone: "+201000000000",
+            email: "supplier@example.com",
+            address: "Main warehouse",
+            status: "active",
+            created_at: "2026-03-01T00:00:00.000Z",
+            updated_at: "2026-03-01T00:00:00.000Z",
+          },
+        }],
+        error: null,
+      };
+    }
+    if (fn === "command_purchase_order") {
+      return {
+        data: [{
+          result_code: "OK",
+          purchase_order: {
+            id: "00000000-0000-0000-0000-000000000333",
+            tenant_id: "00000000-0000-0000-0000-000000000111",
+            supplier_id: "00000000-0000-0000-0000-000000000333",
+            status: "submitted",
+            order_date: "2026-03-10",
+            total_amount: 90,
+            notes: "replenishment",
+            created_at: "2026-03-01T00:00:00.000Z",
+            updated_at: "2026-03-01T00:00:00.000Z",
+          },
+        }],
+        error: null,
+      };
+    }
+    if (fn === "receive_procurement_stock") {
+      return {
+        data: [{
+          result_code: "OK",
+          purchase_order: {
+            id: "00000000-0000-0000-0000-000000000333",
+            tenant_id: "00000000-0000-0000-0000-000000000111",
+            supplier_id: "00000000-0000-0000-0000-000000000333",
+            status: "received",
+            order_date: "2026-03-10",
+            total_amount: 90,
+            notes: "replenishment",
+            created_at: "2026-03-01T00:00:00.000Z",
+            updated_at: "2026-03-01T00:00:00.000Z",
+          },
+          stock_receipt: {
+            id: "00000000-0000-0000-0000-000000000444",
+            tenant_id: "00000000-0000-0000-0000-000000000111",
+            purchase_order_id: "00000000-0000-0000-0000-000000000333",
+            received_at: "2026-03-10T00:00:00.000Z",
+            received_by: "00000000-0000-0000-0000-000000000222",
+            notes: "received",
+            created_at: "2026-03-10T00:00:00.000Z",
+          },
+          medication_batch: {
+            id: "00000000-0000-0000-0000-000000000555",
+            tenant_id: "00000000-0000-0000-0000-000000000111",
+            medication_id: "00000000-0000-0000-0000-000000000333",
+            supplier_id: "00000000-0000-0000-0000-000000000333",
+            lot_number: "LOT-1",
+            expiry_date: "2027-01-01",
+            quantity: 12,
+            cost_price: 7.5,
+            received_at: "2026-03-10T00:00:00.000Z",
+            created_at: "2026-03-10T00:00:00.000Z",
+          },
+          inventory_movement: {
+            id: "00000000-0000-0000-0000-000000000666",
+            tenant_id: "00000000-0000-0000-0000-000000000111",
+            medication_id: "00000000-0000-0000-0000-000000000333",
+            batch_id: "00000000-0000-0000-0000-000000000555",
+            movement_type: "receipt",
+            quantity: 12,
+            source_reference: "purchase_order:po:item:item:receipt:receipt",
+            created_at: "2026-03-10T00:00:00.000Z",
+          },
+          medication: {},
+        }],
+        error: null,
+      };
+    }
+    if (fn === "command_insurance_claim" || fn === "transition_insurance_claim") {
+      return {
+        data: [{
+          result_code: "OK",
+          claim: {
+            id: "00000000-0000-0000-0000-000000000333",
+            tenant_id: "00000000-0000-0000-0000-000000000111",
+            patient_id: "00000000-0000-0000-0000-000000000333",
+            provider: "Provider",
+            service: "Service",
+            amount: 100,
+            claim_date: "2026-03-10",
+            status: "draft",
+            submitted_at: null,
+            processing_started_at: null,
+            approved_at: null,
+            reimbursed_at: null,
+            payer_reference: null,
+            denial_reason: null,
+            assigned_to_user_id: null,
+            internal_notes: null,
+            payer_notes: null,
+            last_follow_up_at: null,
+            next_follow_up_at: null,
+            resubmission_count: 0,
+            deleted_at: null,
+            deleted_by: null,
+            created_at: "2026-03-01T00:00:00.000Z",
+            updated_at: "2026-03-01T00:00:00.000Z",
+          },
+        }],
+        error: null,
+      };
+    }
+    if (fn === "command_lab_order" || fn === "finalize_lab_result") {
+      return {
+        data: [{
+          result_code: "OK",
+          lab_order: {
+            id: "00000000-0000-0000-0000-000000000333",
+            tenant_id: "00000000-0000-0000-0000-000000000111",
+            patient_id: "00000000-0000-0000-0000-000000000333",
+            doctor_id: "00000000-0000-0000-0000-000000000333",
+            test_name: "CBC",
+            order_date: "2026-03-10",
+            status: "pending",
+            result: null,
+            result_value: null,
+            result_unit: null,
+            reference_range: null,
+            abnormal_flag: null,
+            result_notes: null,
+            resulted_at: null,
+            deleted_at: null,
+            deleted_by: null,
+            created_at: "2026-03-01T00:00:00.000Z",
+            updated_at: "2026-03-01T00:00:00.000Z",
+          },
+        }],
+        error: null,
+      };
+    }
+    return mockState.responseRpc;
+  }),
   auth: {
     signInWithPassword: vi.fn(async () => mockState.responseAuth),
     signOut: vi.fn(async () => ({ error: null })),
@@ -157,6 +331,7 @@ import { patientRepository } from "@/services/patients/patient.repository";
 import { patientDocumentsRepository } from "@/services/patients/patientDocuments.repository";
 import { patientDocumentsStorageRepository } from "@/services/patients/patientDocuments.storage.repository";
 import { pharmacyRepository } from "@/services/pharmacy/pharmacy.repository";
+import { procurementRepository } from "@/services/procurement/procurement.repository";
 import { prescriptionRepository } from "@/services/prescriptions/prescription.repository";
 import { realtimeRepository } from "@/services/realtime/realtime.repository";
 import { reportRepository } from "@/services/reports/report.repository";
@@ -660,6 +835,41 @@ describe("repositories smoke", () => {
       status: "in_stock",
     }, tenantId);
     await pharmacyRepository.remove(recordId, tenantId);
+
+    await procurementRepository.listSuppliers({
+      page: 1,
+      pageSize: 10,
+      search: "supplier",
+      filters: { status: "active" },
+      sort: { column: "name", ascending: true } as any,
+    }, tenantId);
+    await procurementRepository.createSupplier({ name: "Supplier", email: "supplier@example.com" }, tenantId);
+    await procurementRepository.updateSupplier(recordId, { phone: "+201111111111" }, tenantId);
+    await procurementRepository.archiveSupplier(recordId, tenantId, userId);
+    await procurementRepository.restoreSupplier(recordId, tenantId);
+    await procurementRepository.listPurchaseOrders({
+      page: 1,
+      pageSize: 10,
+      filters: { status: "submitted", supplier_id: recordId },
+      sort: { column: "order_date", ascending: false } as any,
+    }, tenantId);
+    await procurementRepository.createPurchaseOrder({
+      supplier_id: recordId,
+      status: "submitted",
+      items: [{ medication_id: recordId, quantity: 12, unit_cost: 7.5 }],
+    }, tenantId);
+    await procurementRepository.updatePurchaseOrder(recordId, { notes: "updated" }, tenantId);
+    await procurementRepository.submitPurchaseOrder(recordId, tenantId);
+    await procurementRepository.cancelPurchaseOrder(recordId, tenantId);
+    await procurementRepository.receiveStock({
+      purchase_order_id: recordId,
+      purchase_order_item_id: recordId,
+      quantity: 12,
+      lot_number: "LOT-1",
+      expiry_date: "2027-01-01",
+      received_at: "2026-03-10T00:00:00.000Z",
+      notes: "received",
+    }, tenantId, userId);
 
     await prescriptionRepository.listPaged({
       page: 1,

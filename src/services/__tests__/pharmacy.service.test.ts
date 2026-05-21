@@ -49,14 +49,14 @@ describe("pharmacyService operational authority", () => {
     vi.resetModules();
   });
 
-  it("uses the DB stock command and derives status through the command result", async () => {
+  it("uses the DB medication command and derives status through the command result", async () => {
     vi.doMock("@/core/auth/authStore", () => ({
       useAuth: {
         getState: () => ({ hasPermission: () => true }),
       },
     }));
     const repo = vi.mocked(pharmacyRepository, true);
-    repo.adjustStock.mockResolvedValue(buildMedication({
+    repo.update.mockResolvedValue(buildMedication({
       stock: 0,
       status: "out_of_stock",
     }) as any);
@@ -65,8 +65,8 @@ describe("pharmacyService operational authority", () => {
 
     const result = await pharmacyService.update(medicationId, { stock: 0 });
 
-    expect(repo.adjustStock).toHaveBeenCalledWith(medicationId, 0, tenantId, userId, undefined);
-    expect(repo.update).not.toHaveBeenCalled();
+    expect(repo.update).toHaveBeenCalledWith(medicationId, { stock: 0, status: "out_of_stock" }, tenantId, undefined);
+    expect(repo.adjustStock).not.toHaveBeenCalled();
     expect(result.status).toBe("out_of_stock");
   });
 

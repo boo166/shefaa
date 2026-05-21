@@ -16,7 +16,6 @@ import { BusinessRuleError, ConflictError, NotFoundError, toServiceError } from 
 import { getTenantContext } from "@/services/supabase/tenant";
 import { assertAnyPermission } from "@/services/supabase/permissions";
 import { featureAccessService } from "@/services/subscription/featureAccess.service";
-import { auditLogService } from "@/services/settings/audit.service";
 import { rateLimitService } from "@/services/security/rateLimit.service";
 import { withAuthStaleGuard } from "@/services/auth/authContextSnapshot";
 import { labRepository } from "./lab.repository";
@@ -114,24 +113,9 @@ export const labService = {
       await featureAccessService.assertFeatureAccess("laboratory");
       return await withAuthStaleGuard(async () => {
         const parsed = labResultCreateSchema.parse(input);
-        const { tenantId, userId } = getTenantContext();
+        const { tenantId } = getTenantContext();
         const result = await labRepository.create(parsed, tenantId);
-        const labOrder = labResultSchema.parse(result);
-        await auditLogService.logEvent({
-          tenant_id: tenantId,
-          user_id: userId,
-          action: "lab_order_created",
-          action_type: "lab_order_create",
-          entity_type: "lab_order",
-          entity_id: labOrder.id,
-          details: {
-            patient_id: labOrder.patient_id,
-            doctor_id: labOrder.doctor_id,
-            test_name: labOrder.test_name,
-            status: labOrder.status,
-          },
-        });
-        return labOrder;
+        return labResultSchema.parse(result);
       });
     } catch (err) {
       throw toServiceError(err, "Failed to create lab order");
@@ -209,19 +193,7 @@ export const labService = {
           }
           throw new NotFoundError("Lab order not found");
         }
-        const labOrder = labResultSchema.parse(result);
-        if (!shouldUseFinalizeCommand) {
-          await auditLogService.logEvent({
-            tenant_id: tenantId,
-            user_id: userId,
-            action: "lab_order_updated",
-            action_type: "lab_order_update",
-            entity_type: "lab_order",
-            entity_id: labOrder.id,
-            details: normalizedUpdate as Record<string, unknown>,
-          });
-        }
-        return labOrder;
+        return labResultSchema.parse(result);
       });
     } catch (err) {
       throw toServiceError(err, "Failed to update lab order");
@@ -235,16 +207,7 @@ export const labService = {
         const parsedId = uuidSchema.parse(id);
         const { tenantId, userId } = getTenantContext();
         const result = await labRepository.archive(parsedId, tenantId, userId);
-        const labOrder = labResultSchema.parse(result);
-        await auditLogService.logEvent({
-          tenant_id: tenantId,
-          user_id: userId,
-          action: "lab_order_archived",
-          action_type: "lab_order_archive",
-          entity_type: "lab_order",
-          entity_id: labOrder.id,
-        });
-        return labOrder;
+        return labResultSchema.parse(result);
       });
     } catch (err) {
       throw toServiceError(err, "Failed to archive lab order");
@@ -256,18 +219,9 @@ export const labService = {
       await featureAccessService.assertFeatureAccess("laboratory");
       return await withAuthStaleGuard(async () => {
         const parsedId = uuidSchema.parse(id);
-        const { tenantId, userId } = getTenantContext();
+        const { tenantId } = getTenantContext();
         const result = await labRepository.restore(parsedId, tenantId);
-        const labOrder = labResultSchema.parse(result);
-        await auditLogService.logEvent({
-          tenant_id: tenantId,
-          user_id: userId,
-          action: "lab_order_restored",
-          action_type: "lab_order_restore",
-          entity_type: "lab_order",
-          entity_id: labOrder.id,
-        });
-        return labOrder;
+        return labResultSchema.parse(result);
       });
     } catch (err) {
       throw toServiceError(err, "Failed to restore lab order");

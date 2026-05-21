@@ -125,24 +125,30 @@ export const pharmacyRepository: PharmacyRepository = {
     return ((data as any)?.[0] ?? { total_count: 0, low_stock_count: 0, inventory_value: 0 }) as MedicationSummary;
   },
   async create(input, tenantId) {
-    const payload: Record<string, unknown> = {
-      tenant_id: tenantId,
-      name: input.name,
-    };
-
-    if (input.category !== undefined) payload.category = input.category;
-    if (input.stock !== undefined) payload.stock = input.stock;
-    if (input.unit !== undefined) payload.unit = input.unit;
-    if (input.price !== undefined) payload.price = input.price;
-    if (input.status !== undefined) payload.status = input.status;
-
-    const result = await platformRepository
-      .from("medications", pharmacyCtx(tenantId, "pharmacy.create"))
-      .insert(payload as any)
-      .select(MEDICATION_COLUMNS)
-      .single();
-
-    return assertOk(result) as Medication;
+    const { data, error } = await platformRepository.rpc("command_medication", {
+      p_operation: "create",
+      p_medication_id: null,
+      p_tenant_id: tenantId,
+      p_payload: input,
+      p_expected_updated_at: null,
+      p_idempotency_key: null,
+      p_request_hash: ["create", tenantId, input.name, input.stock ?? ""].join("|"),
+      p_user_id: null,
+      p_request_trace_id: null,
+      p_operation_trace_id: null,
+      p_workflow_trace_id: null,
+    }, pharmacyCtx(tenantId, "pharmacy.create", "critical"));
+    if (error) {
+      throw new ServiceError(error.message ?? "Failed to create medication", {
+        code: error.code,
+        details: error,
+      });
+    }
+    const row = (data as any)?.[0];
+    if (!row?.medication) {
+      throw new ServiceError("Medication command returned no result", { code: "MEDICATION_COMMAND_EMPTY_RESULT" });
+    }
+    return row.medication as Medication;
   },
   async update(id, input, tenantId, expectedUpdatedAt) {
     const payload: Record<string, unknown> = {};
@@ -164,22 +170,31 @@ export const pharmacyRepository: PharmacyRepository = {
       return assertOk(result) as Medication;
     }
 
-    let query = platformRepository
-      .from("medications", pharmacyCtx(tenantId, "pharmacy.update"))
-      .update(payload)
-      .eq("id", id)
-      .eq("tenant_id", tenantId);
-    if (expectedUpdatedAt) {
-      query = query.eq("updated_at", expectedUpdatedAt);
-    }
-    const { data, error } = await query.select(MEDICATION_COLUMNS).maybeSingle();
+    const { data, error } = await platformRepository.rpc("command_medication", {
+      p_operation: "update",
+      p_medication_id: id,
+      p_tenant_id: tenantId,
+      p_payload: payload,
+      p_expected_updated_at: expectedUpdatedAt ?? null,
+      p_idempotency_key: null,
+      p_request_hash: ["update", id, tenantId, JSON.stringify(payload), expectedUpdatedAt ?? ""].join("|"),
+      p_user_id: null,
+      p_request_trace_id: null,
+      p_operation_trace_id: null,
+      p_workflow_trace_id: null,
+    }, pharmacyCtx(tenantId, "pharmacy.update", "critical"));
     if (error) {
       throw new ServiceError(error.message ?? "Failed to update medication", {
         code: error.code,
         details: error,
       });
     }
-    return (data ?? null) as Medication | null;
+    const row = (data as any)?.[0];
+    if (!row) {
+      throw new ServiceError("Medication command returned no result", { code: "MEDICATION_COMMAND_EMPTY_RESULT" });
+    }
+    if (row.result_code === "CONFLICT") return null;
+    return (row.medication ?? null) as Medication | null;
   },
   async adjustStock(id, stock, tenantId, userId, expectedUpdatedAt, trace) {
     const requestHash = [id, tenantId, stock, expectedUpdatedAt ?? ""].join("|");
@@ -210,11 +225,19 @@ export const pharmacyRepository: PharmacyRepository = {
     return (row.medication ?? null) as Medication | null;
   },
   async remove(id, tenantId) {
-    const { error } = await platformRepository
-      .from("medications", pharmacyCtx(tenantId, "pharmacy.remove"))
-      .delete()
-      .eq("id", id)
-      .eq("tenant_id", tenantId);
+    const { data, error } = await platformRepository.rpc("command_medication", {
+      p_operation: "remove",
+      p_medication_id: id,
+      p_tenant_id: tenantId,
+      p_payload: {},
+      p_expected_updated_at: null,
+      p_idempotency_key: null,
+      p_request_hash: ["remove", id, tenantId].join("|"),
+      p_user_id: null,
+      p_request_trace_id: null,
+      p_operation_trace_id: null,
+      p_workflow_trace_id: null,
+    }, pharmacyCtx(tenantId, "pharmacy.remove", "critical"));
 
     if (error) {
       throw new ServiceError(error.message ?? "Failed to delete medication", {
@@ -222,24 +245,24 @@ export const pharmacyRepository: PharmacyRepository = {
         details: error,
       });
     }
+    if (!(data as any)?.[0]) {
+      throw new ServiceError("Medication command returned no result", { code: "MEDICATION_COMMAND_EMPTY_RESULT" });
+    }
   },
   describe() {
     return {
-      certified: false,
+      certified: true,
       tenantBound: true,
       traceAware: true,
       runtimeAware: true,
       capabilityAware: true,
-      reconciliationAware: false,
-      recoveryAware: false,
+      reconciliationAware: true,
+      recoveryAware: true,
       evidenceAware: true,
       retryAware: true,
       staleContextSafe: true,
       metricsEnabled: true,
       requiredCapabilities: [Capabilities.pharmacy.manage],
-      exceptions: [
-        "Stock adjustment is DB-authoritative, but create/update metadata/remove paths are not yet fully recovery-aware.",
-      ],
     };
   },
 };

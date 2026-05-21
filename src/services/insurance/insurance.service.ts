@@ -21,7 +21,6 @@ import { assertAnyPermission } from "@/services/supabase/permissions";
 import { featureAccessService } from "@/services/subscription/featureAccess.service";
 import { BusinessRuleError, ConflictError, NotFoundError, toServiceError } from "@/services/supabase/errors";
 import { getTenantContext } from "@/services/supabase/tenant";
-import { auditLogService } from "@/services/settings/audit.service";
 import { withAuthStaleGuard } from "@/services/auth/authContextSnapshot";
 import { insuranceRepository } from "./insurance.repository";
 
@@ -123,7 +122,7 @@ export const insuranceService = {
       await featureAccessService.assertFeatureAccess("insurance");
       return await withAuthStaleGuard(async () => {
         const parsed = insuranceClaimCreateSchema.parse(input);
-        const { tenantId, userId } = getTenantContext();
+        const { tenantId } = getTenantContext();
         const now = new Date().toISOString();
         const status = parsed.status ?? "draft";
 
@@ -150,24 +149,7 @@ export const insuranceService = {
           next_follow_up_at: parsed.next_follow_up_at ?? null,
           resubmission_count: parsed.resubmission_count ?? 0,
         }, tenantId);
-        const claim = insuranceClaimSchema.parse(result);
-
-        await auditLogService.logEvent({
-          tenant_id: tenantId,
-          user_id: userId,
-          action: "insurance_claim_created",
-          action_type: "insurance_claim_create",
-          entity_type: "insurance_claim",
-          entity_id: claim.id,
-          details: {
-            patient_id: claim.patient_id,
-            provider: claim.provider,
-            amount: claim.amount,
-            status: claim.status,
-          },
-        });
-
-        return claim;
+        return insuranceClaimSchema.parse(result);
       });
     } catch (err) {
       throw toServiceError(err, "Failed to create insurance claim");
@@ -262,21 +244,7 @@ export const insuranceService = {
           }
           throw new NotFoundError("Insurance claim not found");
         }
-        const claim = insuranceClaimSchema.parse(result);
-
-        if (!updates.status) {
-          await auditLogService.logEvent({
-            tenant_id: tenantId,
-            user_id: userId,
-            action: "insurance_claim_updated",
-            action_type: "insurance_claim_update",
-            entity_type: "insurance_claim",
-            entity_id: claim.id,
-            details: updates as Record<string, unknown>,
-          });
-        }
-
-        return claim;
+        return insuranceClaimSchema.parse(result);
       });
     } catch (err) {
       throw toServiceError(err, "Failed to update insurance claim");
@@ -290,16 +258,7 @@ export const insuranceService = {
         const parsedId = uuidSchema.parse(id);
         const { tenantId, userId } = getTenantContext();
         const result = await insuranceRepository.archive(parsedId, tenantId, userId);
-        const claim = insuranceClaimSchema.parse(result);
-        await auditLogService.logEvent({
-          tenant_id: tenantId,
-          user_id: userId,
-          action: "insurance_claim_archived",
-          action_type: "insurance_claim_archive",
-          entity_type: "insurance_claim",
-          entity_id: claim.id,
-        });
-        return claim;
+        return insuranceClaimSchema.parse(result);
       });
     } catch (err) {
       throw toServiceError(err, "Failed to archive insurance claim");
@@ -311,18 +270,9 @@ export const insuranceService = {
       await featureAccessService.assertFeatureAccess("insurance");
       return await withAuthStaleGuard(async () => {
         const parsedId = uuidSchema.parse(id);
-        const { tenantId, userId } = getTenantContext();
+        const { tenantId } = getTenantContext();
         const result = await insuranceRepository.restore(parsedId, tenantId);
-        const claim = insuranceClaimSchema.parse(result);
-        await auditLogService.logEvent({
-          tenant_id: tenantId,
-          user_id: userId,
-          action: "insurance_claim_restored",
-          action_type: "insurance_claim_restore",
-          entity_type: "insurance_claim",
-          entity_id: claim.id,
-        });
-        return claim;
+        return insuranceClaimSchema.parse(result);
       });
     } catch (err) {
       throw toServiceError(err, "Failed to restore insurance claim");

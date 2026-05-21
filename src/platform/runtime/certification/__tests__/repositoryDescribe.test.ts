@@ -18,6 +18,7 @@ import { notificationRepository } from "@/services/notifications/notification.re
 import { labRepository } from "@/services/laboratory/lab.repository";
 import { insuranceRepository } from "@/services/insurance/insurance.repository";
 import { pharmacyRepository } from "@/services/pharmacy/pharmacy.repository";
+import { procurementRepository } from "@/services/procurement/procurement.repository";
 
 describe("repository.describe metadata", () => {
   it("exists and matches contract for converged repositories", () => {
@@ -39,6 +40,7 @@ describe("repository.describe metadata", () => {
       labRepository,
       insuranceRepository,
       pharmacyRepository,
+      procurementRepository,
     ] as any[];
     for (const repo of repos) {
       expect(typeof repo.describe).toBe("function");

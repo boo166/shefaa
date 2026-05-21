@@ -366,36 +366,30 @@ export const insuranceRepository: InsuranceRepository = {
     return assertOk(result) as InsuranceClaim;
   },
   async create(input, tenantId) {
-    const payload: Record<string, unknown> = {
-      tenant_id: tenantId,
-      patient_id: input.patient_id,
-      provider: input.provider,
-      service: input.service,
-      amount: input.amount,
-    };
-
-    if (input.claim_date !== undefined) payload.claim_date = input.claim_date;
-    if (input.status !== undefined) payload.status = input.status;
-    if (input.submitted_at !== undefined) payload.submitted_at = input.submitted_at;
-    if (input.processing_started_at !== undefined) payload.processing_started_at = input.processing_started_at;
-    if (input.approved_at !== undefined) payload.approved_at = input.approved_at;
-    if (input.reimbursed_at !== undefined) payload.reimbursed_at = input.reimbursed_at;
-    if (input.payer_reference !== undefined) payload.payer_reference = input.payer_reference;
-    if (input.denial_reason !== undefined) payload.denial_reason = input.denial_reason;
-    if (input.assigned_to_user_id !== undefined) payload.assigned_to_user_id = input.assigned_to_user_id;
-    if (input.internal_notes !== undefined) payload.internal_notes = input.internal_notes;
-    if (input.payer_notes !== undefined) payload.payer_notes = input.payer_notes;
-    if (input.last_follow_up_at !== undefined) payload.last_follow_up_at = input.last_follow_up_at;
-    if (input.next_follow_up_at !== undefined) payload.next_follow_up_at = input.next_follow_up_at;
-    if (input.resubmission_count !== undefined) payload.resubmission_count = input.resubmission_count;
-
-    const result = await platformRepository
-      .from("insurance_claims", insuranceCtx(tenantId, "insurance.create"))
-      .insert(payload as any)
-      .select(CLAIM_COLUMNS)
-      .single();
-
-    return assertOk(result) as InsuranceClaim;
+    const { data, error } = await platformRepository.rpc("command_insurance_claim", {
+      p_operation: "create",
+      p_claim_id: null,
+      p_tenant_id: tenantId,
+      p_payload: input,
+      p_expected_updated_at: null,
+      p_idempotency_key: null,
+      p_request_hash: ["create", tenantId, input.patient_id, input.provider, input.service, input.amount].join("|"),
+      p_user_id: null,
+      p_request_trace_id: null,
+      p_operation_trace_id: null,
+      p_workflow_trace_id: null,
+    }, insuranceCtx(tenantId, "insurance.create", "critical"));
+    if (error) {
+      throw new ServiceError(error.message ?? "Failed to create insurance claim", {
+        code: error.code,
+        details: error,
+      });
+    }
+    const row = (data as any)?.[0];
+    if (!row?.claim) {
+      throw new ServiceError("Insurance claim command returned no result", { code: "INSURANCE_CLAIM_COMMAND_EMPTY_RESULT" });
+    }
+    return row.claim as InsuranceClaim;
   },
   async update(id, input, tenantId, expectedUpdatedAt) {
     const payload: Record<string, unknown> = {};
@@ -430,22 +424,31 @@ export const insuranceRepository: InsuranceRepository = {
       return assertOk(result) as InsuranceClaim;
     }
 
-    let query = platformRepository
-      .from("insurance_claims", insuranceCtx(tenantId, "insurance.update"))
-      .update(payload)
-      .eq("id", id)
-      .eq("tenant_id", tenantId);
-    if (expectedUpdatedAt) {
-      query = query.eq("updated_at", expectedUpdatedAt);
-    }
-    const { data, error } = await query.select(CLAIM_COLUMNS).maybeSingle();
+    const { data, error } = await platformRepository.rpc("command_insurance_claim", {
+      p_operation: "update",
+      p_claim_id: id,
+      p_tenant_id: tenantId,
+      p_payload: payload,
+      p_expected_updated_at: expectedUpdatedAt ?? null,
+      p_idempotency_key: null,
+      p_request_hash: ["update", id, tenantId, JSON.stringify(payload), expectedUpdatedAt ?? ""].join("|"),
+      p_user_id: null,
+      p_request_trace_id: null,
+      p_operation_trace_id: null,
+      p_workflow_trace_id: null,
+    }, insuranceCtx(tenantId, "insurance.update", "critical"));
     if (error) {
       throw new ServiceError(error.message ?? "Failed to update insurance claim", {
         code: error.code,
         details: error,
       });
     }
-    return (data ?? null) as InsuranceClaim | null;
+    const row = (data as any)?.[0];
+    if (!row) {
+      throw new ServiceError("Insurance claim command returned no result", { code: "INSURANCE_CLAIM_COMMAND_EMPTY_RESULT" });
+    }
+    if (row.result_code === "CONFLICT") return null;
+    return (row.claim ?? null) as InsuranceClaim | null;
   },
   async transitionStatus(id, input, tenantId, userId, expectedUpdatedAt, trace) {
     const requestHash = [
@@ -492,44 +495,71 @@ export const insuranceRepository: InsuranceRepository = {
     return (row.claim ?? null) as InsuranceClaim | null;
   },
   async archive(id, tenantId, userId) {
-    const result = await platformRepository
-      .from("insurance_claims", insuranceCtx(tenantId, "insurance.archive"))
-      .update({ deleted_at: new Date().toISOString(), deleted_by: userId })
-      .eq("id", id)
-      .eq("tenant_id", tenantId)
-      .select(CLAIM_COLUMNS)
-      .single();
-
-    return assertOk(result) as InsuranceClaim;
+    const { data, error } = await platformRepository.rpc("command_insurance_claim", {
+      p_operation: "archive",
+      p_claim_id: id,
+      p_tenant_id: tenantId,
+      p_payload: {},
+      p_expected_updated_at: null,
+      p_idempotency_key: null,
+      p_request_hash: ["archive", id, tenantId].join("|"),
+      p_user_id: userId,
+      p_request_trace_id: null,
+      p_operation_trace_id: null,
+      p_workflow_trace_id: null,
+    }, insuranceCtx(tenantId, "insurance.archive", "critical"));
+    if (error) {
+      throw new ServiceError(error.message ?? "Failed to archive insurance claim", {
+        code: error.code,
+        details: error,
+      });
+    }
+    const row = (data as any)?.[0];
+    if (!row?.claim) {
+      throw new ServiceError("Insurance claim command returned no result", { code: "INSURANCE_CLAIM_COMMAND_EMPTY_RESULT" });
+    }
+    return row.claim as InsuranceClaim;
   },
   async restore(id, tenantId) {
-    const result = await platformRepository
-      .from("insurance_claims", insuranceCtx(tenantId, "insurance.restore"))
-      .update({ deleted_at: null, deleted_by: null })
-      .eq("id", id)
-      .eq("tenant_id", tenantId)
-      .select(CLAIM_COLUMNS)
-      .single();
-
-    return assertOk(result) as InsuranceClaim;
+    const { data, error } = await platformRepository.rpc("command_insurance_claim", {
+      p_operation: "restore",
+      p_claim_id: id,
+      p_tenant_id: tenantId,
+      p_payload: {},
+      p_expected_updated_at: null,
+      p_idempotency_key: null,
+      p_request_hash: ["restore", id, tenantId].join("|"),
+      p_user_id: null,
+      p_request_trace_id: null,
+      p_operation_trace_id: null,
+      p_workflow_trace_id: null,
+    }, insuranceCtx(tenantId, "insurance.restore", "critical"));
+    if (error) {
+      throw new ServiceError(error.message ?? "Failed to restore insurance claim", {
+        code: error.code,
+        details: error,
+      });
+    }
+    const row = (data as any)?.[0];
+    if (!row?.claim) {
+      throw new ServiceError("Insurance claim command returned no result", { code: "INSURANCE_CLAIM_COMMAND_EMPTY_RESULT" });
+    }
+    return row.claim as InsuranceClaim;
   },
   describe() {
     return {
-      certified: false,
+      certified: true,
       tenantBound: true,
       traceAware: true,
       runtimeAware: true,
       capabilityAware: true,
-      reconciliationAware: false,
-      recoveryAware: false,
+      reconciliationAware: true,
+      recoveryAware: true,
       evidenceAware: true,
       retryAware: true,
       staleContextSafe: true,
       metricsEnabled: true,
       requiredCapabilities: [Capabilities.billing.manage],
-      exceptions: [
-        "Claim status transitions are DB-authoritative, but claim create/archive/restore and non-status metadata updates are not yet fully recovery-aware.",
-      ],
     };
   },
 };

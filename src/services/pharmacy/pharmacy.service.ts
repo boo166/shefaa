@@ -72,20 +72,12 @@ export const pharmacyService = {
         const parsedId = uuidSchema.parse(id);
         const parsed = medicationUpdateSchema.parse(input);
         const { expected_updated_at, ...updates } = parsed;
-        const { tenantId, userId } = getTenantContext();
+        const { tenantId } = getTenantContext();
         const normalized = { ...updates };
         if (normalized.stock !== undefined && normalized.status === undefined) {
           normalized.status = statePolicies.pharmacy.deriveStatusFromStock(normalized.stock);
         }
-        let result = normalized.stock !== undefined
-          ? await pharmacyRepository.adjustStock(parsedId, normalized.stock, tenantId, userId, expected_updated_at)
-          : await pharmacyRepository.update(parsedId, normalized, tenantId, expected_updated_at);
-        const metadataUpdate = { ...normalized };
-        delete metadataUpdate.stock;
-        delete metadataUpdate.status;
-        if (result && normalized.stock !== undefined && Object.keys(metadataUpdate).length > 0) {
-          result = await pharmacyRepository.update(parsedId, metadataUpdate, tenantId);
-        }
+        const result = await pharmacyRepository.update(parsedId, normalized, tenantId, expected_updated_at);
         if (!result) {
           if (expected_updated_at) {
             throw new ConflictError("Medication was modified by another user", { code: "CONCURRENT_UPDATE" });
