@@ -12,7 +12,6 @@ import { statePolicies } from "@/domain/workflows/statePolicies";
 import type { LabResultCreateInput, LabResultListParams, LabResultUpdateInput } from "@/domain/lab/lab.types";
 import type { LimitOffsetParams } from "@/domain/shared/pagination.types";
 import { limitOffsetSchema } from "@/domain/shared/pagination.schema";
-import { emitDomainEvent } from "@/core/events";
 import { BusinessRuleError, ConflictError, NotFoundError, toServiceError } from "@/services/supabase/errors";
 import { getTenantContext } from "@/services/supabase/tenant";
 import { assertAnyPermission } from "@/services/supabase/permissions";
@@ -190,7 +189,18 @@ export const labService = {
           await rateLimitService.assertAllowed("lab_upload", [tenantId, userId]);
         }
 
-        const result = await labRepository.update(parsedId, normalizedUpdate, tenantId, expected_updated_at);
+        const shouldUseFinalizeCommand =
+          updates.status === "completed" ||
+          updates.result !== undefined ||
+          updates.result_value !== undefined ||
+          updates.result_unit !== undefined ||
+          updates.reference_range !== undefined ||
+          updates.abnormal_flag !== undefined ||
+          updates.result_notes !== undefined;
+
+        const result = shouldUseFinalizeCommand
+          ? await labRepository.finalizeResult(parsedId, normalizedUpdate, tenantId, userId, expected_updated_at)
+          : await labRepository.update(parsedId, normalizedUpdate, tenantId, expected_updated_at);
         if (!result) {
           if (expected_updated_at) {
             throw new ConflictError("Lab order was modified by another user", {
@@ -200,32 +210,16 @@ export const labService = {
           throw new NotFoundError("Lab order not found");
         }
         const labOrder = labResultSchema.parse(result);
-        await auditLogService.logEvent({
-          tenant_id: tenantId,
-          user_id: userId,
-          action: "lab_order_updated",
-          action_type: "lab_order_update",
-          entity_type: "lab_order",
-          entity_id: labOrder.id,
-          details: normalizedUpdate as Record<string, unknown>,
-        });
-        const hadStructuredResult = hasStructuredResultValue(existing);
-        const hasStructuredResultNow = hasStructuredResultValue(labOrder);
-        const shouldEmit =
-          labOrder.status === "completed" &&
-          hasStructuredResultNow &&
-          (existing.status !== "completed" || !hadStructuredResult);
-        if (shouldEmit) {
-          await emitDomainEvent(
-            "LabResultUploaded",
-            {
-              labOrderId: labOrder.id,
-              patientId: labOrder.patient_id,
-              doctorId: labOrder.doctor_id,
-              status: labOrder.status,
-            },
-            { tenantId, userId },
-          );
+        if (!shouldUseFinalizeCommand) {
+          await auditLogService.logEvent({
+            tenant_id: tenantId,
+            user_id: userId,
+            action: "lab_order_updated",
+            action_type: "lab_order_update",
+            entity_type: "lab_order",
+            entity_id: labOrder.id,
+            details: normalizedUpdate as Record<string, unknown>,
+          });
         }
         return labOrder;
       });

@@ -251,7 +251,9 @@ export const insuranceService = {
           await insuranceService.assertAssignableOwner(updates.assigned_to_user_id, tenantId);
         }
 
-        const result = await insuranceRepository.update(parsedId, updates, tenantId, expected_updated_at);
+        const result = updates.status
+          ? await insuranceRepository.transitionStatus(parsedId, updates, tenantId, userId, expected_updated_at)
+          : await insuranceRepository.update(parsedId, updates, tenantId, expected_updated_at);
         if (!result) {
           if (expected_updated_at) {
             throw new ConflictError("Insurance claim was modified by another user", {
@@ -262,15 +264,17 @@ export const insuranceService = {
         }
         const claim = insuranceClaimSchema.parse(result);
 
-        await auditLogService.logEvent({
-          tenant_id: tenantId,
-          user_id: userId,
-          action: "insurance_claim_updated",
-          action_type: "insurance_claim_update",
-          entity_type: "insurance_claim",
-          entity_id: claim.id,
-          details: updates as Record<string, unknown>,
-        });
+        if (!updates.status) {
+          await auditLogService.logEvent({
+            tenant_id: tenantId,
+            user_id: userId,
+            action: "insurance_claim_updated",
+            action_type: "insurance_claim_update",
+            entity_type: "insurance_claim",
+            entity_id: claim.id,
+            details: updates as Record<string, unknown>,
+          });
+        }
 
         return claim;
       });

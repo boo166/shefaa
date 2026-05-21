@@ -2,6 +2,8 @@ export type DomainEventName =
   | "AppointmentCreated"
   | "InvoicePaid"
   | "LabResultUploaded"
+  | "InsuranceClaimTransitioned"
+  | "MedicationStockAdjusted"
   | "PrescriptionIssued"
   | "PatientRegistered";
 
@@ -25,6 +27,20 @@ export type LabResultUploadedPayload = {
   status: string;
 };
 
+export type InsuranceClaimTransitionedPayload = {
+  claimId: string;
+  patientId: string;
+  previousStatus: string;
+  status: string;
+};
+
+export type MedicationStockAdjustedPayload = {
+  medicationId: string;
+  previousStock: number;
+  stock: number;
+  status: string;
+};
+
 export type PrescriptionIssuedPayload = {
   prescriptionId: string;
   patientId: string;
@@ -40,6 +56,8 @@ export type DomainEventPayloads = {
   AppointmentCreated: AppointmentCreatedPayload;
   InvoicePaid: InvoicePaidPayload;
   LabResultUploaded: LabResultUploadedPayload;
+  InsuranceClaimTransitioned: InsuranceClaimTransitionedPayload;
+  MedicationStockAdjusted: MedicationStockAdjustedPayload;
   PrescriptionIssued: PrescriptionIssuedPayload;
   PatientRegistered: PatientRegisteredPayload;
 };

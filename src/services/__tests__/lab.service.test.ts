@@ -13,6 +13,7 @@ vi.mock("@/services/laboratory/lab.repository", () => ({
     getById: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
+    finalizeResult: vi.fn(),
     archive: vi.fn(),
     restore: vi.fn(),
   },
@@ -160,7 +161,7 @@ describe("labService permissions", () => {
     ).rejects.toThrow("Completed lab results must include a structured result entry");
   });
 
-  it("emits LabResultUploaded only after a structured completed result is saved", async () => {
+  it("uses the DB command when a structured completed result is saved", async () => {
     vi.doMock("@/core/auth/authStore", () => ({
       useAuth: {
         getState: () => ({ hasPermission: () => true }),
@@ -187,7 +188,7 @@ describe("labService permissions", () => {
       created_at: "2026-04-16T10:00:00Z",
       updated_at: "2026-04-16T10:00:00Z",
     } as any);
-    repo.update.mockResolvedValue({
+    repo.finalizeResult.mockResolvedValue({
       id: "00000000-0000-0000-0000-000000000333",
       tenant_id: "00000000-0000-0000-0000-000000000111",
       patient_id: "00000000-0000-0000-0000-000000000aaa",
@@ -220,20 +221,16 @@ describe("labService permissions", () => {
     });
 
     expect(rateLimitService.assertAllowed).toHaveBeenCalled();
-    expect(repo.update).toHaveBeenCalledWith(
+    expect(repo.finalizeResult).toHaveBeenCalledWith(
       "00000000-0000-0000-0000-000000000333",
       expect.objectContaining({
         result: "11.2 g/dL | 12.0 - 16.0 | low",
       }),
       "00000000-0000-0000-0000-000000000111",
+      "00000000-0000-0000-0000-000000000222",
       undefined,
     );
-    expect(emitDomainEvent).toHaveBeenCalledWith(
-      "LabResultUploaded",
-      expect.objectContaining({
-        status: "completed",
-      }),
-      expect.any(Object),
-    );
+    expect(repo.update).not.toHaveBeenCalled();
+    expect(emitDomainEvent).not.toHaveBeenCalled();
   });
 });

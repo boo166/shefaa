@@ -15,6 +15,9 @@ import { patientRepository } from "@/services/patients/patient.repository";
 import { medicalRecordsRepository } from "@/services/patients/medicalRecords.repository";
 import { patientDocumentsRepository } from "@/services/patients/patientDocuments.repository";
 import { notificationRepository } from "@/services/notifications/notification.repository";
+import { labRepository } from "@/services/laboratory/lab.repository";
+import { insuranceRepository } from "@/services/insurance/insurance.repository";
+import { pharmacyRepository } from "@/services/pharmacy/pharmacy.repository";
 
 describe("repository.describe metadata", () => {
   it("exists and matches contract for converged repositories", () => {
@@ -33,6 +36,9 @@ describe("repository.describe metadata", () => {
       medicalRecordsRepository,
       patientDocumentsRepository,
       notificationRepository,
+      labRepository,
+      insuranceRepository,
+      pharmacyRepository,
     ] as any[];
     for (const repo of repos) {
       expect(typeof repo.describe).toBe("function");

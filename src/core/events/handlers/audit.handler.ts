@@ -5,6 +5,8 @@ const EVENT_ACTIONS: Record<DomainEventName, { action: string; entityType: strin
   AppointmentCreated: { action: "appointment_created", entityType: "appointment" },
   InvoicePaid: { action: "invoice_paid", entityType: "invoice" },
   LabResultUploaded: { action: "lab_result_uploaded", entityType: "lab_order" },
+  InsuranceClaimTransitioned: { action: "insurance_claim_transitioned", entityType: "insurance_claim" },
+  MedicationStockAdjusted: { action: "medication_stock_adjusted", entityType: "medication" },
   PrescriptionIssued: { action: "prescription_issued", entityType: "prescription" },
   PatientRegistered: { action: "patient_registered", entityType: "patient" },
 };
@@ -17,6 +19,10 @@ function resolveEntityId(event: DomainEvent) {
       return event.payload.invoiceId;
     case "LabResultUploaded":
       return event.payload.labOrderId;
+    case "InsuranceClaimTransitioned":
+      return event.payload.claimId;
+    case "MedicationStockAdjusted":
+      return event.payload.medicationId;
     case "PrescriptionIssued":
       return event.payload.prescriptionId;
     case "PatientRegistered":

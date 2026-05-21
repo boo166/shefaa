@@ -5,6 +5,8 @@ const EVENT_TITLES: Record<DomainEventName, string> = {
   AppointmentCreated: "New appointment created",
   InvoicePaid: "Invoice marked as paid",
   LabResultUploaded: "Lab results updated",
+  InsuranceClaimTransitioned: "Insurance claim updated",
+  MedicationStockAdjusted: "Medication stock adjusted",
   PrescriptionIssued: "New prescription issued",
   PatientRegistered: "New patient registered",
 };

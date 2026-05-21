@@ -7,6 +7,8 @@ const EVENT_ENTITY_MAP: Record<DomainEventName, { entityType: string; entityIdKe
   AppointmentCreated: { entityType: "appointment", entityIdKey: "appointmentId" },
   InvoicePaid: { entityType: "invoice", entityIdKey: "invoiceId" },
   LabResultUploaded: { entityType: "lab_order", entityIdKey: "labOrderId" },
+  InsuranceClaimTransitioned: { entityType: "insurance_claim", entityIdKey: "claimId" },
+  MedicationStockAdjusted: { entityType: "medication", entityIdKey: "medicationId" },
   PrescriptionIssued: { entityType: "prescription", entityIdKey: "prescriptionId" },
   PatientRegistered: { entityType: "patient", entityIdKey: "patientId" },
 };

@@ -29,9 +29,28 @@ export async function rpc(
   ctx: PlatformRepositoryContext,
 ) {
   const dispatch = composeDispatch(ctx, (fnName, fnArgs) =>
-    (supabase.rpc as any)(fnName, fnArgs ?? {}),
+    (supabase.rpc as any)(fnName, withTraceArgs(fnArgs ?? {}, ctx)),
   );
   return dispatch(fn, args) as ReturnType<typeof supabase.rpc>;
+}
+
+function withTraceArgs(
+  args: Record<string, unknown>,
+  ctx: PlatformRepositoryContext,
+): Record<string, unknown> {
+  const trace = ctx.trace;
+  if (!trace) return args;
+  const next = { ...args };
+  if ("p_request_trace_id" in next) {
+    next.p_request_trace_id = next.p_request_trace_id ?? trace.requestTraceId ?? null;
+  }
+  if ("p_operation_trace_id" in next) {
+    next.p_operation_trace_id = next.p_operation_trace_id ?? trace.operationTraceId ?? null;
+  }
+  if ("p_workflow_trace_id" in next) {
+    next.p_workflow_trace_id = next.p_workflow_trace_id ?? trace.workflowTraceId ?? null;
+  }
+  return next;
 }
 
 /**

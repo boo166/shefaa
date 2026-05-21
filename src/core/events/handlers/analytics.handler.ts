@@ -6,6 +6,8 @@ const ANALYTICS_EVENTS: DomainEventName[] = [
   "AppointmentCreated",
   "InvoicePaid",
   "LabResultUploaded",
+  "InsuranceClaimTransitioned",
+  "MedicationStockAdjusted",
   "PrescriptionIssued",
   "PatientRegistered",
 ];

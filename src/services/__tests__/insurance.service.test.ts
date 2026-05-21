@@ -17,6 +17,7 @@ vi.mock("@/services/insurance/insurance.repository", () => ({
     getById: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
+    transitionStatus: vi.fn(),
     archive: vi.fn(),
     restore: vi.fn(),
   },
@@ -127,7 +128,7 @@ describe("insuranceService workflow", () => {
     }));
     const repo = vi.mocked(insuranceRepository, true);
     repo.getById.mockResolvedValue(buildClaim());
-    repo.update.mockResolvedValue(buildClaim({
+    repo.transitionStatus.mockResolvedValue(buildClaim({
       status: "submitted",
       submitted_at: "2026-04-16T09:00:00.000Z",
     }));
@@ -136,7 +137,7 @@ describe("insuranceService workflow", () => {
 
     await insuranceService.update(claimId, { status: "submitted" });
 
-    expect(repo.update).toHaveBeenCalledWith(
+    expect(repo.transitionStatus).toHaveBeenCalledWith(
       claimId,
       expect.objectContaining({
         status: "submitted",
@@ -144,6 +145,7 @@ describe("insuranceService workflow", () => {
         denial_reason: null,
       }),
       tenantId,
+      userId,
       undefined,
     );
   });
@@ -202,7 +204,7 @@ describe("insuranceService workflow", () => {
       submitted_at: "2026-04-10T09:00:00.000Z",
       resubmission_count: 1,
     }));
-    repo.update.mockResolvedValue(buildClaim({
+    repo.transitionStatus.mockResolvedValue(buildClaim({
       status: "draft",
       denial_reason: "Eligibility terminated",
       resubmission_count: 2,
@@ -212,7 +214,7 @@ describe("insuranceService workflow", () => {
 
     await insuranceService.update(claimId, { status: "draft" });
 
-    expect(repo.update).toHaveBeenCalledWith(
+    expect(repo.transitionStatus).toHaveBeenCalledWith(
       claimId,
       expect.objectContaining({
         status: "draft",
@@ -223,6 +225,7 @@ describe("insuranceService workflow", () => {
         resubmission_count: 2,
       }),
       tenantId,
+      userId,
       undefined,
     );
   });

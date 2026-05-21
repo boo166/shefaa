@@ -7,7 +7,9 @@ import type {
   LabResultUpdateInput,
 } from "@/domain/lab/lab.types";
 import type { LimitOffsetParams, PagedResult } from "@/domain/shared/pagination.types";
-import { supabase } from "@/services/supabase/client";
+import { Capabilities } from "@/platform/authorization/capabilities";
+import { platformRepository } from "@/platform/data/platformRepository";
+import type { PlatformRepositoryContext } from "@/platform/data/platformRepository.context";
 import { ServiceError } from "@/services/supabase/errors";
 import { assertOk } from "@/services/supabase/query";
 
@@ -37,8 +39,47 @@ export interface LabRepository {
   getById(id: string, tenantId: string): Promise<LabResult>;
   create(input: LabResultCreateInput, tenantId: string): Promise<LabResult>;
   update(id: string, input: LabResultUpdateInput, tenantId: string, expectedUpdatedAt?: string): Promise<LabResult | null>;
+  finalizeResult(
+    id: string,
+    input: LabResultUpdateInput,
+    tenantId: string,
+    userId: string | null,
+    expectedUpdatedAt?: string,
+    trace?: PlatformRepositoryContext["trace"],
+  ): Promise<LabResult | null>;
   archive(id: string, tenantId: string, userId: string): Promise<LabResult>;
   restore(id: string, tenantId: string): Promise<LabResult>;
+  describe?(): {
+    certified: boolean;
+    tenantBound: boolean;
+    traceAware: boolean;
+    runtimeAware: boolean;
+    capabilityAware: boolean;
+    reconciliationAware: boolean;
+    recoveryAware: boolean;
+    evidenceAware: boolean;
+    retryAware: boolean;
+    staleContextSafe: boolean;
+    metricsEnabled: boolean;
+    requiredCapabilities: string[];
+    exceptions?: string[];
+  };
+}
+
+function labCtx(
+  tenantId: string,
+  action: string,
+  classification: PlatformRepositoryContext["classification"] = "tenant-critical",
+  trace?: PlatformRepositoryContext["trace"],
+): PlatformRepositoryContext {
+  return {
+    action,
+    classification,
+    tenantScoped: true,
+    tenantId,
+    requiredCapabilities: [Capabilities.records.manage, Capabilities.laboratory.manage],
+    trace,
+  };
 }
 
 export const labRepository: LabRepository = {
@@ -49,8 +90,8 @@ export const labRepository: LabRepository = {
     const to = from + pageSize - 1;
     const searchTerm = params.search?.trim() ?? "";
 
-    let query = supabase
-      .from("lab_orders")
+    let query = platformRepository
+      .from("lab_orders", labCtx(tenantId, "lab.listPaged", "readonly"))
       .select(LAB_COLUMNS, { count: "exact" })
       .eq("tenant_id", tenantId)
       .is("deleted_at", null);
@@ -98,8 +139,8 @@ export const labRepository: LabRepository = {
     const to = from + pageSize - 1;
     const searchTerm = params.search?.trim() ?? "";
 
-    let query = supabase
-      .from("lab_orders")
+    let query = platformRepository
+      .from("lab_orders", labCtx(tenantId, "lab.listPagedWithRelations", "readonly"))
       .select(LAB_WITH_PATIENT_DOCTOR_COLUMNS, { count: "exact" })
       .eq("tenant_id", tenantId)
       .is("deleted_at", null);
@@ -144,8 +185,8 @@ export const labRepository: LabRepository = {
     const statuses = ["pending", "processing", "completed"] as const;
     const results = await Promise.all(
       statuses.map(async (status) => {
-        const { count, error } = await supabase
-          .from("lab_orders")
+        const { count, error } = await platformRepository
+          .from("lab_orders", labCtx(tenantId, "lab.countByStatus", "readonly"))
           .select("id", { count: "exact", head: true })
           .eq("tenant_id", tenantId)
           .is("deleted_at", null)
@@ -168,8 +209,8 @@ export const labRepository: LabRepository = {
   async listByPatient(patientId, tenantId, params) {
     const limit = params?.limit ?? 50;
     const offset = params?.offset ?? 0;
-    const { data, error } = await supabase
-      .from("lab_orders")
+    const { data, error } = await platformRepository
+      .from("lab_orders", labCtx(tenantId, "lab.listByPatient", "readonly"))
       .select(LAB_WITH_DOCTOR_COLUMNS)
       .eq("tenant_id", tenantId)
       .is("deleted_at", null)
@@ -187,8 +228,8 @@ export const labRepository: LabRepository = {
     return (data ?? []) as LabOrderWithDoctor[];
   },
   async getById(id, tenantId) {
-    const result = await supabase
-      .from("lab_orders")
+    const result = await platformRepository
+      .from("lab_orders", labCtx(tenantId, "lab.getById", "readonly"))
       .select(LAB_COLUMNS)
       .eq("id", id)
       .eq("tenant_id", tenantId)
@@ -215,8 +256,8 @@ export const labRepository: LabRepository = {
     if (input.result_notes !== undefined) payload.result_notes = input.result_notes;
     if (input.resulted_at !== undefined) payload.resulted_at = input.resulted_at;
 
-    const result = await supabase
-      .from("lab_orders")
+    const result = await platformRepository
+      .from("lab_orders", labCtx(tenantId, "lab.create"))
       .insert(payload)
       .select(LAB_COLUMNS)
       .single();
@@ -240,8 +281,8 @@ export const labRepository: LabRepository = {
     if (input.resulted_at !== undefined) payload.resulted_at = input.resulted_at;
 
     if (Object.keys(payload).length === 0) {
-      const result = await supabase
-        .from("lab_orders")
+      const result = await platformRepository
+        .from("lab_orders", labCtx(tenantId, "lab.getForUpdate", "readonly"))
         .select(LAB_COLUMNS)
         .eq("id", id)
         .eq("tenant_id", tenantId)
@@ -249,8 +290,8 @@ export const labRepository: LabRepository = {
       return assertOk(result) as LabResult;
     }
 
-    let query = supabase
-      .from("lab_orders")
+    let query = platformRepository
+      .from("lab_orders", labCtx(tenantId, "lab.update"))
       .update(payload)
       .eq("id", id)
       .eq("tenant_id", tenantId);
@@ -266,9 +307,54 @@ export const labRepository: LabRepository = {
     }
     return (data ?? null) as LabResult | null;
   },
+  async finalizeResult(id, input, tenantId, userId, expectedUpdatedAt, trace) {
+    const requestHash = [
+      id,
+      tenantId,
+      input.status ?? "completed",
+      input.result ?? "",
+      input.result_value ?? "",
+      input.result_unit ?? "",
+      input.reference_range ?? "",
+      input.abnormal_flag ?? "",
+      input.result_notes ?? "",
+      expectedUpdatedAt ?? "",
+    ].join("|");
+    const { data, error } = await platformRepository.rpc("finalize_lab_result", {
+      p_lab_order_id: id,
+      p_tenant_id: tenantId,
+      p_status: input.status ?? "completed",
+      p_result: input.result ?? null,
+      p_result_value: input.result_value ?? null,
+      p_result_unit: input.result_unit ?? null,
+      p_reference_range: input.reference_range ?? null,
+      p_abnormal_flag: input.abnormal_flag ?? null,
+      p_result_notes: input.result_notes ?? null,
+      p_resulted_at: input.resulted_at ?? null,
+      p_expected_updated_at: expectedUpdatedAt ?? null,
+      p_idempotency_key: null,
+      p_request_hash: requestHash,
+      p_user_id: userId ?? null,
+      p_request_trace_id: null,
+      p_operation_trace_id: null,
+      p_workflow_trace_id: null,
+    }, labCtx(tenantId, "lab.result.finalize", "critical", trace));
+    if (error) {
+      throw new ServiceError(error.message ?? "Failed to finalize lab result", {
+        code: error.code,
+        details: error,
+      });
+    }
+    const row = (data as any)?.[0];
+    if (!row) {
+      throw new ServiceError("Lab result command returned no result", { code: "LAB_RESULT_COMMAND_EMPTY_RESULT" });
+    }
+    if (row.result_code === "CONFLICT") return null;
+    return (row.lab_order ?? null) as LabResult | null;
+  },
   async archive(id, tenantId, userId) {
-    const result = await supabase
-      .from("lab_orders")
+    const result = await platformRepository
+      .from("lab_orders", labCtx(tenantId, "lab.archive"))
       .update({ deleted_at: new Date().toISOString(), deleted_by: userId })
       .eq("id", id)
       .eq("tenant_id", tenantId)
@@ -278,8 +364,8 @@ export const labRepository: LabRepository = {
     return assertOk(result) as LabResult;
   },
   async restore(id, tenantId) {
-    const result = await supabase
-      .from("lab_orders")
+    const result = await platformRepository
+      .from("lab_orders", labCtx(tenantId, "lab.restore"))
       .update({ deleted_at: null, deleted_by: null })
       .eq("id", id)
       .eq("tenant_id", tenantId)
@@ -287,5 +373,24 @@ export const labRepository: LabRepository = {
       .single();
 
     return assertOk(result) as LabResult;
+  },
+  describe() {
+    return {
+      certified: false,
+      tenantBound: true,
+      traceAware: true,
+      runtimeAware: true,
+      capabilityAware: true,
+      reconciliationAware: false,
+      recoveryAware: false,
+      evidenceAware: true,
+      retryAware: true,
+      staleContextSafe: true,
+      metricsEnabled: true,
+      requiredCapabilities: [Capabilities.records.manage, Capabilities.laboratory.manage],
+      exceptions: [
+        "Lab result finalization is DB-authoritative, but create/archive/restore and non-result updates are not yet fully recovery-aware.",
+      ],
+    };
   },
 };
