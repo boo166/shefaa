@@ -114,6 +114,12 @@ export const patientDocumentsRepository: PatientDocumentsRepository = {
     return {
       certified: false,
       tenantBound: true,
+      traceAware: true,
+      runtimeAware: true,
+      capabilityAware: true,
+      reconciliationAware: false,
+      recoveryAware: false,
+      evidenceAware: false,
       retryAware: true,
       staleContextSafe: true,
       metricsEnabled: true,

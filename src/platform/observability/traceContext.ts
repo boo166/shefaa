@@ -5,11 +5,15 @@
 export type PlatformTraceIds = {
   requestTraceId: string;
   operationTraceId: string;
+  workflowTraceId?: string | null;
   tenantId?: string | null;
   actorId?: string | null;
   sessionVersion?: string | null;
   /** Correlates tenant switch, incident mode, auth recovery across kernels. */
   runtimeTransitionTraceId?: string | null;
+  transitionId?: string | null;
+  reconciliationRunId?: string | null;
+  causalParentId?: string | null;
 };
 
 export function newRequestTraceId(): string {
@@ -42,9 +46,13 @@ export function buildTracePayload(partial: Partial<PlatformTraceIds> & { request
   return {
     requestTraceId: partial.requestTraceId ?? newRequestTraceId(),
     operationTraceId: partial.operationTraceId ?? newOperationTraceId(),
+    workflowTraceId: partial.workflowTraceId,
     tenantId: partial.tenantId,
     actorId: partial.actorId,
     sessionVersion: partial.sessionVersion,
     runtimeTransitionTraceId: partial.runtimeTransitionTraceId,
+    transitionId: partial.transitionId,
+    reconciliationRunId: partial.reconciliationRunId,
+    causalParentId: partial.causalParentId,
   };
 }

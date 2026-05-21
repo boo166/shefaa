@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Architecture-as-code: forbidden patterns outside approved layers.
+ * Architecture-as-code: convergence gates for platform-only infrastructure access.
  * @see docs/architecture/no-unsafe-paths-policy.md
  */
 import fs from "node:fs";
@@ -8,37 +8,34 @@ import path from "node:path";
 
 const root = process.cwd();
 const srcRoot = path.join(root, "src");
-
-const ALLOW_SUPABASE_FROM = [
-  path.join("src", "services"),
-  path.join("src", "integrations", "supabase"),
-  path.join("src", "platform", "data"),
-];
-
-const DISALLOW_LOCALSTORAGE_TOP = [
-  path.join("src", "features"),
-  path.join("src", "pages"),
-];
-
-const PROTECTED_MODULE_PATHS = [
-  "src/services/billing/",
-  "src/services/reports/",
-  "src/services/auth/",
-  "src/services/patients/",
-  "src/services/admin/",
-];
-
 const BASELINE_FILE = path.join("docs", "architecture", "runtime-enforcement-baseline.md");
-const FULL_ENFORCEMENT_FAIL = process.env.ARCH_ENFORCEMENT_STAGE === "D";
 
-function* walkFiles(dir, acc = []) {
-  if (!fs.existsSync(dir)) return acc;
+const CATEGORIES = {
+  rawSupabase: "raw-supabase",
+  runtimeInternals: "runtime-internal-imports",
+  traceGeneration: "direct-trace-generation",
+  rawRealtime: "raw-realtime-access",
+  rawPolicy: "raw-policy-reads",
+  missingCertification: "missing-certification-metadata",
+};
+
+const CATEGORY_LABELS = {
+  [CATEGORIES.rawSupabase]: "Raw Supabase usage",
+  [CATEGORIES.runtimeInternals]: "Runtime internal imports",
+  [CATEGORIES.traceGeneration]: "Direct trace generation",
+  [CATEGORIES.rawRealtime]: "Raw realtime access",
+  [CATEGORIES.rawPolicy]: "Raw runtime policy reads",
+  [CATEGORIES.missingCertification]: "Missing certification metadata",
+};
+
+function* walkFiles(dir) {
+  if (!fs.existsSync(dir)) return;
   for (const name of fs.readdirSync(dir)) {
     const full = path.join(dir, name);
     const st = fs.statSync(full);
     if (st.isDirectory()) {
       if (name === "node_modules" || name === "dist" || name === "coverage") continue;
-      yield* walkFiles(full, acc);
+      yield* walkFiles(full);
     } else if (/\.(ts|tsx|mts|cts)$/.test(name)) {
       yield full;
     }
@@ -49,99 +46,160 @@ function normalizeRel(file) {
   return path.relative(root, file).split(path.sep).join("/");
 }
 
-function isUnderAllowedSupabaseFrom(rel) {
-  return ALLOW_SUPABASE_FROM.some((prefix) => rel.replace(/\\/g, "/").startsWith(prefix.replace(/\\/g, "/")));
+function normPath(value) {
+  return value.replace(/\\/g, "/").trim();
 }
 
-function mentionsSupabaseFrom(content) {
-  return /\bsupabase\s*\.\s*from\s*\(/m.test(content);
-}
-
-function mentionsSupabaseRpc(content) {
-  return /\bsupabase\s*\.\s*rpc\s*\(/m.test(content);
-}
-
-function isProtectedModule(rel) {
-  const norm = rel.replace(/\\/g, "/");
-  return PROTECTED_MODULE_PATHS.some((p) => norm.startsWith(p));
+function isTestFile(rel) {
+  return /(^|\/)(__tests__|tests)\//.test(rel) || /\.(test|spec)\.(ts|tsx|mts|cts)$/.test(rel);
 }
 
 function readBaseline() {
-  if (!fs.existsSync(BASELINE_FILE)) return new Set();
+  const baseline = new Map(Object.values(CATEGORIES).map((category) => [category, new Set()]));
+  if (!fs.existsSync(BASELINE_FILE)) return baseline;
+
+  let currentCategory = CATEGORIES.rawSupabase;
   const lines = fs.readFileSync(BASELINE_FILE, "utf8").split(/\r?\n/);
-  const set = new Set();
   for (const line of lines) {
-    if (line.startsWith("- ")) set.add(line.slice(2).trim());
+    const heading = line.match(/^##\s+(.+?)\s*$/);
+    if (heading) {
+      const normalized = heading[1].toLowerCase();
+      currentCategory =
+        normalized.includes("supabase") ? CATEGORIES.rawSupabase
+          : normalized.includes("runtime internal") ? CATEGORIES.runtimeInternals
+            : normalized.includes("trace") ? CATEGORIES.traceGeneration
+              : normalized.includes("realtime") ? CATEGORIES.rawRealtime
+                : normalized.includes("policy") ? CATEGORIES.rawPolicy
+                  : normalized.includes("certification") ? CATEGORIES.missingCertification
+                    : currentCategory;
+      continue;
+    }
+    if (line.startsWith("- ")) {
+      baseline.get(currentCategory)?.add(normPath(line.slice(2)));
+    }
   }
-  return set;
+  return baseline;
+}
+
+function isBaselined(baseline, category, rel) {
+  return baseline.get(category)?.has(rel) ?? false;
+}
+
+function addViolation(inventory, category, rel) {
+  inventory.get(category)?.add(rel);
+}
+
+function hasRawSupabase(content) {
+  return /\bsupabase\s*\.\s*(from|rpc|channel|removeChannel|auth)\b/m.test(content);
+}
+
+function hasRuntimeInternalImport(content) {
+  return /from\s+["']@\/platform\/runtime\/(coordination|mode|recovery|policy)(\/[^"']*)?["']/m.test(content);
+}
+
+function hasDirectTraceGeneration(content) {
+  return /from\s+["']@\/platform\/observability\/traceContext["']/m.test(content)
+    && /\b(newRequestTraceId|newRuntimeTransitionTraceId|buildTracePayload)\b/m.test(content);
+}
+
+function hasRawRealtimeAccess(content) {
+  return /from\s+["']@\/platform\/realtime\/realtimeRuntime["']/m.test(content);
+}
+
+function hasRawPolicyRead(content) {
+  return /from\s+["']@\/platform\/runtime\/policy(\/[^"']*)?["']/m.test(content)
+    && /\bresolveRuntimePolicy\b/m.test(content);
+}
+
+function hasRepositoryExport(content) {
+  return /export\s+(const|class)\s+\w*Repository\b/m.test(content)
+    || /export\s+interface\s+\w*Repository\b/m.test(content);
+}
+
+function hasDescribeMetadata(content) {
+  return /\bdescribe\s*\(\)\s*\{/m.test(content);
+}
+
+function isAllowedRawSupabase(rel) {
+  return rel.startsWith("src/services/supabase/")
+    || rel.startsWith("src/integrations/supabase/")
+    || rel.startsWith("src/platform/data/");
+}
+
+function isFeatureBoundary(rel) {
+  return rel.startsWith("src/features/")
+    || rel.startsWith("src/pages/")
+    || rel.startsWith("src/components/")
+    || rel.startsWith("src/hooks/");
 }
 
 function main() {
-  const errors = [];
-  const inventory = [];
   const baseline = readBaseline();
+  const inventory = new Map(Object.values(CATEGORIES).map((category) => [category, new Set()]));
+  const errors = [];
 
   for (const file of walkFiles(srcRoot)) {
     const rel = normalizeRel(file);
     const content = fs.readFileSync(file, "utf8");
+    const testFile = isTestFile(rel);
 
-    const hasFrom = mentionsSupabaseFrom(content);
-    const hasRpc = mentionsSupabaseRpc(content);
-    const normRel = rel.replace(/\\/g, "/");
-    const hasRawSupabase = hasFrom || hasRpc;
-
-    // Stage D: no raw supabase usage anywhere (outside platform data + supabase adapter layers).
-    if (FULL_ENFORCEMENT_FAIL && hasRawSupabase) {
-      const allowed = normRel.startsWith("src/services/supabase/") || normRel.startsWith("src/platform/data/");
-      if (!allowed) {
-        inventory.push(normRel);
-        if (!baseline.has(normRel)) {
-          errors.push(`${rel}: Stage D forbids raw supabase.* (must use platformRepository)`);
-        }
-      }
+    if (!testFile && hasRawSupabase(content) && !isAllowedRawSupabase(rel)) {
+      addViolation(inventory, CATEGORIES.rawSupabase, rel);
     }
 
-    // Stage C baseline diff: only track unsafe paths (raw usage outside approved layers).
-    if (!FULL_ENFORCEMENT_FAIL && hasRawSupabase && !isUnderAllowedSupabaseFrom(rel)) {
-      inventory.push(normRel);
-      errors.push(`${rel}: supabase.from(...) must live under src/services or src/integrations/supabase`);
+    if (!testFile && isFeatureBoundary(rel) && hasRuntimeInternalImport(content)) {
+      addViolation(inventory, CATEGORIES.runtimeInternals, rel);
     }
 
-    // Stage B: protected modules must not use raw supabase APIs at all
-    // (except src/platform/data or src/services/supabase), unless explicitly baselined.
-    const norm = rel.replace(/\\/g, "/");
-    const inPlatformData = norm.startsWith("src/platform/data/");
-    const inSupabaseServices = norm.startsWith("src/services/supabase/");
-    if (hasRawSupabase && isProtectedModule(rel) && !inPlatformData && !inSupabaseServices && !baseline.has(norm)) {
-      errors.push(`${rel}: protected module must use platformRepository (raw supabase.* forbidden)`);
+    if (!testFile && hasDirectTraceGeneration(content) && !rel.startsWith("src/platform/")) {
+      addViolation(inventory, CATEGORIES.traceGeneration, rel);
     }
 
-    const posixRel = rel.replace(/\\/g, "/");
-    if (DISALLOW_LOCALSTORAGE_TOP.some((p) => posixRel.startsWith(p.replace(/\\/g, "/")))) {
-      if (/\blocalStorage\s*\./m.test(content)) {
-        errors.push(`${rel}: localStorage access must go through platform storage helpers (not in features/pages)`);
-      }
+    if (!testFile && hasRawRealtimeAccess(content) && !rel.startsWith("src/platform/")) {
+      addViolation(inventory, CATEGORIES.rawRealtime, rel);
     }
 
+    if (!testFile && hasRawPolicyRead(content) && !rel.startsWith("src/platform/")) {
+      addViolation(inventory, CATEGORIES.rawPolicy, rel);
+    }
+
+    if (
+      !testFile
+      && rel.startsWith("src/services/")
+      && rel.endsWith(".repository.ts")
+      && hasRepositoryExport(content)
+      && !hasDescribeMetadata(content)
+    ) {
+      addViolation(inventory, CATEGORIES.missingCertification, rel);
+    }
+
+    if ((rel.startsWith("src/features/") || rel.startsWith("src/pages/")) && /\blocalStorage\s*\./m.test(content)) {
+      errors.push(`${rel}: localStorage access must go through platform storage helpers`);
+    }
   }
 
-  const newViolations = inventory.filter((p) => !baseline.has(p));
-  if (newViolations.length > 0) {
-    errors.push(
-      `new unsafe paths detected (baseline-diff): ${newViolations.join(", ")}`,
-    );
+  for (const [category, entries] of inventory) {
+    for (const rel of entries) {
+      if (!isBaselined(baseline, category, rel)) {
+        errors.push(`${rel}: ${CATEGORY_LABELS[category]} must go through the platform contract or be baselined`);
+      }
+    }
   }
 
-  console.log("Architecture inventory (raw supabase usage):");
-  for (const item of inventory.sort()) {
-    console.log(` - ${item}`);
+  console.log("Architecture convergence inventory:");
+  for (const [category, entries] of inventory) {
+    console.log(`\n${CATEGORY_LABELS[category]}:`);
+    for (const item of [...entries].sort()) {
+      const marker = isBaselined(baseline, category, item) ? "baseline" : "new";
+      console.log(` - ${item} (${marker})`);
+    }
   }
 
   if (errors.length) {
-    console.error("Architecture lint failed:\n\n" + errors.map((e) => `  - ${e}`).join("\n"));
+    console.error("\nArchitecture lint failed:\n\n" + errors.map((e) => `  - ${e}`).join("\n"));
     process.exit(1);
   }
-  console.log("Architecture lint OK");
+  console.log("\nArchitecture lint OK");
 }
 
 main();

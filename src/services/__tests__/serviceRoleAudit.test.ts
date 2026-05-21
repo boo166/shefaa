@@ -13,6 +13,7 @@ const ALLOWED_SERVICE_ROLE_FUNCTIONS = new Set([
   "process-insurance-claims",
   "invite-staff",
   "job-worker",
+  "event-delivery-worker",
   "lab-webhook-inbound",
   "integration-api",
 ]);

@@ -40,14 +40,26 @@ describe("recoveryOrchestrator", () => {
     expect(persistRuntimeIncidentLedger).toHaveBeenCalledWith(expect.objectContaining({
       incident: expect.objectContaining({
         incident_type: "stale_epoch",
-        trace_ids: { trace_id: "trace-1" },
+        failure_kind: "stale_context",
+        runtime_effect: "abort",
+        trace_ids: expect.objectContaining({ trace_id: "trace-1" }),
+        recovery_contract: expect.objectContaining({
+          replaySafe: true,
+          requiresReconciliation: true,
+          requiresOperator: false,
+        }),
         metadata: expect.objectContaining({
           reason_code: "runtime_recovery",
           workflow_count: 1,
         }),
       }),
       actions: expect.arrayContaining([
-        expect.objectContaining({ recovery_class: "abort", action_status: "completed" }),
+        expect.objectContaining({
+          recovery_class: "abort",
+          action_status: "completed",
+          failure_kind: "stale_context",
+          runtime_effect: "abort",
+        }),
       ]),
     }));
   });

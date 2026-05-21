@@ -102,4 +102,23 @@ export const portalRepository = {
     }
     return data ?? [];
   },
+  describe() {
+    return {
+      certified: false,
+      tenantBound: false,
+      traceAware: false,
+      runtimeAware: false,
+      capabilityAware: false,
+      reconciliationAware: false,
+      recoveryAware: false,
+      evidenceAware: false,
+      retryAware: false,
+      staleContextSafe: false,
+      metricsEnabled: false,
+      requiredCapabilities: [],
+      exceptions: [
+        "Portal repository still uses direct Supabase auth and patient-scoped reads pending portal convergence.",
+      ],
+    };
+  },
 };

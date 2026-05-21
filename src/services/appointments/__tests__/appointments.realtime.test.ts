@@ -67,4 +67,39 @@ describe("appointments realtime convergence (registry)", () => {
     off();
     expect(getRealtimeRegistryDiagnostics().intentCount).toBe(0);
   });
+
+  it("forwards normalized payloads while preserving invalidation callbacks", async () => {
+    const { registerRealtimeSubscriptionIntent, reconcileAll } = await import(
+      "@/platform/realtime/realtimeRuntime",
+    );
+    const onEvent = vi.fn();
+    const onPayload = vi.fn();
+
+    const off = registerRealtimeSubscriptionIntent("notifications-test", {
+      ctx: { tenantId: "t1", userId: "u1", sessionVersion: "sv1" },
+      tables: ["notifications"],
+      onEvent,
+      onPayload,
+    });
+
+    reconcileAll({ force: true });
+    await new Promise((r) => setTimeout(r, 150));
+
+    const callback = subscribeMock.mock.calls.at(-1)?.[2];
+    callback?.({
+      type: "INSERT",
+      table: "notifications",
+      row: { id: "n1", tenant_id: "t1", user_id: "u1" },
+      oldRow: null,
+    });
+
+    expect(onPayload).toHaveBeenCalledWith(expect.objectContaining({
+      type: "INSERT",
+      table: "notifications",
+      row: expect.objectContaining({ id: "n1" }),
+    }));
+    expect(onEvent).toHaveBeenCalled();
+
+    off();
+  });
 });

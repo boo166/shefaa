@@ -86,7 +86,7 @@ export function createWorkflow(input: {
 }) {
   const store = input.store ?? inMemoryWorkflowStore;
   const workflowTraceId = newWorkflowTraceId();
-  const trace = buildTracePayload(input.trace ?? {});
+  const trace = buildTracePayload({ ...(input.trace ?? {}), workflowTraceId });
 
   async function checkpoint(stepIndex: number, workflowEpoch: number) {
     await store.put({
@@ -161,4 +161,3 @@ export function createWorkflow(input: {
 
   return { run, workflowTraceId };
 }
-

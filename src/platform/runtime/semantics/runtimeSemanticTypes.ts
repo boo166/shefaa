@@ -66,6 +66,80 @@ export type RuntimeFailureKind =
   | "mutation_freeze_violation"
   | "duplicate_committed_command";
 
+export type OperationalEvidenceCategory =
+  | "domain"
+  | "workflow"
+  | "reconciliation"
+  | "runtime_transition"
+  | "recovery"
+  | "notification"
+  | "audit"
+  | "operator_action";
+
+export type CanonicalFailureKind =
+  | "transient"
+  | "stale_context"
+  | "tenant_violation"
+  | "replay_rejected"
+  | "invariant_violation"
+  | "runtime_blocked"
+  | "semantic_divergence"
+  | "integrity_drift"
+  | "external_dependency"
+  | "operator_action_required";
+
+export type RuntimeEffect =
+  | "none"
+  | "deny"
+  | "retry"
+  | "reconcile"
+  | "compensate"
+  | "contain"
+  | "pause"
+  | "abort"
+  | "fail_safe"
+  | "operator_required";
+
+export type OperatorVisibility = "hidden" | "timeline" | "alert" | "incident";
+
+export type ReplaySafety = "safe" | "conditional" | "unsafe";
+
+export type RecoveryContract = {
+  automatic: boolean;
+  retryable: boolean;
+  replaySafe: boolean;
+  requiresReconciliation: boolean;
+  requiresOperator: boolean;
+  containmentBehavior?: string;
+};
+
+export type OperationalTraceIds = {
+  requestTraceId?: string;
+  operationTraceId?: string;
+  workflowTraceId?: string;
+  transitionId?: string;
+  reconciliationRunId?: string;
+  causalParentId?: string;
+};
+
+export type OperationalEvidenceEnvelope = {
+  id: string;
+  category: OperationalEvidenceCategory;
+  severity: "info" | "warning" | "critical";
+  failureKind: CanonicalFailureKind;
+  runtimeEffect: RuntimeEffect;
+  recoveryContract: RecoveryContract;
+  traceIds: OperationalTraceIds;
+  runtimeMode?: string;
+  tenantId?: string;
+  createdAt: string;
+  label?: string;
+  detail?: string;
+  source?: string;
+  sourceId?: string;
+  metadata?: Record<string, string | number | boolean | null | undefined>;
+};
+
 /** Canonical reactions the kernel and participants may execute (ordering is transition-specific). */
 export type SemanticAction =
   | "ABORT"
@@ -90,10 +164,17 @@ export type RuntimeTransitionClass =
 
 export type SemanticResolution = {
   kind: RuntimeFailureKind;
+  failureKind: CanonicalFailureKind;
+  runtimeEffect: RuntimeEffect;
   /** Ordered interpretation of platform law for this failure. */
   actions: readonly SemanticAction[];
   /** Back-compat bridge for existing {@link resolveRecoveryPolicy} callers. */
   recoveryStrategy: RecoveryStrategy;
+  recoveryContract: RecoveryContract;
+  operatorVisibility: OperatorVisibility;
+  replaySafety: ReplaySafety;
+  requiresReconciliation: boolean;
+  containmentBehavior?: string;
   uiSeverity: "info" | "warning" | "critical";
 };
 

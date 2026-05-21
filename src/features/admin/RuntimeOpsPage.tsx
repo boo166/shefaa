@@ -7,17 +7,19 @@ import type {
   BillingReconciliationRun,
   BillingReconciliationSummary,
 } from "@/domain/billing/billing.types";
-import { consistencyBarrier } from "@/platform/runtime/coordination/consistencyBarrier";
-import { coordinationDiagnostics } from "@/platform/runtime/coordination/coordinationDiagnostics";
-import { runtimeEpochManager } from "@/platform/runtime/coordination/runtimeEpochManager";
-import { runtimeMutationGate } from "@/platform/runtime/coordination/runtimeMutationGate";
-import { runtimeModeController } from "@/platform/runtime/mode/runtimeModeController";
-import { recoveryOrchestrator } from "@/platform/runtime/recovery/recoveryOrchestrator";
-import { runtimeHealthStore } from "@/platform/runtime/recovery/runtimeHealthStore";
-import { getRealtimeRegistryDiagnostics } from "@/platform/realtime/realtimeRuntime";
-import { workflowRuntimeRegistry } from "@/platform/runtime/workflows/workflowRuntimeRegistry";
-import { resolveEffectiveRuntimeState } from "@/platform/runtime/semantics";
-import { subscribePlatformMetrics } from "@/platform/observability/runtimeAnalytics";
+import {
+  evidenceFromDryReconciliationSummary,
+  evidenceFromEventOutbox,
+  evidenceFromReconciliationFinding,
+  evidenceFromReconciliationRun,
+  evidenceFromRecoveryAction,
+  evidenceFromRuntimeIncident,
+  evidenceFromRuntimeTransition,
+  primaryTraceId,
+  sortOperationalEvidence,
+  type OperationalEvidenceEnvelope,
+} from "@/platform/runtime/semantics";
+import { platform } from "@/platform/sdk";
 import { billingReconciliationService } from "@/services/billing/billingReconciliation";
 import {
   listRecentRuntimeTransitionLogRows,
@@ -37,34 +39,6 @@ import {
 
 const OPS_FLAG = import.meta.env.VITE_RUNTIME_OPS_CONSOLE === "1" || import.meta.env.DEV;
 
-let lastBillingTick: Record<string, string | number | boolean | undefined> | null = null;
-
-function subscribeBillingTick(onChange: () => void) {
-  return subscribePlatformMetrics((name, payload) => {
-    if (name === "billing.reconciliation_tick") {
-      lastBillingTick = { ...payload };
-      onChange();
-    }
-  });
-}
-
-function getBillingTick() {
-  return lastBillingTick;
-}
-
-type IncidentTimelineItem = {
-  id: string;
-  at: string;
-  kind: string;
-  label: string;
-  detail: string;
-  traceId: string | null;
-  tenantId: string | null;
-  reconciliationRunId: string | null;
-  workflowId: string | null;
-  findingCode: string | null;
-};
-
 type IncidentSession = {
   key: string;
   label: string;
@@ -75,10 +49,6 @@ type IncidentSession = {
   kinds: string[];
   primaryCause: string;
 };
-
-function traceFrom(...values: Array<string | null | undefined>): string | null {
-  return values.find((value): value is string => Boolean(value)) ?? null;
-}
 
 function formatDateTime(value: string | number | null | undefined) {
   if (!value) return "-";
@@ -104,118 +74,16 @@ function buildIncidentTimeline(input: {
   incidentRows: RuntimeIncidentTimelineRow[];
   recoveryActionRows: RuntimeRecoveryActionRow[];
   eventOutboxRows: EventOutboxRow[];
-}): IncidentTimelineItem[] {
-  const items: IncidentTimelineItem[] = [];
-
-  if (input.latestRun) {
-    items.push({
-      id: `reconciliation-run:${input.latestRun.id}`,
-      at: input.latestRun.completed_at,
-      kind: "Reconciliation run",
-      label: input.latestRun.status,
-      detail: `${input.latestRun.finding_count} findings, ${input.latestRun.critical_count} critical`,
-      traceId: traceFrom(input.latestRun.workflow_trace_id, input.latestRun.operation_trace_id, input.latestRun.request_trace_id),
-      tenantId: input.latestRun.tenant_id,
-      reconciliationRunId: input.latestRun.id,
-      workflowId: input.latestRun.workflow_trace_id,
-      findingCode: null,
-    });
-  }
-
-  if (input.dryRunSummary) {
-    items.push({
-      id: `reconciliation-dry:${input.dryRunSummary.completed_at}`,
-      at: input.dryRunSummary.completed_at,
-      kind: "Dry reconciliation",
-      label: "completed",
-      detail: `${input.dryRunSummary.finding_count} findings, ${input.dryRunSummary.critical_count} critical`,
-      traceId: null,
-      tenantId: null,
-      reconciliationRunId: null,
-      workflowId: null,
-      findingCode: null,
-    });
-  }
-
-  for (const finding of input.openFindings) {
-    items.push({
-      id: `finding:${finding.id}`,
-      at: finding.detected_at,
-      kind: "Billing finding",
-      label: `${finding.severity} ${finding.status}`,
-      detail: finding.finding_code,
-      traceId: traceFrom(finding.workflow_trace_id, finding.operation_trace_id, finding.request_trace_id),
-      tenantId: finding.tenant_id,
-      reconciliationRunId: finding.run_id,
-      workflowId: finding.workflow_trace_id,
-      findingCode: finding.finding_code,
-    });
-  }
-
-  for (const transition of input.transitionRows) {
-    items.push({
-      id: `transition:${transition.id}`,
-      at: transition.started_at,
-      kind: "Runtime transition",
-      label: transition.status,
-      detail: transition.transition_type,
-      traceId: traceFrom(transition.runtime_transition_trace_id, transition.trace_id),
-      tenantId: transition.tenant_id,
-      reconciliationRunId: null,
-      workflowId: transition.runtime_transition_trace_id,
-      findingCode: null,
-    });
-  }
-
-  for (const incident of input.incidentRows) {
-    items.push({
-      id: `incident:${incident.id}`,
-      at: incident.detected_at,
-      kind: "Runtime incident",
-      label: incident.severity,
-      detail: `${incident.incident_type}; health ${incident.runtime_health}`,
-      traceId: traceFrom(incident.trace_ids?.trace_id),
-      tenantId: incident.tenant_id,
-      reconciliationRunId: null,
-      workflowId: incident.trace_ids?.workflow_trace_id ?? null,
-      findingCode: null,
-    });
-  }
-
-  for (const action of input.recoveryActionRows) {
-    items.push({
-      id: `recovery:${action.id}`,
-      at: action.started_at,
-      kind: "Recovery action",
-      label: action.action_status,
-      detail: `${action.recovery_class} by ${action.triggered_by}`,
-      traceId: traceFrom(action.trace_ids?.trace_id),
-      tenantId: action.tenant_id,
-      reconciliationRunId: null,
-      workflowId: action.trace_ids?.workflow_trace_id ?? null,
-      findingCode: null,
-    });
-  }
-
-  for (const row of input.eventOutboxRows) {
-    items.push({
-      id: `outbox:${row.id}`,
-      at: row.updated_at ?? row.created_at,
-      kind: "Event outbox",
-      label: row.status,
-      detail: `${row.event_type} via ${row.handler_name}`,
-      traceId: traceFrom(row.workflow_trace_id, row.operation_trace_id, row.request_trace_id),
-      tenantId: row.tenant_id,
-      reconciliationRunId: null,
-      workflowId: row.workflow_trace_id,
-      findingCode: null,
-    });
-  }
-
-  return items
-    .filter((item) => item.at)
-    .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
-    .slice(0, 16);
+}): OperationalEvidenceEnvelope[] {
+  return sortOperationalEvidence([
+    ...(input.latestRun ? [evidenceFromReconciliationRun(input.latestRun)] : []),
+    ...(input.dryRunSummary ? [evidenceFromDryReconciliationSummary(input.dryRunSummary)] : []),
+    ...input.openFindings.map(evidenceFromReconciliationFinding),
+    ...input.transitionRows.map(evidenceFromRuntimeTransition),
+    ...input.incidentRows.map(evidenceFromRuntimeIncident),
+    ...input.recoveryActionRows.map(evidenceFromRecoveryAction),
+    ...input.eventOutboxRows.map(evidenceFromEventOutbox),
+  ]);
 }
 
 function buildFindingCodeSummary(findings: BillingReconciliationFinding[]) {
@@ -228,12 +96,27 @@ function buildFindingCodeSummary(findings: BillingReconciliationFinding[]) {
     .slice(0, 3);
 }
 
-function sessionKeyFor(item: IncidentTimelineItem) {
-  return item.traceId ?? item.reconciliationRunId ?? item.tenantId ?? "untraced";
+function evidenceKind(item: OperationalEvidenceEnvelope) {
+  if (item.source === "billing_reconciliation_findings") return "Billing finding";
+  if (item.source === "billing_reconciliation_runs") return "Reconciliation run";
+  if (item.source === "billing_reconciliation_dry_run") return "Dry reconciliation";
+  if (item.source === "event_outbox") return "Event outbox";
+  if (item.source === "runtime_incident_timeline") return "Runtime incident";
+  if (item.source === "runtime_recovery_actions") return "Recovery action";
+  if (item.source === "runtime_transition_log") return "Runtime transition";
+  return item.category.replace(/_/g, " ");
 }
 
-function buildIncidentSessions(items: IncidentTimelineItem[]): IncidentSession[] {
-  const grouped = new Map<string, IncidentTimelineItem[]>();
+function evidencePrimaryTrace(item: OperationalEvidenceEnvelope) {
+  return primaryTraceId(item.traceIds) ?? null;
+}
+
+function sessionKeyFor(item: OperationalEvidenceEnvelope) {
+  return evidencePrimaryTrace(item) ?? item.traceIds.reconciliationRunId ?? item.traceIds.causalParentId ?? item.tenantId ?? "untraced";
+}
+
+function buildIncidentSessions(items: OperationalEvidenceEnvelope[]): IncidentSession[] {
+  const grouped = new Map<string, OperationalEvidenceEnvelope[]>();
   for (const item of items) {
     const key = sessionKeyFor(item);
     grouped.set(key, [...(grouped.get(key) ?? []), item]);
@@ -241,29 +124,29 @@ function buildIncidentSessions(items: IncidentTimelineItem[]): IncidentSession[]
 
   return [...grouped.entries()]
     .map(([key, group]) => {
-      const ordered = group.slice().sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
-      const traces = ordered.map((item) => item.traceId).filter(Boolean);
+      const ordered = group.slice().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      const traces = ordered.map(evidencePrimaryTrace).filter(Boolean);
       const traceId = traces[0] ?? null;
-      const kinds = [...new Set(ordered.map((item) => item.kind))];
-      const primary = ordered.find((item) => item.kind === "Billing finding")
-        ?? ordered.find((item) => item.kind === "Runtime incident")
+      const kinds = [...new Set(ordered.map(evidenceKind))];
+      const primary = ordered.find((item) => item.source === "billing_reconciliation_findings")
+        ?? ordered.find((item) => item.source === "runtime_incident_timeline")
         ?? ordered[0];
       return {
         key,
         label: traceId ? `Trace ${traceId}` : key === "untraced" ? "Untraced evidence" : `Session ${key}`,
-        firstAt: ordered[ordered.length - 1]?.at ?? "",
-        lastAt: ordered[0]?.at ?? "",
+        firstAt: ordered[ordered.length - 1]?.createdAt ?? "",
+        lastAt: ordered[0]?.createdAt ?? "",
         itemCount: ordered.length,
         traceId,
         kinds,
-        primaryCause: `${primary.kind}: ${primary.detail}`,
+        primaryCause: `${evidenceKind(primary)}: ${primary.detail ?? primary.failureKind}`,
       };
     })
     .sort((a, b) => new Date(b.lastAt).getTime() - new Date(a.lastAt).getTime())
     .slice(0, 8);
 }
 
-function matchesEvidenceSession(item: IncidentTimelineItem, selectedSessionKey: string | null) {
+function matchesEvidenceSession(item: OperationalEvidenceEnvelope, selectedSessionKey: string | null) {
   if (!selectedSessionKey) return false;
   return sessionKeyFor(item) === selectedSessionKey;
 }
@@ -271,7 +154,7 @@ function matchesEvidenceSession(item: IncidentTimelineItem, selectedSessionKey: 
 function buildForensicBundle(input: {
   tenantId: string | null;
   selectedSession: IncidentSession | null;
-  evidenceItems: IncidentTimelineItem[];
+  evidenceItems: OperationalEvidenceEnvelope[];
   latestRun: BillingReconciliationRun | null;
   openFindings: BillingReconciliationFinding[];
   transitionRows: RuntimeTransitionLogRow[];
@@ -280,8 +163,8 @@ function buildForensicBundle(input: {
   eventOutboxRows: EventOutboxRow[];
 }) {
   const selectedIds = new Set(input.evidenceItems.map((item) => item.id));
-  const selectedTraceIds = new Set(input.evidenceItems.map((item) => item.traceId).filter(Boolean));
-  const selectedRunIds = new Set(input.evidenceItems.map((item) => item.reconciliationRunId).filter(Boolean));
+  const selectedTraceIds = new Set(input.evidenceItems.map(evidencePrimaryTrace).filter(Boolean));
+  const selectedRunIds = new Set(input.evidenceItems.map((item) => item.traceIds.reconciliationRunId).filter(Boolean));
 
   return {
     exported_at: new Date().toISOString(),
@@ -289,14 +172,16 @@ function buildForensicBundle(input: {
     session: input.selectedSession,
     timeline: input.evidenceItems.map((item) => ({
       id: item.id,
-      at: item.at,
-      kind: item.kind,
+      at: item.createdAt,
+      category: item.category,
+      failure_kind: item.failureKind,
+      runtime_effect: item.runtimeEffect,
+      recovery_contract: item.recoveryContract,
       label: item.label,
       detail: item.detail,
-      trace_id: item.traceId,
-      reconciliation_run_id: item.reconciliationRunId,
-      workflow_id: item.workflowId,
-      finding_code: item.findingCode,
+      trace_ids: item.traceIds,
+      source: item.source,
+      source_id: item.sourceId,
     })),
     reconciliation_lineage: {
       latest_run: input.latestRun ? {
@@ -305,10 +190,13 @@ function buildForensicBundle(input: {
         completed_at: input.latestRun.completed_at,
         finding_count: input.latestRun.finding_count,
         critical_count: input.latestRun.critical_count,
-        trace_id: traceFrom(input.latestRun.workflow_trace_id, input.latestRun.operation_trace_id, input.latestRun.request_trace_id),
+        trace_ids: evidenceFromReconciliationRun(input.latestRun).traceIds,
       } : null,
       findings: input.openFindings
-        .filter((finding) => selectedRunIds.has(finding.run_id) || selectedTraceIds.has(traceFrom(finding.workflow_trace_id, finding.operation_trace_id, finding.request_trace_id)))
+        .filter((finding) => {
+          const evidence = evidenceFromReconciliationFinding(finding);
+          return selectedRunIds.has(finding.run_id) || selectedTraceIds.has(evidencePrimaryTrace(evidence));
+        })
         .map((finding) => ({
           id: finding.id,
           run_id: finding.run_id,
@@ -317,22 +205,28 @@ function buildForensicBundle(input: {
           status: finding.status,
           detected_at: finding.detected_at,
           resolved_at: finding.resolved_at,
-          trace_id: traceFrom(finding.workflow_trace_id, finding.operation_trace_id, finding.request_trace_id),
+          trace_ids: evidenceFromReconciliationFinding(finding).traceIds,
         })),
     },
     related_transitions: input.transitionRows
-      .filter((row) => selectedIds.has(`transition:${row.id}`) || selectedTraceIds.has(traceFrom(row.runtime_transition_trace_id, row.trace_id)))
+      .filter((row) => {
+        const evidence = evidenceFromRuntimeTransition(row);
+        return selectedIds.has(evidence.id) || selectedTraceIds.has(evidencePrimaryTrace(evidence));
+      })
       .map((row) => ({
         id: row.id,
         transition_type: row.transition_type,
         status: row.status,
         started_at: row.started_at,
         completed_at: row.completed_at,
-        trace_id: traceFrom(row.runtime_transition_trace_id, row.trace_id),
+        trace_ids: evidenceFromRuntimeTransition(row).traceIds,
       })),
     related_recovery: {
       incidents: input.incidentRows
-        .filter((row) => selectedIds.has(`incident:${row.id}`) || selectedTraceIds.has(traceFrom(row.trace_ids?.trace_id)))
+        .filter((row) => {
+          const evidence = evidenceFromRuntimeIncident(row);
+          return selectedIds.has(evidence.id) || selectedTraceIds.has(evidencePrimaryTrace(evidence));
+        })
         .map((row) => ({
           id: row.id,
           incident_type: row.incident_type,
@@ -340,10 +234,13 @@ function buildForensicBundle(input: {
           runtime_health: row.runtime_health,
           runtime_mode: row.runtime_mode,
           detected_at: row.detected_at,
-          trace_id: traceFrom(row.trace_ids?.trace_id),
+          trace_ids: evidenceFromRuntimeIncident(row).traceIds,
         })),
       actions: input.recoveryActionRows
-        .filter((row) => selectedIds.has(`recovery:${row.id}`) || selectedTraceIds.has(traceFrom(row.trace_ids?.trace_id)))
+        .filter((row) => {
+          const evidence = evidenceFromRecoveryAction(row);
+          return selectedIds.has(evidence.id) || selectedTraceIds.has(evidencePrimaryTrace(evidence));
+        })
         .map((row) => ({
           id: row.id,
           incident_id: row.incident_id,
@@ -352,11 +249,14 @@ function buildForensicBundle(input: {
           triggered_by: row.triggered_by,
           started_at: row.started_at,
           completed_at: row.completed_at,
-          trace_id: traceFrom(row.trace_ids?.trace_id),
+          trace_ids: evidenceFromRecoveryAction(row).traceIds,
         })),
     },
     delivery_attempts: input.eventOutboxRows
-      .filter((row) => selectedIds.has(`outbox:${row.id}`) || selectedTraceIds.has(traceFrom(row.workflow_trace_id, row.operation_trace_id, row.request_trace_id)))
+      .filter((row) => {
+        const evidence = evidenceFromEventOutbox(row);
+        return selectedIds.has(evidence.id) || selectedTraceIds.has(evidencePrimaryTrace(evidence));
+      })
       .map((row) => ({
         id: row.id,
         event_type: row.event_type,
@@ -370,102 +270,16 @@ function buildForensicBundle(input: {
         next_retry_at: row.next_retry_at,
         processed_at: row.processed_at,
         last_error: row.last_error,
-        trace_id: traceFrom(row.workflow_trace_id, row.operation_trace_id, row.request_trace_id),
+        trace_ids: evidenceFromEventOutbox(row).traceIds,
       })),
   };
 }
 
-function buildClientOpsSnapshot() {
-  return {
-    effective: resolveEffectiveRuntimeState(),
-    epoch: runtimeEpochManager.getCurrentEpoch(),
-    diag: coordinationDiagnostics.getSnapshot(),
-    health: runtimeHealthStore.getSnapshot(),
-    barriers: {
-      tenant: consistencyBarrier.getDepth("tenant_transition"),
-      auth: consistencyBarrier.getDepth("auth_recovery"),
-      readonly: consistencyBarrier.getDepth("readonly_enter"),
-    },
-    mutationFreeze: {
-      frozen: runtimeMutationGate.isWritesFrozen(),
-      reason: runtimeMutationGate.getFreezeReason(),
-    },
-    realtime: typeof window !== "undefined"
-      ? getRealtimeRegistryDiagnostics()
-      : {
-        intentCount: 0,
-        activeChannelCount: 0,
-        churnThrottledRecently: false,
-        connectionState: "CONNECTED" as const,
-        maxReplayDriftMs: 30_000,
-        staleSubscriptionThresholdMs: 60_000,
-        replayDriftMs: 0,
-        lastRecoveryAt: null,
-      },
-    workflows: workflowRuntimeRegistry.listActive(),
-    billingTick: getBillingTick(),
-    recovery: {
-      trustLevel: recoveryOrchestrator.getTrustLevel(),
-      timeline: recoveryOrchestrator.getAuditTrail().slice(0, 8),
-    },
-  };
-}
-
-const serverOpsSnapshot = {
-  effective: resolveEffectiveRuntimeState(),
-  epoch: runtimeEpochManager.getCurrentEpoch(),
-  diag: coordinationDiagnostics.getSnapshot(),
-  health: runtimeHealthStore.getSnapshot(),
-  barriers: { tenant: 0, auth: 0, readonly: 0 },
-  mutationFreeze: { frozen: false, reason: null },
-  realtime: {
-    intentCount: 0,
-    activeChannelCount: 0,
-    churnThrottledRecently: false,
-    connectionState: "CONNECTED" as const,
-    maxReplayDriftMs: 30_000,
-    staleSubscriptionThresholdMs: 60_000,
-    replayDriftMs: 0,
-    lastRecoveryAt: null,
-  },
-  workflows: [] as string[],
-  billingTick: null,
-  recovery: { trustLevel: "HEALTHY" as const, timeline: [] },
-};
-
-let cachedOpsSnapshot = buildClientOpsSnapshot();
-let cachedOpsSnapshotKey = JSON.stringify(cachedOpsSnapshot);
-
-function getClientOpsSnapshot() {
-  const next = buildClientOpsSnapshot();
-  const key = JSON.stringify(next);
-  if (key !== cachedOpsSnapshotKey) {
-    cachedOpsSnapshot = next;
-    cachedOpsSnapshotKey = key;
-  }
-  return cachedOpsSnapshot;
-}
-
 function useOpsStore() {
   return useSyncExternalStore(
-    (cb) => {
-      const u1 = runtimeModeController.subscribe(() => cb());
-      const u2 = runtimeEpochManager.subscribe(() => cb());
-      const u3 = coordinationDiagnostics.subscribe(() => cb());
-      const u4 = runtimeHealthStore.subscribe(() => cb());
-      const u5 = subscribeBillingTick(() => cb());
-      const u6 = recoveryOrchestrator.subscribe(() => cb());
-      return () => {
-        u1();
-        u2();
-        u3();
-        u4();
-        u5();
-        u6();
-      };
-    },
-    getClientOpsSnapshot,
-    () => serverOpsSnapshot,
+    platform.coordination.readModels.subscribeOps,
+    platform.coordination.readModels.getOpsSnapshot,
+    () => platform.coordination.readModels.serverOpsSnapshot,
   );
 }
 
@@ -503,10 +317,10 @@ export function RuntimeOpsPage() {
     () => incidentTimeline.filter((item) => matchesEvidenceSession(item, selectedSession?.key ?? null)),
     [incidentTimeline, selectedSession],
   );
-  const relatedTransitions = selectedEvidenceItems.filter((item) => item.kind === "Runtime transition");
-  const relatedWorkflows = [...new Set(selectedEvidenceItems.map((item) => item.workflowId).filter(Boolean))];
-  const reconciliationLineage = selectedEvidenceItems.filter((item) => item.kind === "Reconciliation run" || item.kind === "Billing finding");
-  const deliveryAttempts = selectedEvidenceItems.filter((item) => item.kind === "Event outbox");
+  const relatedTransitions = selectedEvidenceItems.filter((item) => item.category === "runtime_transition");
+  const relatedWorkflows = [...new Set(selectedEvidenceItems.map((item) => item.traceIds.workflowTraceId).filter(Boolean))];
+  const reconciliationLineage = selectedEvidenceItems.filter((item) => item.category === "reconciliation");
+  const deliveryAttempts = selectedEvidenceItems.filter((item) => item.source === "event_outbox");
   const criticalFindings = useMemo(
     () => openFindings.filter((finding) => finding.severity === "critical"),
     [openFindings],
@@ -515,6 +329,9 @@ export function RuntimeOpsPage() {
     .slice()
     .sort((a, b) => new Date(a.detected_at).getTime() - new Date(b.detected_at).getTime())[0] ?? null;
   const findingCodeSummary = useMemo(() => buildFindingCodeSummary(openFindings), [openFindings]);
+  const runtimeModeLabel = "effectiveMode" in snap.effective
+    ? String(snap.effective.effectiveMode)
+    : String(snap.effective.mode);
 
   const refreshOps = useCallback(async () => {
     if (!effectiveTenantId) {
@@ -694,7 +511,7 @@ export function RuntimeOpsPage() {
             <li>Health: {snap.health}</li>
             <li>Trust: {snap.recovery.trustLevel}</li>
             <li>Epoch: {snap.epoch}</li>
-            <li>Mode: {snap.effective.effectiveMode}</li>
+            <li>Mode: {runtimeModeLabel}</li>
           </ul>
         </div>
         <div className="rounded-lg border bg-card p-4 text-sm">
@@ -732,7 +549,7 @@ export function RuntimeOpsPage() {
             <p className="mt-1 text-xs text-muted-foreground">Ordered operational evidence across runtime, reconciliation, recovery, and event delivery.</p>
           </div>
           <div className="text-xs text-muted-foreground">
-            Trace-linked rows: {incidentTimeline.filter((item) => item.traceId).length}/{incidentTimeline.length}
+            Trace-linked rows: {incidentTimeline.filter((item) => evidencePrimaryTrace(item)).length}/{incidentTimeline.length}
           </div>
         </div>
         {incidentSessions.length > 0 ? (
@@ -783,7 +600,7 @@ export function RuntimeOpsPage() {
               <div>
                 <h4 className="mb-1 font-medium text-foreground">Show related transitions</h4>
                 {relatedTransitions.length === 0 ? "-" : relatedTransitions.map((item) => (
-                  <span key={item.id} className="block">{item.detail} {item.label}</span>
+                  <span key={item.id} className="block">{item.detail ?? item.failureKind} {item.label ?? item.runtimeEffect}</span>
                 ))}
               </div>
               <div>
@@ -795,13 +612,13 @@ export function RuntimeOpsPage() {
               <div>
                 <h4 className="mb-1 font-medium text-foreground">Show reconciliation lineage</h4>
                 {reconciliationLineage.length === 0 ? "-" : reconciliationLineage.map((item) => (
-                  <span key={item.id} className="block">{item.kind}: {item.detail}</span>
+                  <span key={item.id} className="block">{evidenceKind(item)}: {item.detail ?? item.failureKind}</span>
                 ))}
               </div>
               <div>
                 <h4 className="mb-1 font-medium text-foreground">Show delivery attempts</h4>
                 {deliveryAttempts.length === 0 ? "-" : deliveryAttempts.map((item) => (
-                  <span key={item.id} className="block">{item.detail} {item.label}</span>
+                  <span key={item.id} className="block">{item.detail ?? item.failureKind} {item.label ?? item.runtimeEffect}</span>
                 ))}
               </div>
             </div>
@@ -813,12 +630,13 @@ export function RuntimeOpsPage() {
           <ol className="mt-4 space-y-2 text-xs text-muted-foreground">
             {incidentTimeline.map((item) => (
               <li key={item.id} className="grid gap-2 rounded border p-3 md:grid-cols-[160px_150px_1fr]">
-                <span>{formatDateTime(item.at)}</span>
-                <span className="font-medium text-foreground">{item.kind}</span>
+                <span>{formatDateTime(item.createdAt)}</span>
+                <span className="font-medium text-foreground">{evidenceKind(item)}</span>
                 <span>
-                  <span className="font-medium text-foreground">{item.label}</span>
-                  {" "}{item.detail}
-                  {item.traceId ? <span className="block break-all">Trace: {item.traceId}</span> : null}
+                  <span className="font-medium text-foreground">{item.label ?? item.runtimeEffect}</span>
+                  {" "}{item.detail ?? item.failureKind}
+                  <span className="block">Effect: {item.runtimeEffect}; failure: {item.failureKind}</span>
+                  {evidencePrimaryTrace(item) ? <span className="block break-all">Trace: {evidencePrimaryTrace(item)}</span> : null}
                 </span>
               </li>
             ))}

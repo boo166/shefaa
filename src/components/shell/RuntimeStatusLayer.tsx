@@ -1,63 +1,9 @@
 import { useSyncExternalStore } from "react";
 import { useAuth } from "@/core/auth/authStore";
 import { cn } from "@/lib/utils";
-import { coordinationDiagnostics } from "@/platform/runtime/coordination/coordinationDiagnostics";
-import { runtimeEpochManager } from "@/platform/runtime/coordination/runtimeEpochManager";
-import { consistencyBarrier } from "@/platform/runtime/coordination/consistencyBarrier";
-import { runtimeModeController } from "@/platform/runtime/mode/runtimeModeController";
-import { RuntimeMode } from "@/platform/runtime/policy";
-import { runtimeHealthStore } from "@/platform/runtime/recovery/runtimeHealthStore";
+import { platform } from "@/platform/sdk";
 
-function subscribeRuntimeTopology(onChange: () => void) {
-  const u1 = runtimeModeController.subscribe(() => onChange());
-  const u2 = runtimeEpochManager.subscribe(() => onChange());
-  const u3 = coordinationDiagnostics.subscribe(() => onChange());
-  const u4 = runtimeHealthStore.subscribe(() => onChange());
-  return () => {
-    u1();
-    u2();
-    u3();
-    u4();
-  };
-}
-
-type RuntimeTopologySnapshot = {
-  mode: RuntimeMode;
-  epoch: number;
-  tenantBarrierDepth: number;
-  health: ReturnType<typeof runtimeHealthStore.getSnapshot>;
-  activeTransitionKind: string | null;
-  lastRejectionReason: string | null;
-};
-
-let lastRuntimeTopologySnapshot: RuntimeTopologySnapshot | null = null;
-
-export function getRuntimeTopologySnapshot() {
-  const diag = coordinationDiagnostics.getSnapshot();
-  const next: RuntimeTopologySnapshot = {
-    mode: runtimeModeController.getSnapshot().effective.effectiveMode,
-    epoch: runtimeEpochManager.getCurrentEpoch(),
-    tenantBarrierDepth: consistencyBarrier.getDepth("tenant_transition"),
-    health: runtimeHealthStore.getSnapshot(),
-    activeTransitionKind: diag.activeTransitionKind,
-    lastRejectionReason: diag.lastRejection?.reason ?? null,
-  };
-
-  if (
-    lastRuntimeTopologySnapshot
-    && lastRuntimeTopologySnapshot.mode === next.mode
-    && lastRuntimeTopologySnapshot.epoch === next.epoch
-    && lastRuntimeTopologySnapshot.tenantBarrierDepth === next.tenantBarrierDepth
-    && lastRuntimeTopologySnapshot.health === next.health
-    && lastRuntimeTopologySnapshot.activeTransitionKind === next.activeTransitionKind
-    && lastRuntimeTopologySnapshot.lastRejectionReason === next.lastRejectionReason
-  ) {
-    return lastRuntimeTopologySnapshot;
-  }
-
-  lastRuntimeTopologySnapshot = next;
-  return next;
-}
+export const getRuntimeTopologySnapshot = platform.coordination.readModels.getTopologySnapshot;
 
 /**
  * Global operational strip: auth machine state and runtime topology (mode vs health).
@@ -66,14 +12,14 @@ export function RuntimeStatusLayer({ className }: { className?: string }) {
   const authMachineState = useAuth((s) => s.authMachineState);
   const isLoading = useAuth((s) => s.isLoading);
   const topology = useSyncExternalStore(
-    subscribeRuntimeTopology,
+    platform.coordination.readModels.subscribeTopology,
     getRuntimeTopologySnapshot,
     getRuntimeTopologySnapshot,
   );
 
   if (authMachineState === "authenticated" && !isLoading) {
     const showGovernance =
-      topology.mode !== RuntimeMode.NORMAL ||
+      topology.mode !== "NORMAL" ||
       topology.tenantBarrierDepth > 0 ||
       topology.health !== "HEALTHY" ||
       topology.activeTransitionKind != null;

@@ -77,6 +77,20 @@ export interface BillingRepository {
   createPayment(invoiceId: string, patientId: string, input: InvoicePaymentCreateInput, tenantId: string, userId?: string | null): Promise<InvoicePayment>;
   archive(id: string, tenantId: string, userId: string): Promise<Invoice>;
   restore(id: string, tenantId: string): Promise<Invoice>;
+  describe?(): {
+    certified: boolean;
+    tenantBound: boolean;
+    traceAware: boolean;
+    runtimeAware: boolean;
+    capabilityAware: boolean;
+    reconciliationAware: boolean;
+    recoveryAware: boolean;
+    evidenceAware: boolean;
+    retryAware: boolean;
+    staleContextSafe: boolean;
+    metricsEnabled: boolean;
+    requiredCapabilities: string[];
+  };
 }
 
 export const billingRepository: BillingRepository = {
@@ -439,5 +453,24 @@ export const billingRepository: BillingRepository = {
       .single();
 
     return assertOk(result) as Invoice;
+  },
+  describe() {
+    return {
+      certified: false,
+      tenantBound: true,
+      traceAware: true,
+      runtimeAware: true,
+      capabilityAware: false,
+      reconciliationAware: true,
+      recoveryAware: true,
+      evidenceAware: true,
+      retryAware: true,
+      staleContextSafe: true,
+      metricsEnabled: true,
+      requiredCapabilities: [],
+      exceptions: [
+        "Billing repository still has legacy non-atomic invoice create/update/status paths; postPaymentAtomic is the current DB-authoritative template.",
+      ],
+    };
   },
 };

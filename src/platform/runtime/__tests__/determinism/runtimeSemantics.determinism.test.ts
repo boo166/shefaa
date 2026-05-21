@@ -57,6 +57,17 @@ describe("runtime semantics determinism", () => {
     for (const kind of Object.keys(expected) as RecoveryFailureKind[]) {
       expect(resolveRecoveryPolicy(kind).strategy).toBe(expected[kind]);
       expect(resolveSemanticAction(kind).recoveryStrategy).toBe(expected[kind]);
+      expect(resolveSemanticAction(kind).failureKind).toEqual(expect.any(String));
+      expect(resolveSemanticAction(kind).runtimeEffect).toEqual(expect.any(String));
+      expect(resolveSemanticAction(kind).recoveryContract).toMatchObject({
+        automatic: expect.any(Boolean),
+        retryable: expect.any(Boolean),
+        replaySafe: expect.any(Boolean),
+        requiresReconciliation: expect.any(Boolean),
+        requiresOperator: expect.any(Boolean),
+      });
+      expect(resolveSemanticAction(kind).operatorVisibility).toEqual(expect.any(String));
+      expect(resolveSemanticAction(kind).replaySafety).toEqual(expect.any(String));
     }
     emit.mockRestore();
   });

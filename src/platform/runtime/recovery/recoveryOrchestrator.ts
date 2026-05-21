@@ -10,6 +10,7 @@ import type {
   RecoveryFailureKind,
 } from "@/platform/runtime/semantics/runtimeSemanticTypes";
 import { semanticSeverity } from "@/platform/runtime/semantics/runtimeSemanticRegistry";
+import { resolveSemanticAction } from "@/platform/runtime/semantics/resolveSemanticAction";
 import { workflowRuntimeRegistry } from "@/platform/runtime/workflows/workflowRuntimeRegistry";
 import { persistRuntimeIncidentLedger } from "@/services/runtime/runtimeIncidentLedger.repository";
 import { runtimeHealthStore, type RuntimeHealth } from "./runtimeHealthStore";
@@ -133,6 +134,13 @@ function persistAuditTrailSnapshot(input: {
   runtimeMode: RuntimeMode;
   severity: "info" | "warning" | "critical";
 }) {
+  const semantic = resolveSemanticAction(input.started.failure);
+  const traceIds = {
+    trace_id: input.started.traceId,
+    requestTraceId: input.started.traceId,
+    workflow_trace_id: null,
+    causal_parent_id: input.started.traceId,
+  };
   void persistRuntimeIncidentLedger({
     incident: {
       tenant_id: input.started.tenantId,
@@ -141,7 +149,16 @@ function persistAuditTrailSnapshot(input: {
       runtime_health: input.started.runtimeHealth,
       runtime_mode: input.runtimeMode,
       severity: input.severity,
-      trace_ids: { trace_id: input.started.traceId },
+      trace_ids: traceIds,
+      causal_parent_id: input.started.traceId,
+      failure_kind: semantic.failureKind,
+      runtime_effect: semantic.runtimeEffect,
+      recovery_contract: semantic.recoveryContract,
+      evidence_metadata: {
+        operator_visibility: semantic.operatorVisibility,
+        replay_safety: semantic.replaySafety,
+        requires_reconciliation: semantic.requiresReconciliation,
+      },
       metadata: {
         recovery_class: input.started.recoveryClass,
         trust_level: input.started.trustLevel,
@@ -157,7 +174,20 @@ function persistAuditTrailSnapshot(input: {
       recovery_class: entry.recoveryClass,
       action_status: actionStatus(entry),
       triggered_by: triggeredBy(entry),
-      trace_ids: { trace_id: entry.traceId },
+      trace_ids: traceIds,
+      causal_parent_id: input.started.id,
+      failure_kind: semantic.failureKind,
+      runtime_effect: entry.action === "operator_required" ? "operator_required" : semantic.runtimeEffect,
+      recovery_contract: {
+        ...semantic.recoveryContract,
+        automatic: entry.automatic,
+        requiresOperator: entry.requiresOperator,
+      },
+      evidence_metadata: {
+        operator_visibility: semantic.operatorVisibility,
+        replay_safety: semantic.replaySafety,
+        action: entry.action,
+      },
       action_metadata: {
         failure: entry.failure,
         runtime_health: entry.runtimeHealth,

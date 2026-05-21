@@ -12,6 +12,11 @@ export type RuntimeTransitionLogInsert = {
   rollback_triggered: boolean;
   trace_id: string | null;
   runtime_transition_trace_id: string | null;
+  causal_parent_id?: string | null;
+  failure_kind?: string | null;
+  runtime_effect?: string | null;
+  recovery_contract?: Record<string, unknown> | null;
+  evidence_metadata?: Record<string, unknown> | null;
   status: string;
 };
 
@@ -53,7 +58,7 @@ export async function listRecentRuntimeTransitionLogRows(limit = 6): Promise<Run
   };
   const { data, error } = await sb
     .from("runtime_transition_log")
-    .select("id, transition_id, runtime_epoch, transition_type, tenant_id, actor_id, started_at, completed_at, failed_at, rollback_triggered, trace_id, runtime_transition_trace_id, status, created_at")
+    .select("id, transition_id, runtime_epoch, transition_type, tenant_id, actor_id, started_at, completed_at, failed_at, rollback_triggered, trace_id, runtime_transition_trace_id, causal_parent_id, failure_kind, runtime_effect, recovery_contract, evidence_metadata, status, created_at")
     .order("started_at", { ascending: false })
     .limit(limit);
   if (error) {

@@ -8,7 +8,17 @@ export type RealtimeTable =
   | "invoices"
   | "medications"
   | "lab_orders"
-  | "insurance_claims";
+  | "insurance_claims"
+  | "notifications";
+
+export type RealtimeChangeType = "INSERT" | "UPDATE" | "DELETE";
+
+export type RealtimeChangePayload<T = unknown> = {
+  type: RealtimeChangeType;
+  table: RealtimeTable;
+  row: T | null;
+  oldRow?: T | null;
+};
 
 export type RealtimePrincipalContext = {
   tenantId: string;
@@ -21,7 +31,7 @@ export interface RealtimeRepository {
   subscribeToTenantTables(
     ctx: RealtimePrincipalContext,
     tables: RealtimeTable[],
-    onChange: () => void,
+    onChange: (payload: RealtimeChangePayload) => void,
   ): { unsubscribe: () => void };
 }
 
@@ -41,7 +51,14 @@ export const realtimeRepository: RealtimeRepository = {
           table,
           filter: `tenant_id=eq.${tenantId}`,
         },
-        onChange,
+        (payload: { eventType: string; new: unknown; old: unknown }) => {
+          onChange({
+            type: payload.eventType as RealtimeChangeType,
+            table,
+            row: payload.new ?? null,
+            oldRow: payload.old ?? null,
+          });
+        },
       );
     }
 

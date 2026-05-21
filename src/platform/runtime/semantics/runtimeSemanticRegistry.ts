@@ -1,4 +1,14 @@
-import type { RecoveryClass, RecoveryStrategy, RuntimeFailureKind, SemanticAction } from "./runtimeSemanticTypes";
+import type {
+  CanonicalFailureKind,
+  OperatorVisibility,
+  RecoveryClass,
+  RecoveryContract,
+  RecoveryStrategy,
+  ReplaySafety,
+  RuntimeEffect,
+  RuntimeFailureKind,
+  SemanticAction,
+} from "./runtimeSemanticTypes";
 
 /** Runtime law: failure kind → ordered semantic actions. */
 export const RUNTIME_SEMANTIC_REGISTRY: Record<RuntimeFailureKind, readonly SemanticAction[]> = {
@@ -91,4 +101,128 @@ const SEVERITY: Record<RuntimeFailureKind, "info" | "warning" | "critical"> = {
 
 export function semanticSeverity(kind: RuntimeFailureKind): "info" | "warning" | "critical" {
   return SEVERITY[kind];
+}
+
+const FAILURE_KIND: Record<RuntimeFailureKind, CanonicalFailureKind> = {
+  stale_epoch: "stale_context",
+  tenant_mismatch: "tenant_violation",
+  policy_denied: "runtime_blocked",
+  runtime_mode_block: "runtime_blocked",
+  realtime_drift: "integrity_drift",
+  realtime_partition: "external_dependency",
+  workflow_divergence: "semantic_divergence",
+  barrier_timeout: "transient",
+  coordination_partition: "external_dependency",
+  recovery_required: "integrity_drift",
+  readonly_transition: "runtime_blocked",
+  auth_invalidation: "tenant_violation",
+  barrier_stall: "invariant_violation",
+  transition_incomplete: "transient",
+  workflow_mismatch: "semantic_divergence",
+  mutation_freeze_violation: "invariant_violation",
+  duplicate_committed_command: "replay_rejected",
+};
+
+const ACTION_TO_EFFECT: Partial<Record<SemanticAction, RuntimeEffect>> = {
+  DENY: "deny",
+  RETRY: "retry",
+  RECONCILE: "reconcile",
+  COMPENSATE: "compensate",
+  CONTAIN: "contain",
+  PAUSE_CHECKPOINTS: "pause",
+  ABORT: "abort",
+  FAIL_SAFE: "fail_safe",
+  TEARDOWN: "abort",
+  INVALIDATE_QUERY_SCOPES: "reconcile",
+  ESCALATE: "operator_required",
+};
+
+const OPERATOR_VISIBILITY: Record<RuntimeFailureKind, OperatorVisibility> = {
+  stale_epoch: "timeline",
+  tenant_mismatch: "incident",
+  policy_denied: "timeline",
+  runtime_mode_block: "alert",
+  realtime_drift: "timeline",
+  realtime_partition: "incident",
+  workflow_divergence: "incident",
+  barrier_timeout: "alert",
+  coordination_partition: "incident",
+  recovery_required: "alert",
+  readonly_transition: "alert",
+  auth_invalidation: "incident",
+  barrier_stall: "incident",
+  transition_incomplete: "timeline",
+  workflow_mismatch: "incident",
+  mutation_freeze_violation: "incident",
+  duplicate_committed_command: "incident",
+};
+
+const REPLAY_SAFETY: Record<RuntimeFailureKind, ReplaySafety> = {
+  stale_epoch: "safe",
+  tenant_mismatch: "unsafe",
+  policy_denied: "conditional",
+  runtime_mode_block: "conditional",
+  realtime_drift: "safe",
+  realtime_partition: "safe",
+  workflow_divergence: "conditional",
+  barrier_timeout: "safe",
+  coordination_partition: "conditional",
+  recovery_required: "conditional",
+  readonly_transition: "conditional",
+  auth_invalidation: "unsafe",
+  barrier_stall: "conditional",
+  transition_incomplete: "safe",
+  workflow_mismatch: "conditional",
+  mutation_freeze_violation: "unsafe",
+  duplicate_committed_command: "unsafe",
+};
+
+const CONTAINMENT_BEHAVIOR: Partial<Record<RuntimeFailureKind, string>> = {
+  runtime_mode_block: "writes_denied_by_runtime_mode",
+  realtime_partition: "rebuild_realtime_then_reconcile",
+  barrier_timeout: "freeze_mutations_and_fail_safe",
+  coordination_partition: "contain_cross_tab_coordination",
+  readonly_transition: "pause_checkpoints_and_invalidate_queries",
+  auth_invalidation: "contain_and_teardown_auth_state",
+  barrier_stall: "enter_fail_safe_until_operator_review",
+  mutation_freeze_violation: "freeze_writes_and_escalate",
+  duplicate_committed_command: "operator_review_before_replay",
+};
+
+export function canonicalFailureKind(kind: RuntimeFailureKind): CanonicalFailureKind {
+  return FAILURE_KIND[kind];
+}
+
+export function runtimeEffectForActions(actions: readonly SemanticAction[]): RuntimeEffect {
+  for (const action of actions) {
+    const effect = ACTION_TO_EFFECT[action];
+    if (effect) return effect;
+  }
+  return "none";
+}
+
+export function operatorVisibility(kind: RuntimeFailureKind): OperatorVisibility {
+  return OPERATOR_VISIBILITY[kind];
+}
+
+export function replaySafety(kind: RuntimeFailureKind): ReplaySafety {
+  return REPLAY_SAFETY[kind];
+}
+
+export function containmentBehavior(kind: RuntimeFailureKind): string | undefined {
+  return CONTAINMENT_BEHAVIOR[kind];
+}
+
+export function recoveryContractForFailure(kind: RuntimeFailureKind): RecoveryContract {
+  const actions = RUNTIME_SEMANTIC_REGISTRY[kind];
+  const safety = replaySafety(kind);
+  const requiresOperator = actions.includes("ESCALATE") || recoveryClassesForFailure(kind).includes("manual_operator_action");
+  return {
+    automatic: !requiresOperator,
+    retryable: actions.includes("RETRY") || kind === "transition_incomplete" || kind === "barrier_timeout",
+    replaySafe: safety === "safe",
+    requiresReconciliation: actions.includes("RECONCILE") || actions.includes("INVALIDATE_QUERY_SCOPES"),
+    requiresOperator,
+    containmentBehavior: containmentBehavior(kind),
+  };
 }

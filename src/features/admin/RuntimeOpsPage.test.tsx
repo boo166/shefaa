@@ -75,6 +75,7 @@ vi.mock("@/platform/runtime/recovery/recoveryOrchestrator", () => ({
 }));
 
 vi.mock("@/platform/realtime/realtimeRuntime", () => ({
+  subscribeEntity: () => ({ unsubscribe: () => {} }),
   getRealtimeRegistryDiagnostics: () => ({
     intentCount: 2,
     activeChannelCount: 1,
@@ -93,12 +94,17 @@ vi.mock("@/platform/runtime/workflows/workflowRuntimeRegistry", () => ({
   },
 }));
 
-vi.mock("@/platform/runtime/semantics", () => ({
-  resolveEffectiveRuntimeState: () => ({ effectiveMode: "NORMAL", version: 1 }),
-}));
+vi.mock("@/platform/runtime/semantics", async () => {
+  const actual = await vi.importActual<typeof import("@/platform/runtime/semantics")>("@/platform/runtime/semantics");
+  return {
+    ...actual,
+    resolveEffectiveRuntimeState: () => ({ effectiveMode: "NORMAL", version: 1 }),
+  };
+});
 
 vi.mock("@/platform/observability/runtimeAnalytics", () => ({
   subscribePlatformMetrics: () => () => {},
+  emitPlatformMetric: vi.fn(),
 }));
 
 vi.mock("@/services/runtime/runtimeTransitionLog.repository", () => ({

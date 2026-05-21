@@ -59,6 +59,7 @@ const INVALIDATION_MAP: Record<RealtimeTable, Array<(tenantId: string) => readon
     (tenantId) => queryKeys.insurance.list({ tenantId }),
     (tenantId) => queryKeys.insurance.summary(tenantId),
   ],
+  notifications: [],
 };
 
 export function useRealtimeSubscription(tables: RealtimeTable[]) {

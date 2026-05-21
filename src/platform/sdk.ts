@@ -22,6 +22,15 @@ import {
   resolveEffectiveRuntimeState,
   resolveSemanticAction,
 } from "@/platform/runtime/semantics";
+import {
+  getRuntimeEpoch,
+  getRuntimeOpsSnapshot,
+  getRuntimeTopologySnapshot,
+  serverRuntimeOpsSnapshot,
+  subscribeRuntimeEpoch,
+  subscribeRuntimeOps,
+  subscribeRuntimeTopology,
+} from "@/platform/runtime/ops/runtimeOpsReadModel";
 import { getRealtimeRegistryDiagnostics, subscribeEntity } from "@/platform/realtime/realtimeRuntime";
 
 export const platform = {
@@ -40,6 +49,15 @@ export const platform = {
     recovery: { bootstrap: transitionRecoveryManager.bootstrap, health: runtimeHealthStore },
     policy: { resolveRecoveryPolicy },
     semantics: { resolveSemanticAction, resolveEffectiveRuntimeState },
+    readModels: {
+      getTopologySnapshot: getRuntimeTopologySnapshot,
+      subscribeTopology: subscribeRuntimeTopology,
+      getOpsSnapshot: getRuntimeOpsSnapshot,
+      subscribeOps: subscribeRuntimeOps,
+      serverOpsSnapshot: serverRuntimeOpsSnapshot,
+      getEpoch: getRuntimeEpoch,
+      subscribeEpoch: subscribeRuntimeEpoch,
+    },
   },
   realtime: { subscribeEntity, getRegistryDiagnostics: getRealtimeRegistryDiagnostics },
   observability: { emitMetric: emitPlatformMetric, trace: traceContext },

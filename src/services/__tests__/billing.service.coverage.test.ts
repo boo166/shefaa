@@ -289,14 +289,17 @@ describe("billingService permissions", () => {
 
     expect(result.invoice.status).toBe("paid");
     expect(result.invoice.balance_due).toBe(0);
-    expect(emitDomainEvent).toHaveBeenCalledWith(
-      "InvoicePaid",
+    expect(emitDomainEvent).not.toHaveBeenCalled();
+    expect(repo.postPaymentAtomic).toHaveBeenCalledWith(
+      invoiceId,
+      expect.objectContaining({ amount: 90 }),
+      tenantId,
+      userId,
       expect.objectContaining({
-        invoiceId,
-        patientId,
-        amount: 90,
+        requestTraceId: expect.any(String),
+        operationTraceId: expect.any(String),
+        workflowTraceId: expect.any(String),
       }),
-      expect.any(Object),
     );
   });
 

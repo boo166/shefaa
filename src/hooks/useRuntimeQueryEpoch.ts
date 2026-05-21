@@ -1,11 +1,11 @@
 import { useSyncExternalStore } from "react";
-import { runtimeEpochManager } from "@/platform/runtime/coordination/runtimeEpochManager";
+import { platform } from "@/platform/sdk";
 
 /** Current runtime epoch for explicit query key lineage (optional; {@link RuntimeEpochQueryBridge} already remounts keys). */
 export function useRuntimeQueryEpoch(): number {
   return useSyncExternalStore(
-    runtimeEpochManager.subscribe,
-    () => runtimeEpochManager.getCurrentEpoch(),
-    () => runtimeEpochManager.getCurrentEpoch(),
+    platform.coordination.readModels.subscribeEpoch,
+    platform.coordination.readModels.getEpoch,
+    platform.coordination.readModels.getEpoch,
   );
 }

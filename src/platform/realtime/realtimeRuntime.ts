@@ -10,6 +10,7 @@ import { runtimeModeController } from "@/platform/runtime/mode/runtimeModeContro
 import { RuntimeMode } from "@/platform/runtime/policy";
 import {
   realtimeRepository,
+  type RealtimeChangePayload,
   type RealtimePrincipalContext,
   type RealtimeTable,
 } from "@/services/realtime/realtime.repository";
@@ -57,7 +58,8 @@ let lastRealtimeRecoveryAt: number | null = null;
 export type SubscribeEntityParams = {
   ctx: RealtimePrincipalContext;
   tables: RealtimeTable[];
-  onEvent: () => void;
+  onEvent?: () => void;
+  onPayload?: (payload: RealtimeChangePayload) => void;
 };
 
 type RegistryEntry = {
@@ -118,10 +120,16 @@ function openChannel(params: SubscribeEntityParams): { unsubscribe: () => void }
     hasSessionVersion: Boolean(params.ctx.sessionVersion),
   });
 
-  const inner = realtimeRepository.subscribeToTenantTables(params.ctx, tables, () => {
+  const inner = realtimeRepository.subscribeToTenantTables(params.ctx, tables, (payload) => {
     lastRealtimeChangeAt = Date.now();
-    emitPlatformMetric("realtime_change", { tenantId: params.ctx.tenantId, tablesKey });
-    params.onEvent();
+    emitPlatformMetric("realtime_change", {
+      tenantId: params.ctx.tenantId,
+      tablesKey,
+      table: payload.table,
+      type: payload.type,
+    });
+    params.onPayload?.(payload);
+    params.onEvent?.();
   });
 
   return {

@@ -4,6 +4,21 @@ import { ServiceError } from "@/services/supabase/errors";
 
 export interface ClientErrorLogRepository {
   insert(input: ClientErrorLogCreateInput): Promise<void>;
+  describe?(): {
+    certified: boolean;
+    tenantBound: boolean;
+    traceAware: boolean;
+    runtimeAware: boolean;
+    capabilityAware: boolean;
+    reconciliationAware: boolean;
+    recoveryAware: boolean;
+    evidenceAware: boolean;
+    retryAware: boolean;
+    staleContextSafe: boolean;
+    metricsEnabled: boolean;
+    requiredCapabilities: string[];
+    exceptions?: string[];
+  };
 }
 
 export const clientErrorLogRepository: ClientErrorLogRepository = {
@@ -24,5 +39,24 @@ export const clientErrorLogRepository: ClientErrorLogRepository = {
     if (error) {
       throw new ServiceError(error.message ?? "Failed to log client error", { code: error.code, details: error });
     }
+  },
+  describe() {
+    return {
+      certified: false,
+      tenantBound: true,
+      traceAware: true,
+      runtimeAware: false,
+      capabilityAware: false,
+      reconciliationAware: false,
+      recoveryAware: true,
+      evidenceAware: true,
+      retryAware: false,
+      staleContextSafe: false,
+      metricsEnabled: false,
+      requiredCapabilities: [],
+      exceptions: [
+        "Client error logging is intentionally best-effort and still writes through the raw Supabase baseline path.",
+      ],
+    };
   },
 };

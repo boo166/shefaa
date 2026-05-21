@@ -35,6 +35,11 @@ const RUN_COLUMNS = [
   "request_trace_id",
   "operation_trace_id",
   "workflow_trace_id",
+  "causal_parent_id",
+  "failure_kind",
+  "runtime_effect",
+  "recovery_contract",
+  "evidence_metadata",
   "started_at",
   "completed_at",
   "created_at",
@@ -54,6 +59,11 @@ const FINDING_COLUMNS = [
   "request_trace_id",
   "operation_trace_id",
   "workflow_trace_id",
+  "causal_parent_id",
+  "failure_kind",
+  "runtime_effect",
+  "recovery_contract",
+  "evidence_metadata",
   "detected_at",
   "resolved_at",
 ].join(", ");
@@ -162,5 +172,25 @@ export const billingReconciliationRepository = {
     }
 
     return data as BillingReconciliationFinding;
+  },
+
+  describe() {
+    return {
+      certified: false,
+      tenantBound: true,
+      traceAware: true,
+      runtimeAware: true,
+      capabilityAware: false,
+      reconciliationAware: true,
+      recoveryAware: true,
+      evidenceAware: true,
+      retryAware: true,
+      staleContextSafe: true,
+      metricsEnabled: true,
+      requiredCapabilities: [],
+      exceptions: [
+        "Billing reconciliation is operationally converged but still lacks repository-level capability metadata.",
+      ],
+    };
   },
 };

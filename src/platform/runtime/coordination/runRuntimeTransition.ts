@@ -27,6 +27,20 @@ function schedulePersistTransitionToRemote(transitionId: string, status: string)
         rollback_triggered: e.rollbackTriggered,
         trace_id: e.traceId,
         runtime_transition_trace_id: e.runtimeTransitionTraceId,
+        causal_parent_id: e.traceId ?? e.runtimeTransitionTraceId,
+        failure_kind: status === "completed" ? "transient" : "stale_context",
+        runtime_effect: status === "completed" ? "none" : "reconcile",
+        recovery_contract: {
+          automatic: status !== "failed",
+          retryable: status !== "completed",
+          replaySafe: status !== "rolled_back",
+          requiresReconciliation: status !== "completed",
+          requiresOperator: status === "failed",
+        },
+        evidence_metadata: {
+          operator_visibility: status === "completed" ? "timeline" : "alert",
+          replay_safety: status === "rolled_back" ? "unsafe" : "conditional",
+        },
         status,
       });
     },

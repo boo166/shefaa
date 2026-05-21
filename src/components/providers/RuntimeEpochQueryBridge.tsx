@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { useEffect, useReducer } from "react";
-import { runtimeEpochManager } from "@/platform/runtime/coordination/runtimeEpochManager";
+import { platform } from "@/platform/sdk";
 
 /**
  * Forces a subtree re-render when the runtime epoch advances so `queryKeys` factories
@@ -9,7 +9,7 @@ import { runtimeEpochManager } from "@/platform/runtime/coordination/runtimeEpoc
 export function RuntimeEpochQueryBridge({ children }: { children: ReactNode }) {
   const [, force] = useReducer((x: number) => x + 1, 0);
 
-  useEffect(() => runtimeEpochManager.subscribe(() => force()), []);
+  useEffect(() => platform.coordination.readModels.subscribeEpoch(() => force()), []);
 
   return children;
 }

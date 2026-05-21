@@ -710,6 +710,12 @@ export const adminRepository: AdminRepository = {
     return {
       certified: false,
       tenantBound: false,
+      traceAware: true,
+      runtimeAware: true,
+      capabilityAware: true,
+      reconciliationAware: false,
+      recoveryAware: true,
+      evidenceAware: false,
       retryAware: true,
       staleContextSafe: true,
       metricsEnabled: true,

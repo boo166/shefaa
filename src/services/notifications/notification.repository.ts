@@ -1,8 +1,8 @@
 import type { Notification, NotificationCreateInput } from "@/domain/notifications/notification.types";
 import { Capabilities } from "@/platform/authorization/capabilities";
 import { platformRepository } from "@/platform/data/platformRepository";
+import { platform } from "@/platform/sdk";
 import type { PlatformRepositoryContext } from "@/platform/data/platformRepository.context";
-import { supabase } from "@/services/supabase/client";
 import { ServiceError } from "@/services/supabase/errors";
 
 const NOTIFICATION_COLUMNS = "id, tenant_id, user_id, title, body, type, read, created_at";
@@ -36,6 +36,12 @@ export interface NotificationRepository {
   describe?(): {
     certified: boolean;
     tenantBound: boolean;
+    traceAware: boolean;
+    runtimeAware: boolean;
+    capabilityAware: boolean;
+    reconciliationAware: boolean;
+    recoveryAware: boolean;
+    evidenceAware: boolean;
     retryAware: boolean;
     staleContextSafe: boolean;
     metricsEnabled: boolean;
@@ -103,74 +109,33 @@ export const notificationRepository: NotificationRepository = {
     return data as Notification;
   },
   subscribeToUser(tenantId, userId, onInsert) {
-    let channelState: "joining" | "subscribed" | "closed" = "joining";
-    let unsubscribeRequested = false;
-    let watchdog: ReturnType<typeof setTimeout> | null = null;
-    let removed = false;
-    const removeWhenSafe = () => {
-      if (removed || channelState === "closed") return;
-      if (channelState === "joining") return;
-      removed = true;
-      channelState = "closed";
-      if (watchdog) {
-        clearTimeout(watchdog);
-        watchdog = null;
-      }
-      void supabase.removeChannel(channel).catch(() => undefined);
-    };
-    const channel = supabase
-      .channel(`user-notifications:${userId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "notifications",
-          filter: `user_id=eq.${userId}`,
-        },
-        (payload) => {
-          const row = payload.new as Notification;
-          if (row.tenant_id !== tenantId) return;
-          onInsert(row);
-        },
-      )
-      .subscribe((status) => {
-        if (status === "SUBSCRIBED") {
-          channelState = "subscribed";
-          if (unsubscribeRequested) removeWhenSafe();
-          return;
-        }
-        if (status === "CLOSED" || status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-          channelState = "closed";
-          if (watchdog) {
-            clearTimeout(watchdog);
-            watchdog = null;
-          }
-        }
-      });
-    return {
-      unsubscribe: () => {
-        unsubscribeRequested = true;
-        removeWhenSafe();
-        if (channelState === "joining" && !watchdog) {
-          watchdog = setTimeout(() => {
-            channelState = "subscribed";
-            removeWhenSafe();
-          }, 10_000);
-        }
+    return platform.realtime.subscribeEntity({
+      ctx: { tenantId, userId, sessionVersion: null },
+      tables: ["notifications"],
+      onPayload: (payload) => {
+        if (payload.type !== "INSERT") return;
+        const row = payload.row as Notification | null;
+        if (!row || row.tenant_id !== tenantId || row.user_id !== userId) return;
+        onInsert(row);
       },
-    };
+    });
   },
   describe() {
     return {
-      certified: true,
+      certified: false,
       tenantBound: true,
+      traceAware: true,
+      runtimeAware: true,
+      capabilityAware: true,
+      reconciliationAware: false,
+      recoveryAware: false,
+      evidenceAware: false,
       retryAware: true,
       staleContextSafe: true,
       metricsEnabled: true,
       requiredCapabilities: [Capabilities.notifications.read, Capabilities.notifications.write],
       exceptions: [
-        "subscribeToUser keeps a direct Supabase channel because the current realtime gateway invalidates tables but does not deliver inserted notification rows.",
+        "Notification delivery is payload-bearing through the realtime gateway but does not yet emit normalized operational evidence.",
       ],
     };
   },

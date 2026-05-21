@@ -552,11 +552,12 @@ describe("repositories smoke", () => {
       type: "system",
       read: false,
     });
+    const channelCallsBeforeNotificationSubscribe = mockSupabase.channel.mock.calls.length;
     const notificationSub = notificationRepository.subscribeToUser(tenantId, userId, () => undefined);
     notificationSub.unsubscribe();
-    expect(mockSupabase.removeChannel).not.toHaveBeenCalled();
-    mockState.realtimeStatusCallback?.("SUBSCRIBED");
-    expect(mockSupabase.removeChannel).toHaveBeenCalledTimes(1);
+    expect(mockSupabase.channel.mock.calls.slice(channelCallsBeforeNotificationSubscribe)).not.toContainEqual([
+      `user-notifications:${userId}`,
+    ]);
 
     await clientErrorLogRepository.insert({
       tenant_id: tenantId,

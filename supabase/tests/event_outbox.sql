@@ -1,6 +1,6 @@
 begin;
 
-select plan(9);
+select plan(11);
 
 set local role postgres;
 set local session_replication_role = replica;
@@ -118,6 +118,19 @@ select is(
 );
 
 select is(
+  (
+    select count(*)
+    from public.event_outbox
+    where domain_event_id = '44000000-0000-0000-0000-000000000001'
+      and causal_parent_id = 'wf-event-test'
+      and failure_kind = 'transient'
+      and runtime_effect = 'none'
+  ),
+  3::bigint,
+  'outbox rows inherit canonical operational evidence lineage'
+);
+
+select is(
   (select count(*) from public.event_outbox where handler_name = 'audit' and delivery_guarantee = 'exactly_once_persistence'),
   1::bigint,
   'audit handler is marked exactly-once persistence'
@@ -163,6 +176,19 @@ select is(
   (select count(*) from public.event_delivery_attempts where status = 'FAILED' and error_code = 'TRANSIENT_ERROR'),
   1::bigint,
   'delivery attempts persist failure evidence'
+);
+
+select is(
+  (
+    select count(*)
+    from public.event_delivery_attempts
+    where status = 'FAILED'
+      and causal_parent_id = 'wf-event-test'
+      and failure_kind = 'external_dependency'
+      and runtime_effect = 'retry'
+  ),
+  1::bigint,
+  'delivery attempts persist canonical operational evidence metadata'
 );
 
 update public.event_outbox
