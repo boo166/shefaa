@@ -76,6 +76,30 @@ describe("platformRepository middleware", () => {
     expect(mockSupabase.rpc).toHaveBeenCalledTimes(1);
   });
 
+  it("injects command trace ids into RPC payloads at the platform boundary", async () => {
+    mockSupabase.rpc.mockClear();
+    await platformRepository.rpc(
+      "command_supplier",
+      {
+        p_request_trace_id: null,
+        p_operation_trace_id: null,
+        p_workflow_trace_id: null,
+      },
+      {
+        action: "procurement.supplier.create",
+        classification: "critical",
+        tenantScoped: true,
+        tenantId: "t-1",
+      },
+    );
+    const [, args] = mockSupabase.rpc.mock.calls[0];
+    expect(args).toEqual(expect.objectContaining({
+      p_request_trace_id: expect.any(String),
+      p_operation_trace_id: expect.any(String),
+      p_workflow_trace_id: null,
+    }));
+  });
+
   it("emits stale-context metric on tenant mismatch short-circuit", () => {
     metricCalls.length = 0;
     expect(() =>

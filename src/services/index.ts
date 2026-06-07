@@ -10,6 +10,7 @@ export { patientService } from "./patients/patient.service";
 export { patientDocumentsService } from "./patients/patientDocuments.service";
 export { medicalRecordsService } from "./patients/medicalRecords.service";
 export { pharmacyService } from "./pharmacy/pharmacy.service";
+export { procurementService } from "./procurement/procurement.service";
 export { prescriptionService } from "./prescriptions/prescription.service";
 export { reportService } from "./reports/report.service";
 export { searchService } from "./search/search.service";

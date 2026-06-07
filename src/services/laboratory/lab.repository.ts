@@ -10,6 +10,7 @@ import type { LimitOffsetParams, PagedResult } from "@/domain/shared/pagination.
 import { Capabilities } from "@/platform/authorization/capabilities";
 import { platformRepository } from "@/platform/data/platformRepository";
 import type { PlatformRepositoryContext } from "@/platform/data/platformRepository.context";
+import { commandTraceParams } from "@/services/operational/commandTrace";
 import { ServiceError } from "@/services/supabase/errors";
 import { assertOk } from "@/services/supabase/query";
 
@@ -37,8 +38,8 @@ export interface LabRepository {
   countByStatus(tenantId: string): Promise<Record<"pending" | "processing" | "completed", number>>;
   listByPatient(patientId: string, tenantId: string, params?: LimitOffsetParams): Promise<LabOrderWithDoctor[]>;
   getById(id: string, tenantId: string): Promise<LabResult>;
-  create(input: LabResultCreateInput, tenantId: string): Promise<LabResult>;
-  update(id: string, input: LabResultUpdateInput, tenantId: string, expectedUpdatedAt?: string): Promise<LabResult | null>;
+  create(input: LabResultCreateInput, tenantId: string, trace?: PlatformRepositoryContext["trace"]): Promise<LabResult>;
+  update(id: string, input: LabResultUpdateInput, tenantId: string, expectedUpdatedAt?: string, trace?: PlatformRepositoryContext["trace"]): Promise<LabResult | null>;
   finalizeResult(
     id: string,
     input: LabResultUpdateInput,
@@ -47,8 +48,8 @@ export interface LabRepository {
     expectedUpdatedAt?: string,
     trace?: PlatformRepositoryContext["trace"],
   ): Promise<LabResult | null>;
-  archive(id: string, tenantId: string, userId: string): Promise<LabResult>;
-  restore(id: string, tenantId: string): Promise<LabResult>;
+  archive(id: string, tenantId: string, userId: string, trace?: PlatformRepositoryContext["trace"]): Promise<LabResult>;
+  restore(id: string, tenantId: string, trace?: PlatformRepositoryContext["trace"]): Promise<LabResult>;
   describe?(): {
     certified: boolean;
     tenantBound: boolean;
@@ -238,7 +239,7 @@ export const labRepository: LabRepository = {
 
     return assertOk(result) as LabResult;
   },
-  async create(input, tenantId) {
+  async create(input, tenantId, trace) {
     const { data, error } = await platformRepository.rpc("command_lab_order", {
       p_operation: "create",
       p_lab_order_id: null,
@@ -248,10 +249,8 @@ export const labRepository: LabRepository = {
       p_idempotency_key: null,
       p_request_hash: ["create", tenantId, input.patient_id, input.doctor_id, input.test_name].join("|"),
       p_user_id: null,
-      p_request_trace_id: null,
-      p_operation_trace_id: null,
-      p_workflow_trace_id: null,
-    }, labCtx(tenantId, "lab.create", "critical"));
+      ...commandTraceParams(trace),
+    }, labCtx(tenantId, "lab.create", "critical", trace));
     if (error) {
       throw new ServiceError(error.message ?? "Failed to create lab order", {
         code: error.code,
@@ -264,7 +263,7 @@ export const labRepository: LabRepository = {
     }
     return row.lab_order as LabResult;
   },
-  async update(id, input, tenantId, expectedUpdatedAt) {
+  async update(id, input, tenantId, expectedUpdatedAt, trace) {
     const payload: Record<string, unknown> = {};
 
     if (input.patient_id !== undefined) payload.patient_id = input.patient_id;
@@ -299,10 +298,8 @@ export const labRepository: LabRepository = {
       p_idempotency_key: null,
       p_request_hash: ["update", id, tenantId, JSON.stringify(payload), expectedUpdatedAt ?? ""].join("|"),
       p_user_id: null,
-      p_request_trace_id: null,
-      p_operation_trace_id: null,
-      p_workflow_trace_id: null,
-    }, labCtx(tenantId, "lab.update", "critical"));
+      ...commandTraceParams(trace),
+    }, labCtx(tenantId, "lab.update", "critical", trace));
     if (error) {
       throw new ServiceError(error.message ?? "Failed to update lab order", {
         code: error.code,
@@ -344,9 +341,7 @@ export const labRepository: LabRepository = {
       p_idempotency_key: null,
       p_request_hash: requestHash,
       p_user_id: userId ?? null,
-      p_request_trace_id: null,
-      p_operation_trace_id: null,
-      p_workflow_trace_id: null,
+      ...commandTraceParams(trace),
     }, labCtx(tenantId, "lab.result.finalize", "critical", trace));
     if (error) {
       throw new ServiceError(error.message ?? "Failed to finalize lab result", {
@@ -361,7 +356,7 @@ export const labRepository: LabRepository = {
     if (row.result_code === "CONFLICT") return null;
     return (row.lab_order ?? null) as LabResult | null;
   },
-  async archive(id, tenantId, userId) {
+  async archive(id, tenantId, userId, trace) {
     const { data, error } = await platformRepository.rpc("command_lab_order", {
       p_operation: "archive",
       p_lab_order_id: id,
@@ -371,10 +366,8 @@ export const labRepository: LabRepository = {
       p_idempotency_key: null,
       p_request_hash: ["archive", id, tenantId].join("|"),
       p_user_id: userId,
-      p_request_trace_id: null,
-      p_operation_trace_id: null,
-      p_workflow_trace_id: null,
-    }, labCtx(tenantId, "lab.archive", "critical"));
+      ...commandTraceParams(trace),
+    }, labCtx(tenantId, "lab.archive", "critical", trace));
     if (error) {
       throw new ServiceError(error.message ?? "Failed to archive lab order", {
         code: error.code,
@@ -387,7 +380,7 @@ export const labRepository: LabRepository = {
     }
     return row.lab_order as LabResult;
   },
-  async restore(id, tenantId) {
+  async restore(id, tenantId, trace) {
     const { data, error } = await platformRepository.rpc("command_lab_order", {
       p_operation: "restore",
       p_lab_order_id: id,
@@ -397,10 +390,8 @@ export const labRepository: LabRepository = {
       p_idempotency_key: null,
       p_request_hash: ["restore", id, tenantId].join("|"),
       p_user_id: null,
-      p_request_trace_id: null,
-      p_operation_trace_id: null,
-      p_workflow_trace_id: null,
-    }, labCtx(tenantId, "lab.restore", "critical"));
+      ...commandTraceParams(trace),
+    }, labCtx(tenantId, "lab.restore", "critical", trace));
     if (error) {
       throw new ServiceError(error.message ?? "Failed to restore lab order", {
         code: error.code,

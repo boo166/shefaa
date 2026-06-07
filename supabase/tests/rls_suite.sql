@@ -1,6 +1,6 @@
 begin;
 
-select plan(36);
+select plan(39);
 \set rls_suite true
 
 set local role postgres;
@@ -92,6 +92,7 @@ truncate
   public.lab_orders,
   public.prescriptions,
   public.medical_records,
+  public.appointment_queue,
   public.appointments,
   public.doctor_schedules,
   public.doctors,
@@ -159,6 +160,11 @@ insert into public.appointments (id, tenant_id, patient_id, doctor_id, appointme
 values
   ('37000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000001', '34000000-0000-0000-0000-000000000001', '36000000-0000-0000-0000-000000000001', '2026-05-11T09:00:00Z', tstzrange('2026-05-11T09:00:00Z', '2026-05-11T09:30:00Z', '[)'), 'scheduled', 'checkup'),
   ('37000000-0000-0000-0000-000000000002', '30000000-0000-0000-0000-000000000002', '34000000-0000-0000-0000-000000000002', '36000000-0000-0000-0000-000000000002', '2026-05-11T10:00:00Z', tstzrange('2026-05-11T10:00:00Z', '2026-05-11T10:30:00Z', '[)'), 'scheduled', 'checkup');
+
+insert into public.appointment_queue (id, appointment_id, tenant_id, status)
+values
+  ('37100000-0000-0000-0000-000000000001', '37000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000001', 'waiting'),
+  ('37100000-0000-0000-0000-000000000002', '37000000-0000-0000-0000-000000000002', '30000000-0000-0000-0000-000000000002', 'waiting');
 
 insert into public.prescriptions (id, tenant_id, patient_id, doctor_id, medication, dosage, status)
 values

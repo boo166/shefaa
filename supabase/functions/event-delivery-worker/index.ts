@@ -11,6 +11,7 @@ const WORKER_ID = "event-delivery-worker";
 
 type OutboxEvent = {
   id: string;
+  domain_event_id: string | null;
   event_type: string;
   aggregate_type: string;
   aggregate_id: string | null;
@@ -26,16 +27,22 @@ type OutboxEvent = {
 
 const EVENT_TITLES: Record<string, string> = {
   AppointmentCreated: "New appointment created",
+  AppointmentLifecycleTransitioned: "Appointment status updated",
   InvoicePaid: "Invoice marked as paid",
+  InsuranceClaimTransitioned: "Insurance claim updated",
   LabResultUploaded: "Lab results updated",
+  MedicationStockAdjusted: "Medication stock updated",
   PrescriptionIssued: "New prescription issued",
   PatientRegistered: "New patient registered",
 };
 
 const EVENT_ACTIONS: Record<string, { action: string; entityType: string }> = {
   AppointmentCreated: { action: "appointment_created", entityType: "appointment" },
+  AppointmentLifecycleTransitioned: { action: "appointment_lifecycle_transitioned", entityType: "appointment" },
   InvoicePaid: { action: "invoice_paid", entityType: "invoice" },
+  InsuranceClaimTransitioned: { action: "insurance_claim_transitioned", entityType: "insurance_claim" },
   LabResultUploaded: { action: "lab_result_uploaded", entityType: "lab_order" },
+  MedicationStockAdjusted: { action: "medication_stock_adjusted", entityType: "medication" },
   PrescriptionIssued: { action: "prescription_issued", entityType: "prescription" },
   PatientRegistered: { action: "patient_registered", entityType: "patient" },
 };
@@ -102,19 +109,35 @@ async function deliverNotification(adminClient: ReturnType<typeof createClient>,
   }
 
   const title = EVENT_TITLES[event.event_type] ?? event.event_type;
-  const { error } = await adminClient.from("notifications").insert({
-    tenant_id: event.tenant_id,
-    user_id: event.user_id,
-    title,
-    body: JSON.stringify({
+  const deliveryKey = `notifications:${event.tenant_id}:${event.id}`;
+  const { error } = await adminClient.rpc("command_notification_delivery", {
+    p_tenant_id: event.tenant_id,
+    p_user_id: event.user_id,
+    p_title: title,
+    p_body: JSON.stringify({
       event: event.event_type,
       payload: event.payload,
       event_outbox_id: event.id,
+      source_event_id: event.domain_event_id,
       operation_trace_id: event.operation_trace_id,
       workflow_trace_id: event.workflow_trace_id,
     }),
-    type: "system_event",
-    read: false,
+    p_type: "system_event",
+    p_delivery_key: deliveryKey,
+    p_source_event_id: event.domain_event_id,
+    p_source_outbox_id: event.id,
+    p_read: false,
+    p_idempotency_key: deliveryKey,
+    p_request_hash: JSON.stringify({
+      event_type: event.event_type,
+      aggregate_type: event.aggregate_type,
+      aggregate_id: event.aggregate_id,
+      user_id: event.user_id,
+    }),
+    p_actor_user_id: event.user_id,
+    p_request_trace_id: event.request_trace_id,
+    p_operation_trace_id: event.operation_trace_id,
+    p_workflow_trace_id: event.workflow_trace_id,
   });
 
   if (error) {

@@ -36,6 +36,27 @@ select lives_ok(
   'appointments RLS snapshot tenant=30000000-0000-0000-0000-000000000001 actor=31000000-0000-0000-0000-000000000001 expected=foreign appointment update sees no rows path=appointments.update.foreign'
 );
 
+select is(
+  (select count(*) from public.appointment_queue where id = '37100000-0000-0000-0000-000000000001'),
+  1::bigint,
+  'appointment_queue RLS snapshot tenant=30000000-0000-0000-0000-000000000001 actor=31000000-0000-0000-0000-000000000001 expected=own queue visible path=appointment_queue.select.own'
+);
+
+select is(
+  (select count(*) from public.appointment_queue where id = '37100000-0000-0000-0000-000000000002'),
+  0::bigint,
+  'appointment_queue RLS snapshot tenant=30000000-0000-0000-0000-000000000001 actor=31000000-0000-0000-0000-000000000001 expected=foreign queue hidden path=appointment_queue.select.foreign'
+);
+
+select lives_ok(
+  $$
+  update public.appointment_queue
+  set status = 'called'
+  where id = '37100000-0000-0000-0000-000000000002';
+  $$,
+  'appointment_queue RLS snapshot tenant=30000000-0000-0000-0000-000000000001 actor=31000000-0000-0000-0000-000000000001 expected=foreign queue update sees no rows path=appointment_queue.update.foreign'
+);
+
 select set_config('request.jwt.claim.sub', '31000000-0000-0000-0000-000000000003', true);
 select set_config('request.jwt.claims', '{"sub":"31000000-0000-0000-0000-000000000003","role":"authenticated"}', true);
 

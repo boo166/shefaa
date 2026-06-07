@@ -41,7 +41,18 @@ export const traceMiddleware: PlatformRepositoryMiddleware = (ctx, next) => {
     sessionVersion: state.sessionVersion,
     ...ctx.trace,
   });
-  return (tableOrFn, args) => next(tableOrFn, args);
+  return (tableOrFn, args) => {
+    if (args && "p_request_trace_id" in args && (args.p_request_trace_id === null || args.p_request_trace_id === undefined)) {
+      args.p_request_trace_id = ctx.trace?.requestTraceId ?? null;
+    }
+    if (args && "p_operation_trace_id" in args && (args.p_operation_trace_id === null || args.p_operation_trace_id === undefined)) {
+      args.p_operation_trace_id = ctx.trace?.operationTraceId ?? null;
+    }
+    if (args && "p_workflow_trace_id" in args && (args.p_workflow_trace_id === null || args.p_workflow_trace_id === undefined)) {
+      args.p_workflow_trace_id = ctx.trace?.workflowTraceId ?? null;
+    }
+    return next(tableOrFn, args);
+  };
 };
 
 export const authBoundaryMiddleware: PlatformRepositoryMiddleware = (ctx, next) => {

@@ -238,6 +238,61 @@ const mockSupabase = vi.hoisted(() => ({
         error: null,
       };
     }
+    if (fn === "command_appointment_lifecycle") {
+      return {
+        data: [{
+          result_code: "OK",
+          retryable: false,
+          idempotency_replay: false,
+          message: null,
+          appointment: {
+            id: "00000000-0000-0000-0000-000000000333",
+            tenant_id: "00000000-0000-0000-0000-000000000111",
+            status: "scheduled",
+          },
+          queue_entry: {
+            id: "00000000-0000-0000-0000-000000000444",
+            appointment_id: "00000000-0000-0000-0000-000000000333",
+            tenant_id: "00000000-0000-0000-0000-000000000111",
+            check_in_at: "2026-03-14T09:55:00.000Z",
+            position: null,
+            status: "waiting",
+            called_at: null,
+            completed_at: null,
+            created_at: "2026-03-14T09:55:00.000Z",
+            updated_at: "2026-03-14T09:55:00.000Z",
+          },
+        }],
+        error: null,
+      };
+    }
+    if (fn === "command_notification_delivery" || fn === "command_notification_acknowledge") {
+      return {
+        data: [{
+          result_code: "OK",
+          retryable: false,
+          idempotency_replay: false,
+          message: null,
+          notification: {
+            id: "00000000-0000-0000-0000-000000000333",
+            tenant_id: "00000000-0000-0000-0000-000000000111",
+            user_id: "00000000-0000-0000-0000-000000000222",
+            title: "Hello",
+            body: null,
+            type: "system",
+            read: fn === "command_notification_acknowledge",
+            created_at: "2026-03-01T00:00:00.000Z",
+            delivery_key: "manual:smoke",
+            source_event_id: null,
+            source_outbox_id: null,
+            delivered_at: "2026-03-01T00:00:00.000Z",
+            acknowledged_at: fn === "command_notification_acknowledge" ? "2026-03-01T00:00:00.000Z" : null,
+            updated_at: "2026-03-01T00:00:00.000Z",
+          },
+        }],
+        error: null,
+      };
+    }
     return mockState.responseRpc;
   }),
   auth: {
@@ -315,6 +370,7 @@ vi.mock("@/services/supabase/tenant", () => ({
 
 import { adminRepository } from "@/services/admin/admin.repository";
 import { appointmentRepository } from "@/services/appointments/appointment.repository";
+import { appointmentQueueRepository } from "@/services/appointments/appointmentQueue.repository";
 import { authRepository } from "@/services/auth/auth.repository";
 import { clinicSlugRepository } from "@/services/auth/clinicSlug.repository";
 import { billingRepository } from "@/services/billing/billing.repository";
@@ -510,6 +566,25 @@ describe("repositories smoke", () => {
     }, tenantId);
     await appointmentRepository.archive(recordId, tenantId, userId);
     await appointmentRepository.restore(recordId, tenantId);
+
+    await appointmentQueueRepository.listByCheckInRange("2026-03-14T00:00:00Z", "2026-03-15T00:00:00Z", tenantId);
+    await appointmentQueueRepository.getById(recordId, tenantId);
+    await appointmentQueueRepository.getByAppointmentId(recordId, tenantId);
+    await appointmentQueueRepository.create({ appointment_id: recordId, status: "waiting" }, tenantId);
+    await appointmentQueueRepository.update(recordId, { status: "called", called_at: "2026-03-14T10:00:00.000Z" }, tenantId);
+    await appointmentQueueRepository.commandLifecycle({
+      operation: "call",
+      queueId: recordId,
+      tenantId,
+      userId,
+      expectedUpdatedAt: "2026-03-14T09:55:00.000Z",
+      requestHash: "appointment-lifecycle-smoke",
+      trace: {
+        requestTraceId: "req-smoke",
+        operationTraceId: "op-smoke",
+        workflowTraceId: "wf-smoke",
+      },
+    });
 
     await billingRepository.listPaged({
       page: 1,

@@ -1,5 +1,6 @@
 export type DomainEventName =
   | "AppointmentCreated"
+  | "AppointmentLifecycleTransitioned"
   | "InvoicePaid"
   | "LabResultUploaded"
   | "InsuranceClaimTransitioned"
@@ -12,6 +13,18 @@ export type AppointmentCreatedPayload = {
   patientId: string;
   doctorId: string;
   appointmentDate: string;
+};
+
+export type AppointmentLifecycleTransitionedPayload = {
+  appointmentId: string;
+  queueId?: string | null;
+  patientId: string;
+  doctorId: string;
+  previousAppointmentStatus: string | null;
+  appointmentStatus: string;
+  previousQueueStatus?: string | null;
+  queueStatus?: string | null;
+  operation: string;
 };
 
 export type InvoicePaidPayload = {
@@ -54,6 +67,7 @@ export type PatientRegisteredPayload = {
 
 export type DomainEventPayloads = {
   AppointmentCreated: AppointmentCreatedPayload;
+  AppointmentLifecycleTransitioned: AppointmentLifecycleTransitionedPayload;
   InvoicePaid: InvoicePaidPayload;
   LabResultUploaded: LabResultUploadedPayload;
   InsuranceClaimTransitioned: InsuranceClaimTransitionedPayload;

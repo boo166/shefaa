@@ -31,6 +31,12 @@ vi.mock("@/services/doctors/doctorSchedule.repository", () => ({
   },
 }));
 
+vi.mock("@/services/appointments/appointmentLifecycle.workflow", () => ({
+  appointmentLifecycleWorkflow: {
+    cancelAppointment: vi.fn(),
+  },
+}));
+
 vi.mock("@/services/events/domainEvent.repository", () => ({
   domainEventRepository: {
     insert: vi.fn(),
@@ -77,6 +83,7 @@ vi.mock("@/core/auth/authStore", () => ({
 }));
 
 import { appointmentService } from "@/services/appointments/appointment.service";
+import { appointmentLifecycleWorkflow } from "@/services/appointments/appointmentLifecycle.workflow";
 
 describe("appointmentService permissions", () => {
   beforeEach(() => {
@@ -218,5 +225,56 @@ describe("appointmentService permissions", () => {
         status: "completed",
       }),
     ).rejects.toThrow("Cannot move appointment from scheduled to completed");
+  });
+
+  it("routes pure cancellations through appointment lifecycle authority", async () => {
+    const repo = vi.mocked(appointmentRepository, true);
+    repo.getById.mockResolvedValue({
+      id: "00000000-0000-0000-0000-000000000999",
+      tenant_id: tenantId,
+      patient_id: "00000000-0000-0000-0000-000000000aaa",
+      doctor_id: "00000000-0000-0000-0000-000000000bbb",
+      appointment_date: "2026-03-14T10:00:00Z",
+      duration_minutes: 30,
+      type: "checkup",
+      status: "scheduled",
+      notes: null,
+      created_at: "2026-03-14T10:00:00Z",
+      updated_at: "2026-03-14T10:00:00Z",
+    } as any);
+    vi.mocked(appointmentLifecycleWorkflow, true).cancelAppointment.mockResolvedValue({
+      result_code: "OK",
+      retryable: false,
+      idempotency_replay: false,
+      message: null,
+      queue_entry: null,
+      appointment: {
+        id: "00000000-0000-0000-0000-000000000999",
+        tenant_id: tenantId,
+        patient_id: "00000000-0000-0000-0000-000000000aaa",
+        doctor_id: "00000000-0000-0000-0000-000000000bbb",
+        appointment_date: "2026-03-14T10:00:00Z",
+        duration_minutes: 30,
+        type: "checkup",
+        status: "cancelled",
+        notes: null,
+        created_at: "2026-03-14T10:00:00Z",
+        updated_at: "2026-03-14T10:00:00Z",
+      },
+    });
+
+    const result = await appointmentService.update("00000000-0000-0000-0000-000000000999", {
+      status: "cancelled",
+      expected_updated_at: "2026-03-14T10:00:00Z",
+    } as any);
+
+    expect(result.status).toBe("cancelled");
+    expect(appointmentLifecycleWorkflow.cancelAppointment).toHaveBeenCalledWith(
+      "00000000-0000-0000-0000-000000000999",
+      tenantId,
+      userId,
+      "2026-03-14T10:00:00Z",
+    );
+    expect(repo.update).not.toHaveBeenCalled();
   });
 });

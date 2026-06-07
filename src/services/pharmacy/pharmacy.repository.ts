@@ -3,6 +3,7 @@ import type { PagedResult } from "@/domain/shared/pagination.types";
 import { Capabilities } from "@/platform/authorization/capabilities";
 import { platformRepository } from "@/platform/data/platformRepository";
 import type { PlatformRepositoryContext } from "@/platform/data/platformRepository.context";
+import { commandTraceParams } from "@/services/operational/commandTrace";
 import { ServiceError } from "@/services/supabase/errors";
 import { assertOk } from "@/services/supabase/query";
 
@@ -19,8 +20,8 @@ function escapeSearchTerm(term: string) {
 export interface PharmacyRepository {
   listPaged(params: MedicationListParams, tenantId: string): Promise<PagedResult<Medication>>;
   getSummary(tenantId: string): Promise<MedicationSummary>;
-  create(input: MedicationCreateInput, tenantId: string): Promise<Medication>;
-  update(id: string, input: MedicationUpdateInput, tenantId: string, expectedUpdatedAt?: string): Promise<Medication | null>;
+  create(input: MedicationCreateInput, tenantId: string, trace?: PlatformRepositoryContext["trace"]): Promise<Medication>;
+  update(id: string, input: MedicationUpdateInput, tenantId: string, expectedUpdatedAt?: string, trace?: PlatformRepositoryContext["trace"]): Promise<Medication | null>;
   adjustStock(
     id: string,
     stock: number,
@@ -29,7 +30,7 @@ export interface PharmacyRepository {
     expectedUpdatedAt?: string,
     trace?: PlatformRepositoryContext["trace"],
   ): Promise<Medication | null>;
-  remove(id: string, tenantId: string): Promise<void>;
+  remove(id: string, tenantId: string, trace?: PlatformRepositoryContext["trace"]): Promise<void>;
   describe?(): {
     certified: boolean;
     tenantBound: boolean;
@@ -124,7 +125,7 @@ export const pharmacyRepository: PharmacyRepository = {
 
     return ((data as any)?.[0] ?? { total_count: 0, low_stock_count: 0, inventory_value: 0 }) as MedicationSummary;
   },
-  async create(input, tenantId) {
+  async create(input, tenantId, trace) {
     const { data, error } = await platformRepository.rpc("command_medication", {
       p_operation: "create",
       p_medication_id: null,
@@ -134,10 +135,8 @@ export const pharmacyRepository: PharmacyRepository = {
       p_idempotency_key: null,
       p_request_hash: ["create", tenantId, input.name, input.stock ?? ""].join("|"),
       p_user_id: null,
-      p_request_trace_id: null,
-      p_operation_trace_id: null,
-      p_workflow_trace_id: null,
-    }, pharmacyCtx(tenantId, "pharmacy.create", "critical"));
+      ...commandTraceParams(trace),
+    }, pharmacyCtx(tenantId, "pharmacy.create", "critical", trace));
     if (error) {
       throw new ServiceError(error.message ?? "Failed to create medication", {
         code: error.code,
@@ -150,7 +149,7 @@ export const pharmacyRepository: PharmacyRepository = {
     }
     return row.medication as Medication;
   },
-  async update(id, input, tenantId, expectedUpdatedAt) {
+  async update(id, input, tenantId, expectedUpdatedAt, trace) {
     const payload: Record<string, unknown> = {};
 
     if (input.name !== undefined) payload.name = input.name;
@@ -179,10 +178,8 @@ export const pharmacyRepository: PharmacyRepository = {
       p_idempotency_key: null,
       p_request_hash: ["update", id, tenantId, JSON.stringify(payload), expectedUpdatedAt ?? ""].join("|"),
       p_user_id: null,
-      p_request_trace_id: null,
-      p_operation_trace_id: null,
-      p_workflow_trace_id: null,
-    }, pharmacyCtx(tenantId, "pharmacy.update", "critical"));
+      ...commandTraceParams(trace),
+    }, pharmacyCtx(tenantId, "pharmacy.update", "critical", trace));
     if (error) {
       throw new ServiceError(error.message ?? "Failed to update medication", {
         code: error.code,
@@ -207,9 +204,7 @@ export const pharmacyRepository: PharmacyRepository = {
       p_idempotency_key: null,
       p_request_hash: requestHash,
       p_user_id: userId ?? null,
-      p_request_trace_id: null,
-      p_operation_trace_id: null,
-      p_workflow_trace_id: null,
+      ...commandTraceParams(trace),
     }, pharmacyCtx(tenantId, "pharmacy.stock.adjust", "critical", trace));
     if (error) {
       throw new ServiceError(error.message ?? "Failed to adjust medication stock", {
@@ -224,7 +219,7 @@ export const pharmacyRepository: PharmacyRepository = {
     if (row.result_code === "CONFLICT") return null;
     return (row.medication ?? null) as Medication | null;
   },
-  async remove(id, tenantId) {
+  async remove(id, tenantId, trace) {
     const { data, error } = await platformRepository.rpc("command_medication", {
       p_operation: "remove",
       p_medication_id: id,
@@ -234,10 +229,8 @@ export const pharmacyRepository: PharmacyRepository = {
       p_idempotency_key: null,
       p_request_hash: ["remove", id, tenantId].join("|"),
       p_user_id: null,
-      p_request_trace_id: null,
-      p_operation_trace_id: null,
-      p_workflow_trace_id: null,
-    }, pharmacyCtx(tenantId, "pharmacy.remove", "critical"));
+      ...commandTraceParams(trace),
+    }, pharmacyCtx(tenantId, "pharmacy.remove", "critical", trace));
 
     if (error) {
       throw new ServiceError(error.message ?? "Failed to delete medication", {

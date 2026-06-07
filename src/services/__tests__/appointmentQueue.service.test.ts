@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { appointmentQueueService } from "@/services/appointments/appointmentQueue.service";
-import { appointmentQueueRepository } from "@/services/appointments/appointmentQueue.repository";
-import { appointmentRepository } from "@/services/appointments/appointment.repository";
+import { appointmentLifecycleWorkflow } from "@/services/appointments/appointmentLifecycle.workflow";
 
 vi.mock("@/services/supabase/tenant", () => ({
   getTenantContext: () => ({ tenantId: "00000000-0000-0000-0000-000000000111", userId: "00000000-0000-0000-0000-000000000222" }),
@@ -15,31 +14,14 @@ vi.mock("@/core/auth/authStore", () => ({
   },
 }));
 
-vi.mock("@/services/settings/audit.service", () => ({
-  auditLogService: {
-    logEvent: vi.fn(),
+vi.mock("@/services/appointments/appointmentLifecycle.workflow", () => ({
+  appointmentLifecycleWorkflow: {
+    checkIn: vi.fn(),
+    updateQueueStatus: vi.fn(),
   },
 }));
 
-vi.mock("@/services/appointments/appointmentQueue.repository", () => ({
-  appointmentQueueRepository: {
-    listByCheckInRange: vi.fn(),
-    getById: vi.fn(),
-    getByAppointmentId: vi.fn(),
-    create: vi.fn(),
-    update: vi.fn(),
-  },
-}));
-
-vi.mock("@/services/appointments/appointment.repository", () => ({
-  appointmentRepository: {
-    getById: vi.fn(),
-    update: vi.fn(),
-  },
-}));
-
-const queueRepo = vi.mocked(appointmentQueueRepository, true);
-const appointmentRepo = vi.mocked(appointmentRepository, true);
+const workflow = vi.mocked(appointmentLifecycleWorkflow, true);
 
 describe("appointmentQueueService", () => {
   beforeEach(() => {
@@ -47,21 +29,7 @@ describe("appointmentQueueService", () => {
   });
 
   it("checks in a scheduled appointment", async () => {
-    appointmentRepo.getById.mockResolvedValue({
-      id: "00000000-0000-0000-0000-000000000333",
-      tenant_id: "00000000-0000-0000-0000-000000000111",
-      patient_id: "00000000-0000-0000-0000-000000000aaa",
-      doctor_id: "00000000-0000-0000-0000-000000000bbb",
-      appointment_date: "2026-03-14T10:00:00Z",
-      duration_minutes: 30,
-      type: "checkup",
-      status: "scheduled",
-      notes: null,
-      created_at: "2026-03-14T10:00:00Z",
-      updated_at: "2026-03-14T10:00:00Z",
-    } as any);
-    queueRepo.getByAppointmentId.mockResolvedValue(null);
-    queueRepo.create.mockResolvedValue({
+    workflow.checkIn.mockResolvedValue({
       id: "00000000-0000-0000-0000-000000000444",
       appointment_id: "00000000-0000-0000-0000-000000000333",
       tenant_id: "00000000-0000-0000-0000-000000000111",
@@ -76,37 +44,15 @@ describe("appointmentQueueService", () => {
     const result = await appointmentQueueService.checkIn("00000000-0000-0000-0000-000000000333");
 
     expect(result.status).toBe("waiting");
-    expect(queueRepo.create).toHaveBeenCalledWith(
-      { appointment_id: "00000000-0000-0000-0000-000000000333", status: "waiting" },
+    expect(workflow.checkIn).toHaveBeenCalledWith(
+      "00000000-0000-0000-0000-000000000333",
       "00000000-0000-0000-0000-000000000111",
+      "00000000-0000-0000-0000-000000000222",
     );
   });
 
   it("rejects duplicate active check-ins", async () => {
-    appointmentRepo.getById.mockResolvedValue({
-      id: "00000000-0000-0000-0000-000000000333",
-      tenant_id: "00000000-0000-0000-0000-000000000111",
-      patient_id: "00000000-0000-0000-0000-000000000aaa",
-      doctor_id: "00000000-0000-0000-0000-000000000bbb",
-      appointment_date: "2026-03-14T10:00:00Z",
-      duration_minutes: 30,
-      type: "checkup",
-      status: "scheduled",
-      notes: null,
-      created_at: "2026-03-14T10:00:00Z",
-      updated_at: "2026-03-14T10:00:00Z",
-    } as any);
-    queueRepo.getByAppointmentId.mockResolvedValue({
-      id: "00000000-0000-0000-0000-000000000444",
-      appointment_id: "00000000-0000-0000-0000-000000000333",
-      tenant_id: "00000000-0000-0000-0000-000000000111",
-      check_in_at: "2026-03-14T09:55:00Z",
-      position: null,
-      status: "waiting",
-      called_at: null,
-      completed_at: null,
-      created_at: "2026-03-14T09:55:00Z",
-    } as any);
+    workflow.checkIn.mockRejectedValue(new Error("Appointment is already checked in"));
 
     await expect(
       appointmentQueueService.checkIn("00000000-0000-0000-0000-000000000333"),
@@ -114,18 +60,7 @@ describe("appointmentQueueService", () => {
   });
 
   it("marks the appointment no-show when the queue is closed as no-show", async () => {
-    queueRepo.getById.mockResolvedValue({
-      id: "00000000-0000-0000-0000-000000000444",
-      appointment_id: "00000000-0000-0000-0000-000000000333",
-      tenant_id: "00000000-0000-0000-0000-000000000111",
-      check_in_at: "2026-03-14T09:55:00Z",
-      position: null,
-      status: "waiting",
-      called_at: null,
-      completed_at: null,
-      created_at: "2026-03-14T09:55:00Z",
-    } as any);
-    queueRepo.update.mockResolvedValue({
+    workflow.updateQueueStatus.mockResolvedValue({
       id: "00000000-0000-0000-0000-000000000444",
       appointment_id: "00000000-0000-0000-0000-000000000333",
       tenant_id: "00000000-0000-0000-0000-000000000111",
@@ -139,10 +74,35 @@ describe("appointmentQueueService", () => {
 
     await appointmentQueueService.updateStatus("00000000-0000-0000-0000-000000000444", "no_show");
 
-    expect(appointmentRepo.update).toHaveBeenCalledWith(
-      "00000000-0000-0000-0000-000000000333",
-      { status: "no_show" },
+    expect(workflow.updateQueueStatus).toHaveBeenCalledWith(
+      "00000000-0000-0000-0000-000000000444",
+      "no_show",
       "00000000-0000-0000-0000-000000000111",
+      "00000000-0000-0000-0000-000000000222",
+    );
+  });
+
+  it("keeps the back-to-waiting action on the lifecycle path", async () => {
+    workflow.updateQueueStatus.mockResolvedValue({
+      id: "00000000-0000-0000-0000-000000000444",
+      appointment_id: "00000000-0000-0000-0000-000000000333",
+      tenant_id: "00000000-0000-0000-0000-000000000111",
+      check_in_at: "2026-03-14T09:55:00Z",
+      position: null,
+      status: "waiting",
+      called_at: null,
+      completed_at: null,
+      created_at: "2026-03-14T09:55:00Z",
+      updated_at: "2026-03-14T10:05:00Z",
+    } as any);
+
+    await appointmentQueueService.updateStatus("00000000-0000-0000-0000-000000000444", "waiting");
+
+    expect(workflow.updateQueueStatus).toHaveBeenCalledWith(
+      "00000000-0000-0000-0000-000000000444",
+      "waiting",
+      "00000000-0000-0000-0000-000000000111",
+      "00000000-0000-0000-0000-000000000222",
     );
   });
 });

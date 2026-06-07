@@ -10,6 +10,7 @@ import { Pill, Package, AlertTriangle, Plus, Trash2 } from "lucide-react";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { useAuth } from "@/core/auth/authStore";
 import { AddMedicationModal } from "./AddMedicationModal";
+import { ProcurementPanel } from "./ProcurementPanel";
 import { ConfirmDialog } from "@/shared/components/ConfirmDialog";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
@@ -229,6 +230,8 @@ export const PharmacyPage = () => {
           />
         }
       />
+
+      <ProcurementPanel medications={liveMeds} />
 
       <AddMedicationModal
         open={showAddModal}

@@ -75,6 +75,13 @@ export const queryKeys = {
       listKey("pharmacy", args),
     summary: (tenantId?: string) => [...tenantKey("pharmacy", tenantId), "summary"] as const,
   },
+  procurement: {
+    root: (tenantId?: string) => tenantKey("procurement", tenantId),
+    suppliers: (args?: { tenantId?: string; page?: number; pageSize?: number; search?: string; filters?: Record<string, unknown>; sort?: { column: string; ascending?: boolean } }) =>
+      [...tenantKey("procurement", args?.tenantId), "suppliers", args] as const,
+    purchaseOrders: (args?: { tenantId?: string; page?: number; pageSize?: number; search?: string; filters?: Record<string, unknown>; sort?: { column: string; ascending?: boolean } }) =>
+      [...tenantKey("procurement", args?.tenantId), "purchaseOrders", args] as const,
+  },
   prescriptions: {
     root: (tenantId?: string) => tenantKey("prescriptions", tenantId),
     list: (args?: { tenantId?: string; page?: number; pageSize?: number; search?: string; filters?: Record<string, unknown>; sort?: { column: string; ascending?: boolean } }) =>

@@ -49,17 +49,20 @@ describe("repository.describe metadata", () => {
     }
   });
 
-  it("documents notifications as gateway-converged but still not evidence-certified", () => {
+  it("documents notifications as command-authoritative and evidence-certified", () => {
     expect(notificationRepository.describe?.()).toMatchObject({
-      certified: false,
+      certified: true,
       tenantBound: true,
       traceAware: true,
       runtimeAware: true,
       capabilityAware: true,
+      reconciliationAware: true,
+      recoveryAware: true,
+      evidenceAware: true,
       staleContextSafe: true,
       metricsEnabled: true,
       exceptions: [
-        expect.stringContaining("payload-bearing through the realtime gateway"),
+        expect.stringContaining("drift query"),
       ],
     });
   });

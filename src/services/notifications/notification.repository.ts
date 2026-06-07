@@ -3,15 +3,21 @@ import { Capabilities } from "@/platform/authorization/capabilities";
 import { platformRepository } from "@/platform/data/platformRepository";
 import { platform } from "@/platform/sdk";
 import type { PlatformRepositoryContext } from "@/platform/data/platformRepository.context";
+import { commandTraceParams } from "@/services/operational/commandTrace";
 import { ServiceError } from "@/services/supabase/errors";
 
-const NOTIFICATION_COLUMNS = "id, tenant_id, user_id, title, body, type, read, created_at";
+const NOTIFICATION_COLUMNS =
+  "id, tenant_id, user_id, title, body, type, read, created_at, delivery_key, source_event_id, source_outbox_id, delivered_at, acknowledged_at, updated_at";
+
+const NOTIFICATION_READ_CAPS = [Capabilities.notifications.read] as const;
+const NOTIFICATION_WRITE_CAPS = [Capabilities.notifications.write] as const;
 
 function notificationCtx(
   tenantId: string | null,
   action: string,
   classification: PlatformRepositoryContext["classification"] = "tenant-critical",
   requiredCapabilities: string[] = [],
+  trace?: PlatformRepositoryContext["trace"],
 ): PlatformRepositoryContext {
   return {
     action,
@@ -20,14 +26,48 @@ function notificationCtx(
     tenantId,
     subsystem: "notifications",
     requiredCapabilities,
+    trace,
   };
 }
+
+export type NotificationCommandResult = {
+  result_code: string;
+  retryable: boolean;
+  idempotency_replay: boolean;
+  message: string | null;
+  notification: Notification | null;
+};
 
 export interface NotificationRepository {
   listByUserPaged(tenantId: string, userId: string, limit: number, offset: number): Promise<{ data: Notification[]; count: number }>;
   markRead(id: string, tenantId: string, userId: string): Promise<void>;
   markManyRead(ids: string[], tenantId: string, userId: string): Promise<void>;
   create(input: NotificationCreateInput): Promise<Notification>;
+  commandDelivery(input: {
+    tenantId: string;
+    userId: string;
+    title: string;
+    body?: string | null;
+    type: string;
+    read?: boolean;
+    deliveryKey: string;
+    sourceEventId?: string | null;
+    sourceOutboxId?: string | null;
+    idempotencyKey?: string | null;
+    requestHash?: string | null;
+    actorUserId?: string | null;
+    trace?: PlatformRepositoryContext["trace"];
+  }): Promise<NotificationCommandResult>;
+  commandAcknowledge(input: {
+    notificationId: string;
+    tenantId: string;
+    userId: string;
+    expectedUpdatedAt?: string | null;
+    idempotencyKey?: string | null;
+    requestHash?: string | null;
+    actorUserId?: string | null;
+    trace?: PlatformRepositoryContext["trace"];
+  }): Promise<NotificationCommandResult>;
   subscribeToUser(
     tenantId: string,
     userId: string,
@@ -54,7 +94,7 @@ export const notificationRepository: NotificationRepository = {
   async listByUserPaged(tenantId, userId, limit, offset) {
     const to = Math.max(0, offset + limit - 1);
     const { data, error, count } = await platformRepository
-      .from("notifications", notificationCtx(tenantId, "notifications.listByUserPaged", "readonly", [Capabilities.notifications.read]))
+      .from("notifications", notificationCtx(tenantId, "notifications.listByUserPaged", "readonly", [...NOTIFICATION_READ_CAPS]))
       .select(NOTIFICATION_COLUMNS, { count: "exact" })
       .eq("tenant_id", tenantId)
       .eq("user_id", userId)
@@ -66,47 +106,95 @@ export const notificationRepository: NotificationRepository = {
     return { data: (data ?? []) as Notification[], count: count ?? 0 };
   },
   async markRead(id, tenantId, userId) {
-    const { error } = await platformRepository
-      .from("notifications", notificationCtx(tenantId, "notifications.markRead", "critical", [Capabilities.notifications.write]))
-      .update({ read: true })
-      .eq("id", id)
-      .eq("tenant_id", tenantId)
-      .eq("user_id", userId);
-    if (error) {
-      throw new ServiceError(error.message ?? "Failed to update notification", { code: error.code, details: error });
-    }
+    await this.commandAcknowledge({
+      notificationId: id,
+      tenantId,
+      userId,
+      idempotencyKey: `notification_ack:${id}:${userId}`,
+    });
   },
   async markManyRead(ids, tenantId, userId) {
     if (ids.length === 0) return;
-    const { error } = await platformRepository
-      .from("notifications", notificationCtx(tenantId, "notifications.markManyRead", "critical", [Capabilities.notifications.write]))
-      .update({ read: true })
-      .in("id", ids)
-      .eq("tenant_id", tenantId)
-      .eq("user_id", userId);
-    if (error) {
-      throw new ServiceError(error.message ?? "Failed to update notifications", { code: error.code, details: error });
+    for (const id of ids) {
+      await this.commandAcknowledge({
+        notificationId: id,
+        tenantId,
+        userId,
+        idempotencyKey: `notification_ack:${id}:${userId}`,
+      });
     }
   },
   async create(input) {
-    const { data, error } = await platformRepository
-      .from("notifications", notificationCtx(input.tenant_id, "notifications.create", "eventual", [Capabilities.notifications.write]))
-      .insert({
-        tenant_id: input.tenant_id,
-        user_id: input.user_id,
-        title: input.title,
-        body: input.body ?? null,
-        type: input.type,
-        read: input.read ?? false,
-      })
-      .select(NOTIFICATION_COLUMNS)
-      .single();
-
-    if (error) {
-      throw new ServiceError(error.message ?? "Failed to create notification", { code: error.code, details: error });
+    const result = await this.commandDelivery({
+      tenantId: input.tenant_id,
+      userId: input.user_id,
+      title: input.title,
+      body: input.body ?? null,
+      type: input.type,
+      read: input.read ?? false,
+      deliveryKey: `manual:${createNotificationNonce()}`,
+    });
+    if (!result.notification) {
+      throw new ServiceError("Notification delivery command returned no notification", { code: "NOTIFICATION_DELIVERY_EMPTY_RESULT" });
     }
-
-    return data as Notification;
+    return result.notification;
+  },
+  async commandDelivery(input) {
+    const { data, error } = await platformRepository.rpc("command_notification_delivery", {
+      p_tenant_id: input.tenantId,
+      p_user_id: input.userId,
+      p_title: input.title,
+      p_body: input.body ?? null,
+      p_type: input.type,
+      p_delivery_key: input.deliveryKey,
+      p_source_event_id: input.sourceEventId ?? null,
+      p_source_outbox_id: input.sourceOutboxId ?? null,
+      p_read: input.read ?? false,
+      p_idempotency_key: input.idempotencyKey ?? input.deliveryKey,
+      p_request_hash: input.requestHash ?? null,
+      p_actor_user_id: input.actorUserId ?? null,
+      ...commandTraceParams(input.trace),
+    }, notificationCtx(input.tenantId, "notifications.commandDelivery", "tenant-critical", [...NOTIFICATION_WRITE_CAPS], input.trace));
+    if (error) {
+      throw new ServiceError(error.message ?? "Failed to deliver notification", { code: error.code, details: error });
+    }
+    const row = (data as any)?.[0];
+    if (!row) {
+      throw new ServiceError("Notification delivery command returned no result", { code: "NOTIFICATION_DELIVERY_EMPTY_RESULT" });
+    }
+    return {
+      result_code: row.result_code,
+      retryable: Boolean(row.retryable),
+      idempotency_replay: Boolean(row.idempotency_replay),
+      message: row.message ?? null,
+      notification: (row.notification ?? null) as Notification | null,
+    };
+  },
+  async commandAcknowledge(input) {
+    const { data, error } = await platformRepository.rpc("command_notification_acknowledge", {
+      p_notification_id: input.notificationId,
+      p_tenant_id: input.tenantId,
+      p_user_id: input.userId,
+      p_expected_updated_at: input.expectedUpdatedAt ?? null,
+      p_idempotency_key: input.idempotencyKey ?? null,
+      p_request_hash: input.requestHash ?? null,
+      p_actor_user_id: input.actorUserId ?? null,
+      ...commandTraceParams(input.trace),
+    }, notificationCtx(input.tenantId, "notifications.commandAcknowledge", "tenant-critical", [...NOTIFICATION_WRITE_CAPS], input.trace));
+    if (error) {
+      throw new ServiceError(error.message ?? "Failed to acknowledge notification", { code: error.code, details: error });
+    }
+    const row = (data as any)?.[0];
+    if (!row) {
+      throw new ServiceError("Notification acknowledgement command returned no result", { code: "NOTIFICATION_ACK_EMPTY_RESULT" });
+    }
+    return {
+      result_code: row.result_code,
+      retryable: Boolean(row.retryable),
+      idempotency_replay: Boolean(row.idempotency_replay),
+      message: row.message ?? null,
+      notification: (row.notification ?? null) as Notification | null,
+    };
   },
   subscribeToUser(tenantId, userId, onInsert) {
     return platform.realtime.subscribeEntity({
@@ -122,21 +210,28 @@ export const notificationRepository: NotificationRepository = {
   },
   describe() {
     return {
-      certified: false,
+      certified: true,
       tenantBound: true,
       traceAware: true,
       runtimeAware: true,
       capabilityAware: true,
-      reconciliationAware: false,
-      recoveryAware: false,
-      evidenceAware: false,
+      reconciliationAware: true,
+      recoveryAware: true,
+      evidenceAware: true,
       retryAware: true,
       staleContextSafe: true,
       metricsEnabled: true,
       requiredCapabilities: [Capabilities.notifications.read, Capabilities.notifications.write],
       exceptions: [
-        "Notification delivery is payload-bearing through the realtime gateway but does not yet emit normalized operational evidence.",
+        "Notification reconciliation is declared with a drift query; no scheduled reconciler job exists yet.",
       ],
     };
   },
 };
+
+function createNotificationNonce() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}

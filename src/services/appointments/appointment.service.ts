@@ -22,6 +22,7 @@ import { withAuthStaleGuard } from "@/services/auth/authContextSnapshot";
 import { auditLogService } from "@/services/settings/audit.service";
 import { doctorRepository } from "@/services/doctors/doctor.repository";
 import { doctorScheduleRepository } from "@/services/doctors/doctorSchedule.repository";
+import { appointmentLifecycleWorkflow } from "./appointmentLifecycle.workflow";
 import { appointmentRepository } from "./appointment.repository";
 
 const DEFAULT_APPOINTMENT_DURATION_MINUTES = 30;
@@ -263,6 +264,19 @@ export const appointmentService = {
           const durationMinutes = updates.duration_minutes ?? current.duration_minutes;
           await ensureDoctorAvailability(doctorId, appointmentDate, durationMinutes, tenantId);
           await ensureNoConflict(doctorId, appointmentDate, tenantId, parsedId);
+        }
+
+        if (updates.status === "cancelled" && Object.keys(updates).length === 1) {
+          const result = await appointmentLifecycleWorkflow.cancelAppointment(parsedId, tenantId, userId, expected_updated_at);
+          if (result.result_code === "CONFLICT") {
+            throw new ConflictError(result.message ?? "Appointment was modified by another user", {
+              code: "CONCURRENT_UPDATE",
+            });
+          }
+          if (!result.appointment) {
+            throw new NotFoundError("Appointment not found");
+          }
+          return appointmentSchema.parse(result.appointment);
         }
 
         const result = await appointmentRepository.update(parsedId, updates, tenantId, expected_updated_at);

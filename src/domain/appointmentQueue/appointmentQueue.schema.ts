@@ -21,6 +21,7 @@ export const appointmentQueueSchema = z.object({
   called_at: dateTimeStringSchema.optional().nullable(),
   completed_at: dateTimeStringSchema.optional().nullable(),
   created_at: dateTimeStringSchema,
+  updated_at: dateTimeStringSchema.optional(),
 });
 
 export const appointmentQueueWithRelationsSchema = appointmentQueueSchema.extend({

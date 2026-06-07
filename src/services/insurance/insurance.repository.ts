@@ -12,6 +12,7 @@ import type { PagedResult } from "@/domain/shared/pagination.types";
 import { Capabilities } from "@/platform/authorization/capabilities";
 import { platformRepository } from "@/platform/data/platformRepository";
 import type { PlatformRepositoryContext } from "@/platform/data/platformRepository.context";
+import { commandTraceParams } from "@/services/operational/commandTrace";
 import { ServiceError } from "@/services/supabase/errors";
 import { assertOk } from "@/services/supabase/query";
 
@@ -84,8 +85,8 @@ export interface InsuranceRepository {
   listAssignableOwners(tenantId: string): Promise<InsuranceAssignableOwner[]>;
   isAssignableOwner(userId: string, tenantId: string): Promise<boolean>;
   getById(id: string, tenantId: string): Promise<InsuranceClaim>;
-  create(input: InsuranceClaimCreateInput, tenantId: string): Promise<InsuranceClaim>;
-  update(id: string, input: InsuranceClaimUpdateInput, tenantId: string, expectedUpdatedAt?: string): Promise<InsuranceClaim | null>;
+  create(input: InsuranceClaimCreateInput, tenantId: string, trace?: PlatformRepositoryContext["trace"]): Promise<InsuranceClaim>;
+  update(id: string, input: InsuranceClaimUpdateInput, tenantId: string, expectedUpdatedAt?: string, trace?: PlatformRepositoryContext["trace"]): Promise<InsuranceClaim | null>;
   transitionStatus(
     id: string,
     input: InsuranceClaimUpdateInput,
@@ -94,8 +95,8 @@ export interface InsuranceRepository {
     expectedUpdatedAt?: string,
     trace?: PlatformRepositoryContext["trace"],
   ): Promise<InsuranceClaim | null>;
-  archive(id: string, tenantId: string, userId: string): Promise<InsuranceClaim>;
-  restore(id: string, tenantId: string): Promise<InsuranceClaim>;
+  archive(id: string, tenantId: string, userId: string, trace?: PlatformRepositoryContext["trace"]): Promise<InsuranceClaim>;
+  restore(id: string, tenantId: string, trace?: PlatformRepositoryContext["trace"]): Promise<InsuranceClaim>;
   describe?(): {
     certified: boolean;
     tenantBound: boolean;
@@ -365,7 +366,7 @@ export const insuranceRepository: InsuranceRepository = {
       .single();
     return assertOk(result) as InsuranceClaim;
   },
-  async create(input, tenantId) {
+  async create(input, tenantId, trace) {
     const { data, error } = await platformRepository.rpc("command_insurance_claim", {
       p_operation: "create",
       p_claim_id: null,
@@ -375,10 +376,8 @@ export const insuranceRepository: InsuranceRepository = {
       p_idempotency_key: null,
       p_request_hash: ["create", tenantId, input.patient_id, input.provider, input.service, input.amount].join("|"),
       p_user_id: null,
-      p_request_trace_id: null,
-      p_operation_trace_id: null,
-      p_workflow_trace_id: null,
-    }, insuranceCtx(tenantId, "insurance.create", "critical"));
+      ...commandTraceParams(trace),
+    }, insuranceCtx(tenantId, "insurance.create", "critical", trace));
     if (error) {
       throw new ServiceError(error.message ?? "Failed to create insurance claim", {
         code: error.code,
@@ -391,7 +390,7 @@ export const insuranceRepository: InsuranceRepository = {
     }
     return row.claim as InsuranceClaim;
   },
-  async update(id, input, tenantId, expectedUpdatedAt) {
+  async update(id, input, tenantId, expectedUpdatedAt, trace) {
     const payload: Record<string, unknown> = {};
 
     if (input.patient_id !== undefined) payload.patient_id = input.patient_id;
@@ -433,10 +432,8 @@ export const insuranceRepository: InsuranceRepository = {
       p_idempotency_key: null,
       p_request_hash: ["update", id, tenantId, JSON.stringify(payload), expectedUpdatedAt ?? ""].join("|"),
       p_user_id: null,
-      p_request_trace_id: null,
-      p_operation_trace_id: null,
-      p_workflow_trace_id: null,
-    }, insuranceCtx(tenantId, "insurance.update", "critical"));
+      ...commandTraceParams(trace),
+    }, insuranceCtx(tenantId, "insurance.update", "critical", trace));
     if (error) {
       throw new ServiceError(error.message ?? "Failed to update insurance claim", {
         code: error.code,
@@ -477,9 +474,7 @@ export const insuranceRepository: InsuranceRepository = {
       p_idempotency_key: null,
       p_request_hash: requestHash,
       p_user_id: userId ?? null,
-      p_request_trace_id: null,
-      p_operation_trace_id: null,
-      p_workflow_trace_id: null,
+      ...commandTraceParams(trace),
     }, insuranceCtx(tenantId, "insurance.claim.transition", "critical", trace));
     if (error) {
       throw new ServiceError(error.message ?? "Failed to transition insurance claim", {
@@ -494,7 +489,7 @@ export const insuranceRepository: InsuranceRepository = {
     if (row.result_code === "CONFLICT") return null;
     return (row.claim ?? null) as InsuranceClaim | null;
   },
-  async archive(id, tenantId, userId) {
+  async archive(id, tenantId, userId, trace) {
     const { data, error } = await platformRepository.rpc("command_insurance_claim", {
       p_operation: "archive",
       p_claim_id: id,
@@ -504,10 +499,8 @@ export const insuranceRepository: InsuranceRepository = {
       p_idempotency_key: null,
       p_request_hash: ["archive", id, tenantId].join("|"),
       p_user_id: userId,
-      p_request_trace_id: null,
-      p_operation_trace_id: null,
-      p_workflow_trace_id: null,
-    }, insuranceCtx(tenantId, "insurance.archive", "critical"));
+      ...commandTraceParams(trace),
+    }, insuranceCtx(tenantId, "insurance.archive", "critical", trace));
     if (error) {
       throw new ServiceError(error.message ?? "Failed to archive insurance claim", {
         code: error.code,
@@ -520,7 +513,7 @@ export const insuranceRepository: InsuranceRepository = {
     }
     return row.claim as InsuranceClaim;
   },
-  async restore(id, tenantId) {
+  async restore(id, tenantId, trace) {
     const { data, error } = await platformRepository.rpc("command_insurance_claim", {
       p_operation: "restore",
       p_claim_id: id,
@@ -530,10 +523,8 @@ export const insuranceRepository: InsuranceRepository = {
       p_idempotency_key: null,
       p_request_hash: ["restore", id, tenantId].join("|"),
       p_user_id: null,
-      p_request_trace_id: null,
-      p_operation_trace_id: null,
-      p_workflow_trace_id: null,
-    }, insuranceCtx(tenantId, "insurance.restore", "critical"));
+      ...commandTraceParams(trace),
+    }, insuranceCtx(tenantId, "insurance.restore", "critical", trace));
     if (error) {
       throw new ServiceError(error.message ?? "Failed to restore insurance claim", {
         code: error.code,

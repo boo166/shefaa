@@ -5,6 +5,7 @@ import { domainEventRepository } from "@/services/events/domainEvent.repository"
 
 const EVENT_ENTITY_MAP: Record<DomainEventName, { entityType: string; entityIdKey: keyof DomainEventPayloads[DomainEventName] }> = {
   AppointmentCreated: { entityType: "appointment", entityIdKey: "appointmentId" },
+  AppointmentLifecycleTransitioned: { entityType: "appointment", entityIdKey: "appointmentId" },
   InvoicePaid: { entityType: "invoice", entityIdKey: "invoiceId" },
   LabResultUploaded: { entityType: "lab_order", entityIdKey: "labOrderId" },
   InsuranceClaimTransitioned: { entityType: "insurance_claim", entityIdKey: "claimId" },
