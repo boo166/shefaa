@@ -22,13 +22,11 @@ import type {
 } from "@/domain/billing/billing.types";
 import type { LimitOffsetParams } from "@/domain/shared/pagination.types";
 import { limitOffsetSchema } from "@/domain/shared/pagination.schema";
-import { emitDomainEvent } from "@/core/events";
 import { assertAnyPermission } from "@/services/supabase/permissions";
 import { featureAccessService } from "@/services/subscription/featureAccess.service";
 import { BusinessRuleError, ConflictError, NotFoundError, toServiceError } from "@/services/supabase/errors";
 import { getTenantContext } from "@/services/supabase/tenant";
 import { withAuthStaleGuard } from "@/services/auth/authContextSnapshot";
-import { auditLogService } from "@/services/settings/audit.service";
 import { rateLimitService } from "@/services/security/rateLimit.service";
 import { buildTracePayload } from "@/platform/observability/traceContext";
 import { createAsyncOperation } from "@/platform/runtime/async/createAsyncOperation";
@@ -189,6 +187,7 @@ export const billingService = {
       const normalizedStatus = deriveInvoiceStatus(totalAmount, amountPaid, parsed.due_date ?? null, null);
       const paidAt = normalizedStatus === "paid" ? new Date().toISOString() : null;
 
+      const trace = buildTracePayload({ tenantId, actorId: userId ?? undefined });
       const result = await billingRepository.create({
         ...parsed,
         amount: totalAmount,
@@ -196,37 +195,8 @@ export const billingService = {
         balance_due: balanceDue,
         paid_at: paidAt,
         status: normalizedStatus,
-      }, tenantId);
+      }, tenantId, userId, trace);
       const invoice = invoiceSchema.parse(result);
-
-      await auditLogService.logEvent({
-        tenant_id: tenantId,
-        user_id: userId,
-        action: "invoice_created",
-        action_type: "invoice_create",
-        entity_type: "invoice",
-        entity_id: invoice.id,
-        details: {
-          patient_id: invoice.patient_id,
-          invoice_code: invoice.invoice_code,
-          amount: invoice.amount,
-          due_date: invoice.due_date,
-          status: invoice.status,
-        },
-      });
-
-      if (invoice.status === "paid") {
-        await emitDomainEvent(
-          "InvoicePaid",
-          {
-            invoiceId: invoice.id,
-            patientId: invoice.patient_id,
-            amount: Number(invoice.amount),
-          },
-          { tenantId, userId },
-        );
-      }
-
       return invoice;
     } catch (err) {
       throw toServiceError(err, "Failed to create invoice");
@@ -277,7 +247,8 @@ export const billingService = {
         voided_at: normalizedStatus === "void" ? voidedAt : null,
       };
 
-      const result = await billingRepository.update(parsedId, normalizedUpdate, tenantId, expected_updated_at);
+      const trace = buildTracePayload({ tenantId, actorId: userId ?? undefined });
+      const result = await billingRepository.update(parsedId, normalizedUpdate, tenantId, expected_updated_at, userId, trace);
       if (!result) {
         if (expected_updated_at) {
           throw new ConflictError("Invoice was modified by another user", {
@@ -287,29 +258,6 @@ export const billingService = {
         throw new NotFoundError("Invoice not found");
       }
       const invoice = invoiceSchema.parse(result);
-
-      await auditLogService.logEvent({
-        tenant_id: tenantId,
-        user_id: userId,
-        action: "invoice_updated",
-        action_type: "invoice_update",
-        entity_type: "invoice",
-        entity_id: invoice.id,
-        details: normalizedUpdate as Record<string, unknown>,
-      });
-
-      if (existing.status !== "paid" && invoice.status === "paid") {
-        await emitDomainEvent(
-          "InvoicePaid",
-          {
-            invoiceId: invoice.id,
-            patientId: invoice.patient_id,
-            amount: Number(invoice.amount),
-          },
-          { tenantId, userId },
-        );
-      }
-
       return invoice;
     } catch (err) {
       throw toServiceError(err, "Failed to update invoice");
@@ -447,16 +395,9 @@ export const billingService = {
       await featureAccessService.assertFeatureAccess("billing");
       const parsedId = uuidSchema.parse(id);
       const { tenantId, userId } = getTenantContext();
-      const result = await billingRepository.archive(parsedId, tenantId, userId);
+      const trace = buildTracePayload({ tenantId, actorId: userId ?? undefined });
+      const result = await billingRepository.archive(parsedId, tenantId, userId, trace);
       const invoice = invoiceSchema.parse(result);
-      await auditLogService.logEvent({
-        tenant_id: tenantId,
-        user_id: userId,
-        action: "invoice_archived",
-        action_type: "invoice_archive",
-        entity_type: "invoice",
-        entity_id: invoice.id,
-      });
       return invoice;
     } catch (err) {
       throw toServiceError(err, "Failed to archive invoice");
@@ -468,16 +409,9 @@ export const billingService = {
       await featureAccessService.assertFeatureAccess("billing");
       const parsedId = uuidSchema.parse(id);
       const { tenantId, userId } = getTenantContext();
-      const result = await billingRepository.restore(parsedId, tenantId);
+      const trace = buildTracePayload({ tenantId, actorId: userId ?? undefined });
+      const result = await billingRepository.restore(parsedId, tenantId, userId, trace);
       const invoice = invoiceSchema.parse(result);
-      await auditLogService.logEvent({
-        tenant_id: tenantId,
-        user_id: userId,
-        action: "invoice_restored",
-        action_type: "invoice_restore",
-        entity_type: "invoice",
-        entity_id: invoice.id,
-      });
       return invoice;
     } catch (err) {
       throw toServiceError(err, "Failed to restore invoice");

@@ -10,8 +10,10 @@ import type {
   InvoiceWithPatient,
 } from "@/domain/billing/billing.types";
 import type { LimitOffsetParams, PagedResult } from "@/domain/shared/pagination.types";
+import { Capabilities } from "@/platform/authorization/capabilities";
 import { platformRepository } from "@/platform/data/platformRepository";
 import type { PlatformRepositoryContext } from "@/platform/data/platformRepository.context";
+import { commandTraceParams } from "@/services/operational/commandTrace";
 import { ServiceError } from "@/services/supabase/errors";
 import { assertOk } from "@/services/supabase/query";
 import { assertBillingMoneyNonNegative, assertInvoiceTenantScope } from "@/platform/billing/invariants";
@@ -20,7 +22,7 @@ function billingCtx(
   tenantId: string,
   action: string,
   classification: PlatformRepositoryContext["classification"] = "financial",
-  extra?: Pick<PlatformRepositoryContext, "signal" | "trace" | "subsystem">,
+  extra?: Pick<PlatformRepositoryContext, "signal" | "trace" | "subsystem" | "requiredCapabilities">,
 ): PlatformRepositoryContext {
   const isWrite = classification !== "readonly" && classification !== "eventual";
   return {
@@ -29,6 +31,9 @@ function billingCtx(
     tenantScoped: true,
     tenantId,
     subsystem: isWrite ? "billing" : undefined,
+    requiredCapabilities: isWrite
+      ? [Capabilities.billing.manage]
+      : [Capabilities.billing.view, Capabilities.billing.manage],
     ...extra,
   };
 }
@@ -56,6 +61,42 @@ function escapeSearchTerm(term: string) {
   return term.replace(/[%_]/g, "\\$&").replace(/,/g, "\\,");
 }
 
+type BillingInvoiceLifecycleOperation = "create" | "update" | "archive" | "restore";
+
+type BillingInvoiceCommandResult = {
+  result_code: string;
+  retryable: boolean;
+  idempotency_replay: boolean;
+  message: string | null;
+  invoice: Invoice | null;
+};
+
+function invoicePayload(input: Partial<InvoiceCreateInput & InvoiceUpdateInput>) {
+  const payload: Record<string, unknown> = {};
+  if (input.patient_id !== undefined) payload.patient_id = input.patient_id;
+  if (input.invoice_code !== undefined) payload.invoice_code = input.invoice_code;
+  if (input.service !== undefined) payload.service = input.service;
+  if (input.amount !== undefined) payload.amount = input.amount;
+  if (input.amount_paid !== undefined) payload.amount_paid = input.amount_paid;
+  if (input.balance_due !== undefined) payload.balance_due = input.balance_due;
+  if (input.invoice_date !== undefined) payload.invoice_date = input.invoice_date;
+  if (input.due_date !== undefined) payload.due_date = input.due_date;
+  if (input.paid_at !== undefined) payload.paid_at = input.paid_at;
+  if (input.voided_at !== undefined) payload.voided_at = input.voided_at;
+  if (input.void_reason !== undefined) payload.void_reason = input.void_reason;
+  if (input.status !== undefined) payload.status = input.status;
+  return payload;
+}
+
+function invoiceCommandRequestHash(
+  operation: BillingInvoiceLifecycleOperation,
+  invoiceId: string | null,
+  tenantId: string,
+  payload: Record<string, unknown>,
+) {
+  return JSON.stringify({ operation, invoiceId, tenantId, payload });
+}
+
 export interface BillingRepository {
   listPaged(params: InvoiceListParams, tenantId: string): Promise<PagedResult<Invoice>>;
   listPagedWithRelations(params: InvoiceListParams, tenantId: string): Promise<PagedResult<InvoiceWithPatient>>;
@@ -65,8 +106,19 @@ export interface BillingRepository {
   listByDateRange(start: string, end: string, tenantId: string, params?: LimitOffsetParams): Promise<Invoice[]>;
   listByPatient(patientId: string, tenantId: string, params?: LimitOffsetParams): Promise<Invoice[]>;
   listPayments(invoiceId: string, tenantId: string): Promise<InvoicePayment[]>;
-  create(input: InvoiceCreateInput, tenantId: string): Promise<Invoice>;
-  update(id: string, input: InvoiceUpdateInput, tenantId: string, expectedUpdatedAt?: string): Promise<Invoice | null>;
+  commandInvoiceLifecycle(input: {
+    operation: BillingInvoiceLifecycleOperation;
+    invoiceId?: string | null;
+    payload?: Record<string, unknown>;
+    tenantId: string;
+    userId?: string | null;
+    expectedUpdatedAt?: string | null;
+    idempotencyKey?: string | null;
+    requestHash?: string | null;
+    trace?: PlatformRepositoryContext["trace"];
+  }): Promise<BillingInvoiceCommandResult>;
+  create(input: InvoiceCreateInput, tenantId: string, userId?: string | null, trace?: PlatformRepositoryContext["trace"]): Promise<Invoice>;
+  update(id: string, input: InvoiceUpdateInput, tenantId: string, expectedUpdatedAt?: string, userId?: string | null, trace?: PlatformRepositoryContext["trace"]): Promise<Invoice | null>;
   postPaymentAtomic(
     invoiceId: string,
     input: InvoicePaymentCreateInput,
@@ -75,8 +127,8 @@ export interface BillingRepository {
     trace?: PlatformRepositoryContext["trace"],
   ): Promise<InvoicePaymentCommandResult>;
   createPayment(invoiceId: string, patientId: string, input: InvoicePaymentCreateInput, tenantId: string, userId?: string | null): Promise<InvoicePayment>;
-  archive(id: string, tenantId: string, userId: string): Promise<Invoice>;
-  restore(id: string, tenantId: string): Promise<Invoice>;
+  archive(id: string, tenantId: string, userId: string, trace?: PlatformRepositoryContext["trace"]): Promise<Invoice>;
+  restore(id: string, tenantId: string, userId?: string | null, trace?: PlatformRepositoryContext["trace"]): Promise<Invoice>;
   describe?(): {
     certified: boolean;
     tenantBound: boolean;
@@ -293,48 +345,57 @@ export const billingRepository: BillingRepository = {
 
     return (data ?? []) as InvoicePayment[];
   },
-  async create(input, tenantId) {
-    const payload: Record<string, unknown> = {
-      tenant_id: tenantId,
-      patient_id: input.patient_id,
-      invoice_code: input.invoice_code,
-      service: input.service,
-      amount: input.amount,
+  async commandInvoiceLifecycle(input) {
+    const { data, error } = await platformRepository.rpc("command_invoice_lifecycle", {
+      p_operation: input.operation,
+      p_invoice_id: input.invoiceId ?? null,
+      p_tenant_id: input.tenantId,
+      p_payload: input.payload ?? {},
+      p_expected_updated_at: input.expectedUpdatedAt ?? null,
+      p_idempotency_key: input.idempotencyKey ?? null,
+      p_request_hash: input.requestHash ?? null,
+      p_user_id: input.userId ?? null,
+      ...commandTraceParams(input.trace),
+    }, billingCtx(input.tenantId, `billing.invoice.${input.operation}`, "financial", input.trace ? { trace: input.trace } : undefined));
+    if (error) {
+      throw new ServiceError(error.message ?? "Failed to run invoice lifecycle command", {
+        code: error.code,
+        details: error,
+      });
+    }
+    const row = (data as any)?.[0];
+    if (!row) {
+      throw new ServiceError("Invoice lifecycle command returned no result", { code: "INVOICE_LIFECYCLE_EMPTY_RESULT" });
+    }
+    return {
+      result_code: row.result_code,
+      retryable: Boolean(row.retryable),
+      idempotency_replay: Boolean(row.idempotency_replay),
+      message: row.message ?? null,
+      invoice: (row.invoice ?? null) as Invoice | null,
     };
-
-    if (input.invoice_date !== undefined) payload.invoice_date = input.invoice_date;
-    if (input.due_date !== undefined) payload.due_date = input.due_date;
-    if (input.status !== undefined) payload.status = input.status;
-    if (input.amount_paid !== undefined) payload.amount_paid = input.amount_paid;
-    if (input.balance_due !== undefined) payload.balance_due = input.balance_due;
-    if (input.paid_at !== undefined) payload.paid_at = input.paid_at;
-    if (input.voided_at !== undefined) payload.voided_at = input.voided_at;
-    if (input.void_reason !== undefined) payload.void_reason = input.void_reason;
-
-    const result = await platformRepository
-      .from("invoices", billingCtx(tenantId, "billing.invoice.create"))
-      .insert(payload as never)
-      .select(INVOICE_COLUMNS)
-      .single();
-
-    return assertOk(result) as Invoice;
   },
-  async update(id, input, tenantId, expectedUpdatedAt) {
-    const payload: Record<string, unknown> = {};
-
-    if (input.patient_id !== undefined) payload.patient_id = input.patient_id;
-    if (input.invoice_code !== undefined) payload.invoice_code = input.invoice_code;
-    if (input.service !== undefined) payload.service = input.service;
-    if (input.amount !== undefined) payload.amount = input.amount;
-    if (input.amount_paid !== undefined) payload.amount_paid = input.amount_paid;
-    if (input.balance_due !== undefined) payload.balance_due = input.balance_due;
-    if (input.invoice_date !== undefined) payload.invoice_date = input.invoice_date;
-    if (input.due_date !== undefined) payload.due_date = input.due_date;
-    if (input.paid_at !== undefined) payload.paid_at = input.paid_at;
-    if (input.voided_at !== undefined) payload.voided_at = input.voided_at;
-    if (input.void_reason !== undefined) payload.void_reason = input.void_reason;
-    if (input.status !== undefined) payload.status = input.status;
-
+  async create(input, tenantId, userId, trace) {
+    const payload = invoicePayload(input);
+    const command = await this.commandInvoiceLifecycle({
+      operation: "create",
+      tenantId,
+      userId,
+      payload,
+      idempotencyKey: `invoice_create:${tenantId}:${input.invoice_code}`,
+      requestHash: invoiceCommandRequestHash("create", null, tenantId, payload),
+      trace,
+    });
+    if (!command.invoice) {
+      throw new ServiceError(command.message ?? "Invoice create command returned no invoice", {
+        code: "INVOICE_CREATE_EMPTY_RESULT",
+        details: { resultCode: command.result_code, retryable: command.retryable },
+      });
+    }
+    return command.invoice;
+  },
+  async update(id, input, tenantId, expectedUpdatedAt, userId, trace) {
+    const payload = invoicePayload(input);
     if (Object.keys(payload).length === 0) {
       const result = await platformRepository
         .from("invoices", billingCtx(tenantId, "billing.invoice.getForUpdate", "readonly"))
@@ -344,23 +405,21 @@ export const billingRepository: BillingRepository = {
         .single();
       return assertOk(result) as Invoice;
     }
-
-    let query = platformRepository
-      .from("invoices", billingCtx(tenantId, "billing.invoice.update"))
-      .update(payload)
-      .eq("id", id)
-      .eq("tenant_id", tenantId);
-    if (expectedUpdatedAt) {
-      query = query.eq("updated_at", expectedUpdatedAt);
+    const command = await this.commandInvoiceLifecycle({
+      operation: "update",
+      invoiceId: id,
+      tenantId,
+      userId,
+      payload,
+      expectedUpdatedAt,
+      idempotencyKey: expectedUpdatedAt ? `invoice_update:${id}:${expectedUpdatedAt}` : null,
+      requestHash: invoiceCommandRequestHash("update", id, tenantId, payload),
+      trace,
+    });
+    if (command.result_code === "CONFLICT") {
+      return null;
     }
-    const { data, error } = await query.select(INVOICE_COLUMNS).maybeSingle();
-    if (error) {
-      throw new ServiceError(error.message ?? "Failed to update invoice", {
-        code: error.code,
-        details: error,
-      });
-    }
-    return (data ?? null) as Invoice | null;
+    return command.invoice;
   },
   async postPaymentAtomic(invoiceId, input, tenantId, userId, trace?: PlatformRepositoryContext["trace"]) {
     assertBillingMoneyNonNegative(Number(input.amount), "payment.amount");
@@ -432,44 +491,62 @@ export const billingRepository: BillingRepository = {
 
     return assertOk(result) as InvoicePayment;
   },
-  async archive(id, tenantId, userId) {
-    const result = await platformRepository
-      .from("invoices", billingCtx(tenantId, "billing.invoice.archive"))
-      .update({ deleted_at: new Date().toISOString(), deleted_by: userId })
-      .eq("id", id)
-      .eq("tenant_id", tenantId)
-      .select(INVOICE_COLUMNS)
-      .single();
-
-    return assertOk(result) as Invoice;
+  async archive(id, tenantId, userId, trace) {
+    const payload = { deleted_by: userId };
+    const command = await this.commandInvoiceLifecycle({
+      operation: "archive",
+      invoiceId: id,
+      tenantId,
+      userId,
+      payload,
+      idempotencyKey: `invoice_archive:${id}`,
+      requestHash: invoiceCommandRequestHash("archive", id, tenantId, payload),
+      trace,
+    });
+    if (!command.invoice) {
+      throw new ServiceError(command.message ?? "Invoice archive command returned no invoice", {
+        code: "INVOICE_ARCHIVE_EMPTY_RESULT",
+        details: { resultCode: command.result_code, retryable: command.retryable },
+      });
+    }
+    return command.invoice;
   },
-  async restore(id, tenantId) {
-    const result = await platformRepository
-      .from("invoices", billingCtx(tenantId, "billing.invoice.restore"))
-      .update({ deleted_at: null, deleted_by: null })
-      .eq("id", id)
-      .eq("tenant_id", tenantId)
-      .select(INVOICE_COLUMNS)
-      .single();
-
-    return assertOk(result) as Invoice;
+  async restore(id, tenantId, userId, trace) {
+    const payload = {};
+    const command = await this.commandInvoiceLifecycle({
+      operation: "restore",
+      invoiceId: id,
+      tenantId,
+      userId,
+      payload,
+      idempotencyKey: `invoice_restore:${id}`,
+      requestHash: invoiceCommandRequestHash("restore", id, tenantId, payload),
+      trace,
+    });
+    if (!command.invoice) {
+      throw new ServiceError(command.message ?? "Invoice restore command returned no invoice", {
+        code: "INVOICE_RESTORE_EMPTY_RESULT",
+        details: { resultCode: command.result_code, retryable: command.retryable },
+      });
+    }
+    return command.invoice;
   },
   describe() {
     return {
-      certified: false,
+      certified: true,
       tenantBound: true,
       traceAware: true,
       runtimeAware: true,
-      capabilityAware: false,
+      capabilityAware: true,
       reconciliationAware: true,
       recoveryAware: true,
       evidenceAware: true,
       retryAware: true,
       staleContextSafe: true,
       metricsEnabled: true,
-      requiredCapabilities: [],
+      requiredCapabilities: [Capabilities.billing.view, Capabilities.billing.manage],
       exceptions: [
-        "Billing repository still has legacy non-atomic invoice create/update/status paths; postPaymentAtomic is the current DB-authoritative template.",
+        "Refund and reversal authority is not implemented yet; payment posting and invoice lifecycle mutations are DB-command authoritative.",
       ],
     };
   },
