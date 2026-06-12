@@ -1,4 +1,5 @@
 import type { SearchResult } from "@/domain/search/search.types";
+import { Capabilities } from "@/platform/authorization/capabilities";
 import { platformRepository } from "@/platform/data/platformRepository";
 import type { PlatformRepositoryContext } from "@/platform/data/platformRepository.context";
 import { ServiceError } from "@/services/supabase/errors";
@@ -9,6 +10,12 @@ function searchCtx(tenantId: string): PlatformRepositoryContext {
     classification: "readonly",
     tenantScoped: true,
     tenantId,
+    requiredCapabilities: [
+      Capabilities.patients.view,
+      Capabilities.patients.manage,
+      Capabilities.billing.view,
+      Capabilities.billing.manage,
+    ],
   };
 }
 
@@ -51,16 +58,21 @@ export const searchRepository: SearchRepository = {
       tenantBound: true,
       traceAware: true,
       runtimeAware: true,
-      capabilityAware: false,
+      capabilityAware: true,
       reconciliationAware: false,
       recoveryAware: false,
       evidenceAware: false,
       retryAware: true,
       staleContextSafe: true,
       metricsEnabled: true,
-      requiredCapabilities: [],
+      requiredCapabilities: [
+        Capabilities.patients.view,
+        Capabilities.patients.manage,
+        Capabilities.billing.view,
+        Capabilities.billing.manage,
+      ],
       exceptions: [
-        "Global search uses platformRepository but does not yet declare capability metadata.",
+        "Global search declares patient and billing read capabilities, but remains uncertified until cross-surface retention/search regressions cover every entity type.",
       ],
     };
   },

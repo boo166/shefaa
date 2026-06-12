@@ -101,6 +101,48 @@ async function upsertDeliveryLog(
   }
 }
 
+async function deliverJobNotification(
+  adminClient: ReturnType<typeof createClient>,
+  input: {
+    tenantId: string;
+    userId: string;
+    title: string;
+    body: string;
+    requestId: string;
+    sent: number;
+    failed: number;
+    skipped: number;
+  },
+) {
+  const deliveryKey = `billing-email-job:${input.tenantId}:${input.requestId}:${input.userId}`;
+  const { error } = await adminClient.rpc("command_notification_delivery", {
+    p_tenant_id: input.tenantId,
+    p_user_id: input.userId,
+    p_title: input.title,
+    p_body: input.body,
+    p_type: "billing_email_job",
+    p_delivery_key: deliveryKey,
+    p_source_event_id: null,
+    p_source_outbox_id: null,
+    p_read: false,
+    p_idempotency_key: deliveryKey,
+    p_request_hash: JSON.stringify({
+      type: "billing_email_job",
+      sent: input.sent,
+      failed: input.failed,
+      skipped: input.skipped,
+    }),
+    p_actor_user_id: input.userId,
+    p_request_trace_id: input.requestId,
+    p_operation_trace_id: "send-invoice-emails",
+    p_workflow_trace_id: "billing-email-delivery",
+  });
+
+  if (error) {
+    throw new Error(error.message ?? "Failed to persist invoice email notification evidence");
+  }
+}
+
 Deno.serve(async (req) => {
   initSentry();
   const { corsHeaders, errorResponse } = enforceCors(req, { allowedOrigins });
@@ -318,13 +360,15 @@ Deno.serve(async (req) => {
       }
     }
 
-    await adminClient.from("notifications").insert({
-      tenant_id: tenantId,
-      user_id: userId,
+    await deliverJobNotification(adminClient, {
+      tenantId,
+      userId,
       title: "Invoice email delivery completed",
       body: `Sent ${sent}, failed ${failed}, skipped ${skipped}.`,
-      type: "billing_email_job",
-      read: false,
+      requestId,
+      sent,
+      failed,
+      skipped,
     });
 
     await adminClient.rpc("log_audit_event", {

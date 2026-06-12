@@ -12,7 +12,6 @@ import { Capabilities } from "@/platform/authorization/capabilities";
 import { ValidationError, toServiceError } from "@/services/supabase/errors";
 import { getTenantContext } from "@/services/supabase/tenant";
 import { withAuthStaleGuard } from "@/services/auth/authContextSnapshot";
-import { auditLogService } from "@/services/settings/audit.service";
 import { patientDocumentsRepository } from "./patientDocuments.repository";
 import { requirePatientAccess } from "./patientAccess";
 import {
@@ -78,7 +77,7 @@ export const patientDocumentsService = {
           notes: parsed.notes ?? null,
         };
         const validated = patientDocumentCreateSchema.parse(metadata);
-        const created = await patientDocumentsRepository.createMetadata(validated, tenantId);
+        const created = await patientDocumentsRepository.createMetadata(validated, tenantId, userId);
         return patientDocumentSchema.parse(created);
       } catch (err) {
         await removePatientDocument(tenantId, uploadResult.filePath).catch(() => undefined);
@@ -104,21 +103,10 @@ export const patientDocumentsService = {
   async download(document: { file_path: string; id?: string; patient_id?: string }) {
     try {
       const parsed = patientDocumentSchema.pick({ file_path: true }).parse(document);
+      const documentId = uuidSchema.parse(document.id);
       const { tenantId, userId } = getTenantContext();
       requirePatientAccess({ tenantId, anyOfCapabilities: [...DOC_READ_CAPS] });
-      try {
-        await auditLogService.logEvent({
-          tenant_id: tenantId,
-          user_id: userId,
-          action: "patient_document_accessed",
-          action_type: "patient_document_download",
-          entity_type: "patient_document",
-          entity_id: document.id ?? "unknown",
-          details: { file_path: parsed.file_path, patient_id: document.patient_id ?? null },
-        });
-      } catch (auditErr) {
-        console.error("patient document access audit failed", auditErr);
-      }
+      await patientDocumentsRepository.recordAccess(documentId, tenantId, userId);
       return await downloadPatientDocument(tenantId, parsed.file_path);
     } catch (err) {
       throw toServiceError(err, "Failed to download patient document");
@@ -167,7 +155,8 @@ export const patientDocumentsService = {
       const { tenantId } = getTenantContext();
       requirePatientAccess({ tenantId, anyOfCapabilities: [...DOC_WRITE_CAPS] });
       return await withAuthStaleGuard(async () => {
-      const result = await patientDocumentsRepository.restore(parsedId, tenantId);
+      const { userId } = getTenantContext();
+      const result = await patientDocumentsRepository.restore(parsedId, tenantId, userId);
       return result ? patientDocumentSchema.parse(result) : null;
       });
     } catch (err) {

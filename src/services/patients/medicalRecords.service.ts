@@ -34,10 +34,10 @@ export const medicalRecordsService = {
   async create(input: MedicalRecordCreateInput) {
     try {
       const parsed = medicalRecordCreateSchema.parse(input);
-      const { tenantId } = getTenantContext();
+      const { tenantId, userId } = getTenantContext();
       requirePatientAccess({ tenantId, anyOfCapabilities: [...RECORD_WRITE] });
       return await withAuthStaleGuard(async () => {
-      const result = await medicalRecordsRepository.create(parsed, tenantId);
+      const result = await medicalRecordsRepository.create(parsed, tenantId, userId);
       return medicalRecordWithDoctorSchema.parse(result);
       });
     } catch (err) {
@@ -48,10 +48,10 @@ export const medicalRecordsService = {
     try {
       const parsedId = uuidSchema.parse(id);
       const parsed = medicalRecordUpdateSchema.parse(input);
-      const { tenantId } = getTenantContext();
+      const { tenantId, userId } = getTenantContext();
       requirePatientAccess({ tenantId, anyOfCapabilities: [...RECORD_WRITE] });
       return await withAuthStaleGuard(async () => {
-      const result = await medicalRecordsRepository.update(parsedId, parsed, tenantId);
+      const result = await medicalRecordsRepository.update(parsedId, parsed, tenantId, userId);
       return medicalRecordWithDoctorSchema.parse(result);
       });
     } catch (err) {
@@ -61,9 +61,9 @@ export const medicalRecordsService = {
   async remove(id: string) {
     try {
       const parsedId = uuidSchema.parse(id);
-      const { tenantId } = getTenantContext();
+      const { tenantId, userId } = getTenantContext();
       requirePatientAccess({ tenantId, anyOfCapabilities: [...RECORD_WRITE] });
-      return await withAuthStaleGuard(async () => medicalRecordsRepository.remove(parsedId, tenantId));
+      return await withAuthStaleGuard(async () => medicalRecordsRepository.remove(parsedId, tenantId, userId));
     } catch (err) {
       throw toServiceError(err, "Failed to delete medical record");
     }

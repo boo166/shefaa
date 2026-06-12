@@ -54,6 +54,45 @@ async function sendWhatsAppMessage(
   return res.ok;
 }
 
+async function deliverInAppReminderNotification(
+  supabase: ReturnType<typeof createClient>,
+  input: {
+    tenantId: string;
+    appointmentId: string;
+    doctorUserId: string;
+    bodyText: string;
+    requestId: string;
+  },
+) {
+  const deliveryKey = `appointment-reminder:${input.tenantId}:${input.appointmentId}:${input.doctorUserId}:in_app`;
+  const { error } = await supabase.rpc("command_notification_delivery", {
+    p_tenant_id: input.tenantId,
+    p_user_id: input.doctorUserId,
+    p_title: "Upcoming Appointment Reminder",
+    p_body: input.bodyText,
+    p_type: "appointment_reminder",
+    p_delivery_key: deliveryKey,
+    p_source_event_id: null,
+    p_source_outbox_id: null,
+    p_read: false,
+    p_idempotency_key: deliveryKey,
+    p_request_hash: JSON.stringify({
+      type: "appointment_reminder",
+      appointment_id: input.appointmentId,
+      user_id: input.doctorUserId,
+      channel: "in_app",
+    }),
+    p_actor_user_id: input.doctorUserId,
+    p_request_trace_id: input.requestId,
+    p_operation_trace_id: "appointment-reminders",
+    p_workflow_trace_id: "appointment-reminder-delivery",
+  });
+
+  if (error) {
+    throw new Error(error.message ?? "Failed to persist appointment reminder notification evidence");
+  }
+}
+
 Deno.serve(async (req) => {
   initSentry();
   const { corsHeaders, errorResponse } = enforceCors(req, {
@@ -311,24 +350,21 @@ Deno.serve(async (req) => {
                 .maybeSingle();
 
               if (!existingInAppLog) {
-                const { error: notifError } = await supabase.from("notifications").insert({
-                  tenant_id: appt.tenant_id,
-                  user_id: doctorUserId,
-                  title: "Upcoming Appointment Reminder",
-                  body: bodyText,
-                  type: "appointment_reminder",
-                  read: false,
+                await deliverInAppReminderNotification(supabase, {
+                  tenantId: appt.tenant_id,
+                  appointmentId: appt.id,
+                  doctorUserId,
+                  bodyText,
+                  requestId,
                 });
 
-                if (!notifError) {
-                  await supabase.from("appointment_reminder_log").insert({
-                    appointment_id: appt.id,
-                    tenant_id: appt.tenant_id,
-                    notified_user_id: doctorUserId,
-                    channel: "in_app",
-                  });
-                  notificationsCreated++;
-                }
+                await supabase.from("appointment_reminder_log").insert({
+                  appointment_id: appt.id,
+                  tenant_id: appt.tenant_id,
+                  notified_user_id: doctorUserId,
+                  channel: "in_app",
+                });
+                notificationsCreated++;
               }
             }
           }

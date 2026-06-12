@@ -67,6 +67,27 @@ describe("repository.describe metadata", () => {
     });
   });
 
+  it("documents patient repositories as command-authoritative and evidence-certified", () => {
+    for (const meta of [
+      patientRepository.describe?.(),
+      patientDocumentsRepository.describe?.(),
+      medicalRecordsRepository.describe?.(),
+    ]) {
+      expect(meta).toMatchObject({
+        certified: true,
+        tenantBound: true,
+        traceAware: true,
+        runtimeAware: true,
+        capabilityAware: true,
+        reconciliationAware: true,
+        recoveryAware: true,
+        evidenceAware: true,
+        staleContextSafe: true,
+        metricsEnabled: true,
+      });
+    }
+  });
+
   it("requires stronger guarantees before a repository may claim certification", () => {
     expect(() => assertCertifiedRepositoryDescribe({
       certified: true,

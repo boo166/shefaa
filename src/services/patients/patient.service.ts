@@ -7,7 +7,6 @@ import {
 } from "@/domain/patient/patient.schema";
 import { uuidListSchema, uuidSchema } from "@/domain/shared/identifiers.schema";
 import type { PatientCreateInput, PatientListParams, PatientUpdateInput } from "@/domain/patient/patient.types";
-import { emitDomainEvent } from "@/core/events";
 import { Capabilities } from "@/platform/authorization/capabilities";
 import { BusinessRuleError, ConflictError, NotFoundError, toServiceError } from "@/services/supabase/errors";
 import { getTenantContext } from "@/services/supabase/tenant";
@@ -72,13 +71,8 @@ export const patientService = {
           );
         }
       }
-      const result = await patientRepository.create(parsed, tenantId);
+      const result = await patientRepository.create(parsed, tenantId, userId);
       const patient = patientSchema.parse(result);
-      await emitDomainEvent(
-        "PatientRegistered",
-        { patientId: patient.id, fullName: patient.full_name },
-        { tenantId, userId },
-      );
       return patient;
       });
     } catch (err) {
@@ -89,7 +83,7 @@ export const patientService = {
     try {
       const parsedId = uuidSchema.parse(id);
       const parsed = patientUpdateSchema.parse(input);
-      const { tenantId } = getTenantContext();
+      const { tenantId, userId } = getTenantContext();
       requirePatientAccess({ tenantId, anyOfCapabilities: [...PATIENT_WRITE] });
       return await withAuthStaleGuard(async () => {
       if (parsed.status === "inactive") {
@@ -101,7 +95,7 @@ export const patientService = {
         }
       }
       const { expected_updated_at, ...updates } = parsed;
-      const result = await patientRepository.update(parsedId, updates, tenantId, expected_updated_at);
+      const result = await patientRepository.update(parsedId, updates, tenantId, expected_updated_at, userId);
       if (!result) {
         if (expected_updated_at) {
           throw new ConflictError("Patient was modified by another user", {
@@ -148,10 +142,10 @@ export const patientService = {
   async restore(id: string) {
     try {
       const parsedId = uuidSchema.parse(id);
-      const { tenantId } = getTenantContext();
+      const { tenantId, userId } = getTenantContext();
       requirePatientAccess({ tenantId, anyOfCapabilities: [...PATIENT_WRITE] });
       return await withAuthStaleGuard(async () => {
-      const result = await patientRepository.restore(parsedId, tenantId);
+      const result = await patientRepository.restore(parsedId, tenantId, userId);
       return patientSchema.parse(result);
       });
     } catch (err) {

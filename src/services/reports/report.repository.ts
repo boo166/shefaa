@@ -8,6 +8,7 @@ import type {
   RevenueByMonthRow,
   RevenueByServiceRow,
 } from "@/domain/reports/reports.types";
+import { Capabilities } from "@/platform/authorization/capabilities";
 import { platformRepository } from "@/platform/data/platformRepository";
 import type { PlatformRepositoryContext } from "@/platform/data/platformRepository.context";
 import { ServiceError } from "@/services/supabase/errors";
@@ -22,6 +23,7 @@ function reportCtx(
     classification,
     tenantScoped: Boolean(tenantId),
     tenantId: tenantId ?? null,
+    requiredCapabilities: [Capabilities.reports.view],
   };
 }
 
@@ -190,7 +192,10 @@ export const reportRepository: ReportRepository = {
       retryAware: true,
       staleContextSafe: true,
       metricsEnabled: true,
-      requiredCapabilities: ["reports.analytics.view"],
+      requiredCapabilities: [Capabilities.reports.view],
+      exceptions: [
+        "Reports declare analytics capabilities and tenant scope, but patient retention/search certification remains covered by targeted SQL regressions rather than full report repository certification.",
+      ],
     };
   },
 };

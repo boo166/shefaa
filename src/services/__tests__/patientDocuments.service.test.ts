@@ -4,6 +4,7 @@ import { patientDocumentsRepository } from "@/services/patients/patientDocuments
 import {
   uploadPatientDocument,
   removePatientDocument,
+  downloadPatientDocument,
 } from "@/services/patients/patientDocuments.storage";
 
 vi.mock("@/services/supabase/tenant", () => ({
@@ -37,6 +38,9 @@ vi.mock("@/services/patients/patientDocuments.repository", () => ({
   patientDocumentsRepository: {
     createMetadata: vi.fn(),
     listByPatient: vi.fn(),
+    recordAccess: vi.fn(),
+    archive: vi.fn(),
+    restore: vi.fn(),
     remove: vi.fn(),
   },
 }));
@@ -56,6 +60,7 @@ vi.mock("@/services/security/rateLimit.service", () => ({
 const repo = vi.mocked(patientDocumentsRepository, true);
 const storageUpload = vi.mocked(uploadPatientDocument, true);
 const storageRemove = vi.mocked(removePatientDocument, true);
+const storageDownload = vi.mocked(downloadPatientDocument, true);
 
 class FileMock {
   name: string;
@@ -116,6 +121,37 @@ describe("patientDocumentsService", () => {
     });
     expect(repo.createMetadata).toHaveBeenCalled();
     expect(result.file_name).toBe("doc.pdf");
+  });
+
+  it("records command evidence before downloading document storage", async () => {
+    repo.recordAccess.mockResolvedValue({
+      id: "00000000-0000-0000-0000-000000009999",
+      patient_id: "00000000-0000-0000-0000-000000000333",
+      tenant_id: "00000000-0000-0000-0000-000000000111",
+      file_name: "doc.pdf",
+      file_path: "00000000-0000-0000-0000-000000000111/patients/p1/doc.pdf",
+      file_size: 10,
+      file_type: "application/pdf",
+      uploaded_by: "00000000-0000-0000-0000-000000000222",
+      created_at: "2026-03-11T10:00:00Z",
+    } as any);
+    storageDownload.mockResolvedValue(new Blob(["content"], { type: "application/pdf" }));
+
+    await patientDocumentsService.download({
+      id: "00000000-0000-0000-0000-000000009999",
+      patient_id: "00000000-0000-0000-0000-000000000333",
+      file_path: "00000000-0000-0000-0000-000000000111/patients/p1/doc.pdf",
+    });
+
+    expect(repo.recordAccess).toHaveBeenCalledWith(
+      "00000000-0000-0000-0000-000000009999",
+      "00000000-0000-0000-0000-000000000111",
+      "00000000-0000-0000-0000-000000000222",
+    );
+    expect(storageDownload).toHaveBeenCalledWith(
+      "00000000-0000-0000-0000-000000000111",
+      "00000000-0000-0000-0000-000000000111/patients/p1/doc.pdf",
+    );
   });
 
   it("cleans up storage if metadata creation fails", async () => {

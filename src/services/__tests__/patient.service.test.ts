@@ -90,6 +90,7 @@ describe("patientService permissions", () => {
     expect(repo.create).toHaveBeenCalledWith(
       expect.objectContaining({ full_name: "Test Patient" }),
       tenantId,
+      userId,
     );
   });
 

@@ -266,6 +266,114 @@ const mockSupabase = vi.hoisted(() => ({
         error: null,
       };
     }
+    if (fn === "command_invoice_lifecycle") {
+      return {
+        data: [{
+          result_code: "OK",
+          retryable: false,
+          idempotency_replay: false,
+          message: null,
+          invoice: {
+            id: "00000000-0000-0000-0000-000000000333",
+            tenant_id: "00000000-0000-0000-0000-000000000111",
+            patient_id: "00000000-0000-0000-0000-000000000333",
+            invoice_code: "INV-1",
+            service: "Consultation",
+            amount: 100,
+            amount_paid: 0,
+            balance_due: 100,
+            invoice_date: "2026-03-10",
+            due_date: null,
+            paid_at: null,
+            voided_at: null,
+            void_reason: null,
+            status: "pending",
+            deleted_at: null,
+            deleted_by: null,
+            created_at: "2026-03-01T00:00:00.000Z",
+            updated_at: "2026-03-01T00:00:00.000Z",
+          },
+        }],
+        error: null,
+      };
+    }
+    if (fn === "command_patient_lifecycle") {
+      return {
+        data: [{
+          result_code: "OK",
+          retryable: false,
+          idempotency_replay: false,
+          message: null,
+          patient: {
+            id: "00000000-0000-0000-0000-000000000333",
+            tenant_id: "00000000-0000-0000-0000-000000000111",
+            patient_code: "PT-1",
+            full_name: "Jane Doe",
+            date_of_birth: null,
+            gender: null,
+            blood_type: null,
+            phone: null,
+            email: null,
+            address: null,
+            insurance_provider: null,
+            status: "active",
+            deleted_at: null,
+            deleted_by: null,
+            created_at: "2026-03-01T00:00:00.000Z",
+            updated_at: "2026-03-01T00:00:00.000Z",
+          },
+        }],
+        error: null,
+      };
+    }
+    if (fn === "command_patient_document_lifecycle") {
+      return {
+        data: [{
+          result_code: "OK",
+          retryable: false,
+          idempotency_replay: false,
+          message: null,
+          document: {
+            id: "00000000-0000-0000-0000-000000000333",
+            tenant_id: "00000000-0000-0000-0000-000000000111",
+            patient_id: "00000000-0000-0000-0000-000000000333",
+            file_name: "doc.pdf",
+            file_path: "00000000-0000-0000-0000-000000000111/patients/p1/doc.pdf",
+            file_size: 10,
+            file_type: "application/pdf",
+            uploaded_by: "00000000-0000-0000-0000-000000000222",
+            notes: null,
+            deleted_at: null,
+            deleted_by: null,
+            created_at: "2026-03-01T00:00:00.000Z",
+          },
+        }],
+        error: null,
+      };
+    }
+    if (fn === "command_medical_record_lifecycle") {
+      return {
+        data: [{
+          result_code: "OK",
+          retryable: false,
+          idempotency_replay: false,
+          message: null,
+          record: {
+            id: "00000000-0000-0000-0000-000000000333",
+            tenant_id: "00000000-0000-0000-0000-000000000111",
+            patient_id: "00000000-0000-0000-0000-000000000333",
+            doctor_id: "00000000-0000-0000-0000-000000000333",
+            record_date: "2026-03-10",
+            diagnosis: "Diagnosis",
+            notes: "Note",
+            record_type: "progress_note",
+            created_at: "2026-03-01T00:00:00.000Z",
+            doctors: { full_name: "Doctor" },
+          },
+        }],
+        error: null,
+      };
+    }
     if (fn === "command_notification_delivery" || fn === "command_notification_acknowledge") {
       return {
         data: [{
