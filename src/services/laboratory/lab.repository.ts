@@ -356,6 +356,52 @@ export const labRepository: LabRepository = {
     if (row.result_code === "CONFLICT") return null;
     return (row.lab_order ?? null) as LabResult | null;
   },
+  async amendResult(id, input, tenantId, userId, expectedUpdatedAt, trace) {
+    const payload = {
+      result_value: input.result_value ?? null,
+      result_unit: input.result_unit ?? null,
+      reference_range: input.reference_range ?? null,
+      abnormal_flag: input.abnormal_flag ?? null,
+      result_notes: input.result_notes ?? null,
+      amendment_reason: input.amendment_reason ?? null,
+    };
+    const { data, error } = await platformRepository.rpc("command_lab_result_amend", {
+      p_lab_order_id: id,
+      p_tenant_id: tenantId,
+      p_payload: payload,
+      p_expected_updated_at: expectedUpdatedAt ?? null,
+      p_idempotency_key: null,
+      p_request_hash: ["amend", id, tenantId, JSON.stringify(payload)].join("|"),
+      p_user_id: userId ?? null,
+      ...commandTraceParams(trace),
+    }, labCtx(tenantId, "lab.result.amend", "critical", trace));
+    if (error) {
+      throw new ServiceError(error.message ?? "Failed to amend lab result", {
+        code: error.code,
+        details: error,
+      });
+    }
+    const row = (data as any)?.[0];
+    if (!row?.lab_order) {
+      throw new ServiceError("Lab amend command returned no result", { code: "LAB_AMEND_EMPTY_RESULT" });
+    }
+    return row.lab_order as LabResult;
+  },
+  async listResultVersions(labOrderId: string, tenantId: string) {
+    const { data, error } = await platformRepository
+      .from("lab_result_versions", labCtx(tenantId, "lab.result.versions", "readonly"))
+      .select("id, version_number, result_value, result_unit, reference_range, abnormal_flag, result_notes, amendment_reason, created_at")
+      .eq("tenant_id", tenantId)
+      .eq("lab_order_id", labOrderId)
+      .order("version_number", { ascending: true });
+    if (error) {
+      throw new ServiceError(error.message ?? "Failed to load lab result versions", {
+        code: error.code,
+        details: error,
+      });
+    }
+    return data ?? [];
+  },
   async archive(id, tenantId, userId, trace) {
     const { data, error } = await platformRepository.rpc("command_lab_order", {
       p_operation: "archive",

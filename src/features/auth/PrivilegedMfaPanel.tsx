@@ -15,7 +15,7 @@ import { useAuth, buildPrivilegedSession } from "@/core/auth/authStore";
 import { useI18n } from "@/core/i18n/i18nStore";
 import { toast } from "@/hooks/use-toast";
 import { authService } from "@/services/auth/auth.service";
-import { auditLogService } from "@/services/settings/audit.service";
+import { identityAuditService } from "@/services/auth/identityAudit.service";
 import { privilegedSessionService } from "@/services/auth/privilegedSession.service";
 import { emitAuthMetric } from "@/services/auth/authMetrics";
 
@@ -107,18 +107,18 @@ export const PrivilegedMfaPanel = ({ mode = "embedded" }: PrivilegedMfaPanelProp
         secret: data.totp.secret,
         uri: data.totp.uri,
       });
-      await auditLogService.logEvent({
-        tenant_id: toAuditTenantId(user),
-        user_id: user.id,
-        action: privilegedSession.isPrivileged ? "privileged_mfa_enrollment_started" : "mfa_enrollment_started",
-        action_type: privilegedSession.isPrivileged ? "privileged_mfa_enrollment_started" : "mfa_enrollment_started",
-        entity_type: "auth_mfa_factor",
-        entity_id: data.id,
-        resource_type: "auth_mfa_factor",
+      await identityAuditService.logEvent({
+        action: "MFA_ENROLLED",
+        tenantId: toAuditTenantId(user),
+        userId: user.id,
+        actorUserId: user.id,
+        entityType: "auth_mfa_factor",
+        entityId: data.id,
         details: {
           role_tier: privilegedSession.roleTier,
           factor_type: "totp",
           scope: enrollScope,
+          phase: "enrollment_started",
         },
       });
     } catch (err) {
@@ -151,14 +151,13 @@ export const PrivilegedMfaPanel = ({ mode = "embedded" }: PrivilegedMfaPanelProp
       await authService.verifyTotpFactor({ factorId: enrollment.factorId, code });
       await reloadState();
       emitAuthMetric("mfa_enroll_succeeded", { scope: enrollScope });
-      await auditLogService.logEvent({
-        tenant_id: toAuditTenantId(user),
-        user_id: user.id,
-        action: privilegedSession.isPrivileged ? "privileged_mfa_enrolled" : "mfa_enrolled",
-        action_type: privilegedSession.isPrivileged ? "privileged_mfa_enrolled" : "mfa_enrolled",
-        entity_type: "auth_mfa_factor",
-        entity_id: enrollment.factorId,
-        resource_type: "auth_mfa_factor",
+      await identityAuditService.logEvent({
+        action: "MFA_ENROLLED",
+        tenantId: toAuditTenantId(user),
+        userId: user.id,
+        actorUserId: user.id,
+        entityType: "auth_mfa_factor",
+        entityId: enrollment.factorId,
         details: {
           role_tier: privilegedSession.roleTier,
           factor_type: "totp",
@@ -204,19 +203,19 @@ export const PrivilegedMfaPanel = ({ mode = "embedded" }: PrivilegedMfaPanelProp
     try {
       await authService.verifyTotpFactor({ factorId: sessionVerificationFactorId, code: sessionCode });
       await reloadState();
-      await auditLogService.logEvent({
-        tenant_id: toAuditTenantId(user),
-        user_id: user.id,
-        action: privilegedSession.isPrivileged ? "privileged_mfa_session_verified" : "mfa_session_verified",
-        action_type: privilegedSession.isPrivileged ? "privileged_mfa_session_verified" : "mfa_session_verified",
-        entity_type: "auth_mfa_factor",
-        entity_id: sessionVerificationFactorId,
-        resource_type: "auth_mfa_factor",
+      await identityAuditService.logEvent({
+        action: "MFA_ENROLLED",
+        tenantId: toAuditTenantId(user),
+        userId: user.id,
+        actorUserId: user.id,
+        entityType: "auth_mfa_factor",
+        entityId: sessionVerificationFactorId,
         details: {
           role_tier: privilegedSession.roleTier,
           factor_type: "totp",
           assurance_level: "aal2",
           scope: enrollScope,
+          phase: "session_verify",
         },
       });
       setSessionCode("");
@@ -235,14 +234,13 @@ export const PrivilegedMfaPanel = ({ mode = "embedded" }: PrivilegedMfaPanelProp
     try {
       await authService.removeMfaFactor(factorId);
       await reloadState();
-      await auditLogService.logEvent({
-        tenant_id: toAuditTenantId(user),
-        user_id: user.id,
-        action: privilegedSession.isPrivileged ? "privileged_mfa_reset" : "mfa_factor_removed",
-        action_type: privilegedSession.isPrivileged ? "privileged_mfa_reset" : "mfa_factor_removed",
-        entity_type: "auth_mfa_factor",
-        entity_id: factorId,
-        resource_type: "auth_mfa_factor",
+      await identityAuditService.logEvent({
+        action: "MFA_REMOVED",
+        tenantId: toAuditTenantId(user),
+        userId: user.id,
+        actorUserId: user.id,
+        entityType: "auth_mfa_factor",
+        entityId: factorId,
         details: {
           role_tier: privilegedSession.roleTier,
           scope: enrollScope,

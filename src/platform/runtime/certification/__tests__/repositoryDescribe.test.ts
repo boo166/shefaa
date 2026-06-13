@@ -59,12 +59,11 @@ describe("repository.describe metadata", () => {
       reconciliationAware: true,
       recoveryAware: true,
       evidenceAware: true,
+      retryAware: true,
       staleContextSafe: true,
       metricsEnabled: true,
-      exceptions: [
-        expect.stringContaining("drift query"),
-      ],
     });
+    expect(notificationRepository.describe?.().exceptions).toBeUndefined();
   });
 
   it("documents patient repositories as command-authoritative and evidence-certified", () => {
@@ -85,6 +84,29 @@ describe("repository.describe metadata", () => {
         staleContextSafe: true,
         metricsEnabled: true,
       });
+    }
+  });
+
+  it("documents billing repositories as command-authoritative and evidence-certified", () => {
+    for (const meta of [
+      billingRepository.describe?.(),
+      billingReconciliationRepository.describe?.(),
+    ]) {
+      expect(() => assertCertifiedRepositoryDescribe(meta!)).not.toThrow();
+      expect(meta).toMatchObject({
+        certified: true,
+        tenantBound: true,
+        traceAware: true,
+        runtimeAware: true,
+        capabilityAware: true,
+        reconciliationAware: true,
+        recoveryAware: true,
+        evidenceAware: true,
+        retryAware: true,
+        staleContextSafe: true,
+        metricsEnabled: true,
+      });
+      expect(meta?.exceptions).toBeUndefined();
     }
   });
 

@@ -35,6 +35,16 @@ function isAuthTokenUrl(urlStr: string) {
   }
 }
 
+function isEdgeFunctionUrl(urlStr: string) {
+  try {
+    const base = env.VITE_SUPABASE_URL;
+    const u = new URL(urlStr, base);
+    return u.pathname.includes("/functions/v1/");
+  } catch {
+    return urlStr.includes("/functions/v1/");
+  }
+}
+
 function requestUrlString(input: RequestInfo | URL): string {
   if (typeof input === "string") return input;
   if (input instanceof URL) return input.href;
@@ -83,7 +93,7 @@ export function createSupabaseAuthFetch(): typeof fetch {
       return res;
     }
 
-    if (res.status !== 401) {
+    if (res.status !== 401 || isEdgeFunctionUrl(urlStr)) {
       return res;
     }
 

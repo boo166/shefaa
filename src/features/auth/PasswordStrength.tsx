@@ -13,7 +13,7 @@ interface Rule {
 }
 
 const RULES: Rule[] = [
-  { key: "minLength", test: (pw) => pw.length >= 8 },
+  { key: "minLength", test: (pw) => pw.length >= 12 },
   { key: "uppercase", test: (pw) => /[A-Z]/.test(pw) },
   { key: "lowercase", test: (pw) => /[a-z]/.test(pw) },
   { key: "number", test: (pw) => /\d/.test(pw) },

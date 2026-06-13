@@ -37,6 +37,7 @@ export {
   createOperationalEvidenceEnvelope,
   evidenceFromDryReconciliationSummary,
   evidenceFromEventOutbox,
+  evidenceFromNotificationDelivery,
   evidenceFromReconciliationFinding,
   evidenceFromReconciliationRun,
   evidenceFromRecoveryAction,

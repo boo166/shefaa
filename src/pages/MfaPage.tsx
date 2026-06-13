@@ -4,6 +4,7 @@ import { ShieldCheck, Loader2 } from "lucide-react";
 import { useAuth, isSuperAdmin, type AuthenticatorAssuranceLevel } from "@/core/auth/authStore";
 import { useI18n } from "@/core/i18n/i18nStore";
 import { authService } from "@/services/auth/auth.service";
+import { identityAuditService } from "@/services/auth/identityAudit.service";
 import { privilegedSessionService } from "@/services/auth/privilegedSession.service";
 import { emitAuthMetric } from "@/services/auth/authMetrics";
 import { sessionVersionFromSupabaseUser } from "@/services/auth/sessionVersion";
@@ -96,6 +97,12 @@ export const MfaPage = () => {
       navigate(targetPath, { replace: true });
     } catch (err) {
       emitAuthMetric("mfa_challenge_failed", { reason: "login", method: "totp" });
+      identityAuditService.logAction("MFA_CHALLENGE_FAILED", {
+        userId: user?.id,
+        tenantId: user?.tenantId,
+        actorUserId: user?.id,
+        details: { method: "totp" },
+      });
       setAuthMachineState("mfa_required");
       const message = err instanceof Error ? err.message : t("common.error");
       toast({ title: t("auth.mfa.loginFailedTitle"), description: message, variant: "destructive" });
@@ -114,13 +121,20 @@ export const MfaPage = () => {
         throw new Error(t("auth.mfa.recoveryInvalid"));
       }
       await privilegedSessionService.refreshNow();
-      await bumpSessionVersionAfterMfa("aal2");
+      // Option B: recovery unlocks login (AAL1); privileged actions require TOTP step-up.
+      await bumpSessionVersionAfterMfa("aal1");
       markSessionVerified();
       emitAuthMetric("mfa_challenge_succeeded", { reason: "login", method: "recovery" });
       setAuthMachineState("authenticated");
       navigate(targetPath, { replace: true });
     } catch (err) {
       emitAuthMetric("mfa_challenge_failed", { reason: "login", method: "recovery" });
+      identityAuditService.logAction("MFA_CHALLENGE_FAILED", {
+        userId: user?.id,
+        tenantId: user?.tenantId,
+        actorUserId: user?.id,
+        details: { method: "recovery" },
+      });
       setAuthMachineState("mfa_required");
       const message = err instanceof Error ? err.message : t("common.error");
       toast({ title: t("auth.mfa.loginFailedTitle"), description: message, variant: "destructive" });

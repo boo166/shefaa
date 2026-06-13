@@ -1,15 +1,18 @@
 # Domain Certification Report
 
-Date: 2026-06-07
+Date: 2026-06-13  
+Status: **Production Readiness Review** (not yet **Production Readiness Certified**)
 
 This audit answers a different question from platform hardening: each score reflects whether the business domain uses the platform correctly, enforces its intended rules, and has executable evidence proving those rules. Passing service-layer tests does not count as DB authority proof unless SQL, RLS, command, outbox, or reconciliation evidence exists.
+
+Domain authority scores below reflect **local/CI evidence**. Operational readiness certification requires passing all four gates in the section below on **staging**.
 
 ## Executive Scorecard
 
 | Module | Score | Platform | Business Rules | Workflow | Evidence | Ops | Certification |
 | --- | ---: | --- | --- | --- | --- | --- | --- |
-| Billing | 86% | PARTIAL | PASS | PASS | PASS | PASS | Strong, not fully certified |
-| Patients | 74% | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | Needs evidence and retention closure |
+| Billing | 92% | PASS | PASS | PASS | PASS | PASS | Enterprise-grade post-payment authority |
+| Patients | 88% | PASS | PASS | PASS | PASS | PARTIAL | Visibility hardened; reconciliation wired |
 | Appointments | 85% | PASS | PASS | PASS | PASS | PARTIAL | Operational authority certified; reconciliation remains |
 | Notifications | 85% | PASS | PASS | PASS | PASS | PARTIAL | Operational authority certified; scheduled reconciliation remains |
 | Insurance | 84% | PASS | PARTIAL | PASS | PASS | PASS | Certified with coverage/duplicate gaps |
@@ -164,3 +167,59 @@ Commands run for this report:
 - PASS: `npm run test:db`: 18 SQL files, 283 tests passed after applying pending local migration `20260607172000_notification_operational_authority`.
 
 The appointment and notification DB evidence is now refreshed against the local Supabase stack.
+
+## Operational Readiness Gates
+
+Certification status advances to **Production Readiness Certified** only when all four gates pass on staging with recorded evidence.
+
+| Phase | Gate | Tooling | Status | Evidence |
+| --- | --- | --- | --- | --- |
+| 1 | Load certification | `npm run ops:run-load-game-day` | **PARTIAL** | [staging-load-cert-results-2026-06-13.md](ops/staging-load-cert-results-2026-06-13.md) |
+| 2 | Security audit | `npm run ops:run-security-gate` | **PASS** (reachable) | [security-audit-triage-2026-06-13.md](ops/security-audit-triage-2026-06-13.md) |
+| 3 | Disaster recovery | `npm run ops:run-dr-drill` | **PARTIAL** | [dr-drill-2026-06-13.md](ops/dr-drill-2026-06-13.md) |
+| 4 | User acceptance (UAT) | [uat/day-in-the-life/](ops/uat/day-in-the-life/) | **PENDING** | [uat-results-2026-06-13.md](ops/uat-results-2026-06-13.md) |
+| 5 | Production checklist | [production-go-live-checklist.md](ops/production-go-live-checklist.md) | **PENDING** | [go-live-readiness-2026-06-13.md](ops/go-live-readiness-2026-06-13.md) |
+
+Run all automated gates: `npm run ops:run-all-gates`
+
+### Phase 1 — Load Targets (staging)
+
+| Target | Script | Pass gate |
+| --- | --- | --- |
+| 100k patients | `scripts/load-cert/seed-staging-volume.mjs` | count ≥ 100k |
+| 100k invoices | `scripts/load-cert/seed-staging-volume.mjs` | count ≥ 100k |
+| 1M notifications | `scripts/load-cert/seed-staging-volume.mjs` | count ≥ 1M |
+| Billing throughput | `scripts/load-cert/billing-payments.mjs` | p95 ≤ 500ms; reconciliation critical = 0 |
+| Notification delivery | `scripts/load-cert/notification-deliveries.mjs` | reconciliation critical = 0 |
+| 50 concurrent users | `scripts/load-cert/concurrent-users.mjs` | p95 ≤ 2000ms; error rate ≤ 1% |
+
+### Phase 2 — Security Targets
+
+- `npm audit`: zero critical/high (or documented exception)
+- No `SUPABASE_SERVICE_ROLE_KEY` in client bundle (`scripts/ops/run-security-audit.mjs`)
+- Edge functions on service-role allowlist only
+- `pg_policies` report: zero sensitive tables without tenant isolation
+
+### Phase 3 — DR Targets
+
+- Backup → destroy target → restore → `backup-smoke.sql` PASS
+- Dry reconciliation: billing + notifications critical = 0
+- Two-tenant manual isolation check PASS
+
+### Phase 4 — UAT Targets
+
+All five roles complete day-in-the-life checklists without developer intervention:
+
+- Receptionist, Doctor, Accountant, Pharmacist, Lab Technician
+
+### Certification Rule
+
+```
+Production Readiness Certified =
+  Load PASS
+  AND Security PASS
+  AND DR PASS
+  AND UAT PASS
+```
+
+Until then, this document remains at **Production Readiness Review**.

@@ -116,6 +116,47 @@ function startLeaseHeartbeat() {
   }, Math.floor(LEASE_TTL_MS / 2));
 }
 
+const SCOPED_STORAGE_KEY_PATTERNS = [
+  /^shefaa-cache:([^:]+):([^:]+):/,
+  /^shefaa-features:([^:]+):([^:]+):/,
+  /^lang:([^:]+):([^:]+)$/,
+  /^calendar:([^:]+):([^:]+)$/,
+] as const;
+
+function isPreAuthSentinelScope(keyTenantId: string, keyUserId: string) {
+  return keyTenantId === "public" && keyUserId === "anon";
+}
+
+/** Removes scoped localStorage keys that do not match the active principal (leader tab only). */
+export function purgeCrossPrincipalScopedStorageLeaderOnly(expected: { userId: string; tenantId: string }) {
+  if (typeof localStorage === "undefined") return;
+  if (!tryAcquireOrRenewLease() && !isLeaderLeaseHolder()) return;
+
+  const { userId, tenantId } = expected;
+  const toRemove: string[] = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (!k) continue;
+    for (const pattern of SCOPED_STORAGE_KEY_PATTERNS) {
+      const match = k.match(pattern);
+      if (!match) continue;
+      const [, keyTenantId, keyUserId] = match;
+      if (isPreAuthSentinelScope(keyTenantId, keyUserId)) break;
+      if (keyTenantId !== tenantId || keyUserId !== userId) {
+        toRemove.push(k);
+      }
+      break;
+    }
+  }
+  for (const k of toRemove) {
+    try {
+      localStorage.removeItem(k);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 function clearTenantScopedStorageLeaderOnly(parts: { userId: string; tenantId: string }) {
   if (typeof localStorage === "undefined") return;
   if (!tryAcquireOrRenewLease() && !isLeaderLeaseHolder()) return;
@@ -213,18 +254,25 @@ async function runPerTabBoundaryReset(event: AuthTransitionEventV1, parts: { use
       event.type === "USER_CHANGED"
       || event.type === "SIGNED_OUT"
       || event.type === "BOUNDARY_RESET"
+      || event.type === "TENANT_CHANGED"
     ) {
       // These transitions can leave behind scoped keys from a different principal (user/tenant).
       // Clearing all principal-scoped preference keys avoids cross-user leakage.
       clearAllPrincipalScopedPreferencesLeaderOnly();
     }
     clearTenantScopedStorageLeaderOnly(parts);
+    const projection = handlers?.getAuthProjection();
+    if (projection?.isAuthenticated && projection.userId) {
+      purgeCrossPrincipalScopedStorageLeaderOnly(handlers!.getPrincipalParts());
+    }
   }
   if (import.meta.env.DEV) {
-    const residue = queryClient.getQueryCache().getAll().length;
-    if (residue > 0) {
-      console.warn("[auth] query cache non-empty after boundary reset", residue);
-    }
+    queueMicrotask(() => {
+      const residue = queryClient.getQueryCache().getAll().length;
+      if (residue > 0) {
+        console.warn("[auth] query cache non-empty after boundary reset", residue);
+      }
+    });
   }
 }
 
@@ -311,6 +359,7 @@ export async function runTenantScopedCacheReset(params: {
     tryAcquireOrRenewLease();
   }
   if (isLeaderLeaseHolder()) {
+    clearAllPrincipalScopedPreferencesLeaderOnly();
     clearTenantScopedStorageLeaderOnly(params.previousPrincipalParts);
   }
 }

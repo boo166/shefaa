@@ -11,9 +11,13 @@ import { PageContainer, SectionHeader } from "@/components/layout/AppLayout";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { DollarSign, CreditCard, FileText, TrendingUp, Plus, Ban, Wallet } from "lucide-react";
+import { DollarSign, CreditCard, FileText, TrendingUp, Plus, Ban, Wallet, RotateCcw, FileX } from "lucide-react";
 import { NewInvoiceModal } from "./NewInvoiceModal";
 import { PostPaymentDialog } from "./PostPaymentDialog";
+import { RefundDialog } from "./RefundDialog";
+import { WriteOffDialog } from "./WriteOffDialog";
+import { PaymentReversalDialog } from "./PaymentReversalDialog";
+import { FinancialIntegrityPanel } from "./FinancialIntegrityPanel";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { selectEffectiveTenantId, useAuth } from "@/core/auth/authStore";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -50,6 +54,9 @@ export const BillingPage = () => {
   const [showModal, setShowModal] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<InvoiceWithPatient | null>(null);
   const [voidInvoice, setVoidInvoice] = useState<InvoiceWithPatient | null>(null);
+  const [refundInvoice, setRefundInvoice] = useState<InvoiceWithPatient | null>(null);
+  const [writeOffInvoice, setWriteOffInvoice] = useState<InvoiceWithPatient | null>(null);
+  const [reversalInvoice, setReversalInvoice] = useState<InvoiceWithPatient | null>(null);
   const [voidReason, setVoidReason] = useState("");
   const [voiding, setVoiding] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
@@ -231,6 +238,39 @@ export const BillingPage = () => {
               {t("billing.payment.action")}
             </Button>
           ) : null}
+          {Number(invoice.amount_paid) > 0 && invoice.status !== "void" ? (
+            <>
+              <Button
+                onClick={() => setRefundInvoice(invoice)}
+                variant="outline"
+                size="sm"
+                className="gap-1"
+              >
+                <RotateCcw className="h-4 w-4" />
+                {t("billing.integrity.refundAction")}
+              </Button>
+              <Button
+                onClick={() => setReversalInvoice(invoice)}
+                variant="outline"
+                size="sm"
+                className="gap-1"
+              >
+                <Ban className="h-4 w-4" />
+                {t("billing.integrity.reversalAction")}
+              </Button>
+            </>
+          ) : null}
+          {invoice.status !== "void" && Number(invoice.amount_paid) === 0 && Number(invoice.balance_due) > 0 ? (
+            <Button
+              onClick={() => setWriteOffInvoice(invoice)}
+              variant="outline"
+              size="sm"
+              className="gap-1"
+            >
+              <FileX className="h-4 w-4" />
+              {t("billing.integrity.writeOffAction")}
+            </Button>
+          ) : null}
           {invoice.status !== "void" && Number(invoice.amount_paid) === 0 ? (
             <Button
               onClick={() => {
@@ -274,6 +314,8 @@ export const BillingPage = () => {
           <AlertDescription>{billingErrorMessage}</AlertDescription>
         </Alert>
       ) : null}
+
+      <FinancialIntegrityPanel />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard title={t("billing.totalRevenue")} value={formatCurrency(totalRevenue, locale)} icon={DollarSign} />
@@ -333,6 +375,27 @@ export const BillingPage = () => {
         invoice={selectedInvoice}
         open={!!selectedInvoice}
         onClose={() => setSelectedInvoice(null)}
+        onSuccess={invalidateInvoices}
+      />
+
+      <RefundDialog
+        invoice={refundInvoice}
+        open={!!refundInvoice}
+        onClose={() => setRefundInvoice(null)}
+        onSuccess={invalidateInvoices}
+      />
+
+      <WriteOffDialog
+        invoice={writeOffInvoice}
+        open={!!writeOffInvoice}
+        onClose={() => setWriteOffInvoice(null)}
+        onSuccess={invalidateInvoices}
+      />
+
+      <PaymentReversalDialog
+        invoice={reversalInvoice}
+        open={!!reversalInvoice}
+        onClose={() => setReversalInvoice(null)}
         onSuccess={invalidateInvoices}
       />
 

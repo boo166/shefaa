@@ -34,6 +34,7 @@ import {
   attachAuthSessionOrchestrator,
   broadcastAuthEvent,
   initAuthMultiTabSync,
+  purgeCrossPrincipalScopedStorageLeaderOnly,
   runAuthCleanupEvent,
   runPrincipalBoundaryIfNeeded,
   runTenantScopedCacheReset,
@@ -51,12 +52,14 @@ function attachHandlers(overrides: Partial<{
   reset: () => void | Promise<void>;
   setState: (next: AuthMachineState) => void;
 }> = {}) {
+  let projection = overrides.projection ?? { isAuthenticated: true, userId: "u1" };
   attachAuthSessionOrchestrator({
     getTabId: () => "tab-a",
     getPrincipalKey: () => overrides.principalKey ?? "u1:tenant-1",
     getPrincipalParts: () => overrides.parts ?? ({ userId: "u1", tenantId: "tenant-1" }),
     resetAuthStores: async () => {
       authHarness.calls.push("resetStores");
+      projection = { isAuthenticated: false, userId: null };
       await overrides.reset?.();
     },
     setAuthMachineState: (next) => {
@@ -64,7 +67,7 @@ function attachHandlers(overrides: Partial<{
       overrides.setState?.(next);
     },
     getAuthMachineState: () => overrides.machineState ?? "authenticated",
-    getAuthProjection: () => overrides.projection ?? ({ isAuthenticated: true, userId: "u1" }),
+    getAuthProjection: () => projection,
   });
 }
 
@@ -229,6 +232,32 @@ describe("authSessionOrchestrator", () => {
       "abort:trace-tenant",
     ]);
     expect(localStorage.getItem("lang:tenant-1:u1")).toBeNull();
+  });
+
+  it("purges scoped storage keys from other principals while keeping the active scope", () => {
+    localStorage.setItem("lang:tenant-1:u1", "ar");
+    localStorage.setItem("lang:tenant-2:u1", "en");
+    localStorage.setItem("lang:tenant-3:u-other", "fr");
+    localStorage.setItem("shefaa-cache:tenant-2:u1:patients", "stale");
+    localStorage.setItem("lang:public:anon", "en");
+
+    purgeCrossPrincipalScopedStorageLeaderOnly({ userId: "u1", tenantId: "tenant-2" });
+
+    expect(localStorage.getItem("lang:tenant-1:u1")).toBeNull();
+    expect(localStorage.getItem("lang:tenant-2:u1")).toBe("en");
+    expect(localStorage.getItem("lang:tenant-3:u-other")).toBeNull();
+    expect(localStorage.getItem("shefaa-cache:tenant-2:u1:patients")).toBe("stale");
+    expect(localStorage.getItem("lang:public:anon")).toBe("en");
+  });
+
+  it("clears all lang preferences on tenant_changed boundary reset", async () => {
+    localStorage.setItem("lang:tenant-1:u1", "ar");
+    localStorage.setItem("lang:tenant-2:u1", "en");
+
+    await runAuthCleanupEvent(event({ type: "TENANT_CHANGED" }));
+
+    expect(localStorage.getItem("lang:tenant-1:u1")).toBeNull();
+    expect(localStorage.getItem("lang:tenant-2:u1")).toBeNull();
   });
 
   it("broadcastAuthEvent always writes the storage fallback for browsers without BroadcastChannel delivery", () => {

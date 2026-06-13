@@ -59,6 +59,9 @@ function mapServiceError(err: ServiceError) {
     return new AuthorizationError(err.message, { code: "FRESH_AUTH_REQUIRED", details: err.details });
   }
   if (err.code === "42501" || err.code === "PGRST301") {
+    if (err.message.toLowerCase().includes("recent password authentication")) {
+      return new AuthorizationError(err.message, { code: "FRESH_AUTH_REQUIRED", details: err.details });
+    }
     return new AuthorizationError(err.message, { code: err.code, details: err.details });
   }
   if (err.code === "PGRST116") return new NotFoundError(err.message, { code: err.code, details: err.details });

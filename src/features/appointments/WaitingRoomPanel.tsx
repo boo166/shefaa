@@ -1,10 +1,12 @@
 import { useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useI18n } from "@/core/i18n/i18nStore";
 import { Button } from "@/components/primitives/Button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/shared/components/StatusBadge";
 import { formatDate } from "@/shared/utils/formatDate";
 import type { AppointmentQueueStatus, AppointmentQueueWithRelations } from "@/domain/appointmentQueue/appointmentQueue.types";
+import { QueueKanbanBoardPanel } from "./QueueKanbanBoardPanel";
 
 interface WaitingRoomPanelProps {
   entries: AppointmentQueueWithRelations[];
@@ -53,7 +55,16 @@ function queueStatusVariant(status: AppointmentQueueStatus) {
 
 export const WaitingRoomPanel = ({ entries, isLoading, onUpdateStatus }: WaitingRoomPanelProps) => {
   const { locale, calendarType, t } = useI18n(["appointments"]);
+  const [searchParams, setSearchParams] = useSearchParams();
   const [statusFilter, setStatusFilter] = useState<AppointmentQueueStatus | "all">("all");
+  const tvMode = searchParams.get("tv") === "1";
+
+  const toggleTvMode = () => {
+    const next = new URLSearchParams(searchParams);
+    if (tvMode) next.delete("tv");
+    else next.set("tv", "1");
+    setSearchParams(next, { replace: true });
+  };
 
   const counts = useMemo(() => (
     entries.reduce<Record<AppointmentQueueStatus, number>>((acc, entry) => {
@@ -91,106 +102,118 @@ export const WaitingRoomPanel = ({ entries, isLoading, onUpdateStatus }: Waiting
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-2">
-        {filters.map((filter) => (
-          <Button
-            key={filter.value}
-            type="button"
-            size="sm"
-            variant={statusFilter === filter.value ? "default" : "outline"}
-            onClick={() => setStatusFilter(filter.value)}
-          >
-            {filter.label} ({filter.count})
-          </Button>
-        ))}
+      <div className="hidden md:block">
+        <QueueKanbanBoardPanel
+          entries={entries}
+          isLoading={isLoading}
+          onUpdateStatus={onUpdateStatus}
+          tvMode={tvMode}
+          onToggleTvMode={toggleTvMode}
+        />
       </div>
 
-      {isLoading ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("appointments.queue.title")}</CardTitle>
-            <CardDescription>{t("appointments.queue.loading")}</CardDescription>
-          </CardHeader>
-        </Card>
-      ) : visibleEntries.length === 0 ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("appointments.queue.title")}</CardTitle>
-            <CardDescription>{t("appointments.queue.empty")}</CardDescription>
-          </CardHeader>
-        </Card>
-      ) : (
-        <div className="grid gap-3">
-          {visibleEntries.map((entry) => (
-            <Card key={entry.id}>
-              <CardHeader className="space-y-3">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <CardTitle className="text-lg">
-                      {entry.appointments?.patients?.full_name ?? t("appointments.queue.unknownPatient")}
-                    </CardTitle>
-                    <CardDescription>
-                      {t("appointments.queue.appointmentSummary", {
-                        doctorName: entry.appointments?.doctors?.full_name ?? t("appointments.queue.unassignedDoctor"),
-                        date: entry.appointments ? formatDate(entry.appointments.appointment_date, locale, "datetime", calendarType) : t("appointments.queue.timeUnavailable"),
-                      })}
-                    </CardDescription>
-                  </div>
-                  <StatusBadge variant={queueStatusVariant(entry.status)} dot>
-                    {queueStatusLabel(entry.status, t)}
-                  </StatusBadge>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-3">
-                  <div>
-                    {t("appointments.queue.checkedInAt", { time: formatDate(entry.check_in_at, locale, "time", calendarType) })}
-                  </div>
-                  <div>
-                    {t("appointments.queue.calledAt", { time: entry.called_at ? formatDate(entry.called_at, locale, "time", calendarType) : t("appointments.queue.notYet") })}
-                  </div>
-                  <div>
-                    {t("appointments.queue.completedAt", { time: entry.completed_at ? formatDate(entry.completed_at, locale, "time", calendarType) : t("appointments.queue.notYet") })}
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  {entry.status === "waiting" && (
-                    <>
-                      <Button size="sm" onClick={() => void onUpdateStatus(entry.id, "called")}>
-                        {t("appointments.queue.actions.callPatient")}
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={() => void onUpdateStatus(entry.id, "no_show")}>
-                        {t("appointments.queue.actions.markNoShow")}
-                      </Button>
-                    </>
-                  )}
-
-                  {entry.status === "called" && (
-                    <>
-                      <Button size="sm" onClick={() => void onUpdateStatus(entry.id, "in_service")}>
-                        {t("appointments.queue.actions.startVisit")}
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={() => void onUpdateStatus(entry.id, "waiting")}>
-                        {t("appointments.queue.actions.backToWaiting")}
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={() => void onUpdateStatus(entry.id, "no_show")}>
-                        {t("appointments.queue.actions.markNoShow")}
-                      </Button>
-                    </>
-                  )}
-
-                  {entry.status === "in_service" && (
-                    <Button size="sm" variant="success" onClick={() => void onUpdateStatus(entry.id, "done")}>
-                      {t("appointments.queue.actions.completeVisit")}
-                    </Button>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+      <div className={tvMode ? "hidden" : "md:hidden space-y-4"}>
+        <div className="flex flex-wrap gap-2">
+          {filters.map((filter) => (
+            <Button
+              key={filter.value}
+              type="button"
+              size="sm"
+              variant={statusFilter === filter.value ? "default" : "outline"}
+              onClick={() => setStatusFilter(filter.value)}
+            >
+              {filter.label} ({filter.count})
+            </Button>
           ))}
         </div>
-      )}
+
+        {isLoading ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>{t("appointments.queue.title")}</CardTitle>
+              <CardDescription>{t("appointments.queue.loading")}</CardDescription>
+            </CardHeader>
+          </Card>
+        ) : visibleEntries.length === 0 ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>{t("appointments.queue.title")}</CardTitle>
+              <CardDescription>{t("appointments.queue.empty")}</CardDescription>
+            </CardHeader>
+          </Card>
+        ) : (
+          <div className="grid gap-3">
+            {visibleEntries.map((entry) => (
+              <Card key={entry.id}>
+                <CardHeader className="space-y-3">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <CardTitle className="text-lg">
+                        {entry.appointments?.patients?.full_name ?? t("appointments.queue.unknownPatient")}
+                      </CardTitle>
+                      <CardDescription>
+                        {t("appointments.queue.appointmentSummary", {
+                          doctorName: entry.appointments?.doctors?.full_name ?? t("appointments.queue.unassignedDoctor"),
+                          date: entry.appointments ? formatDate(entry.appointments.appointment_date, locale, "datetime", calendarType) : t("appointments.queue.timeUnavailable"),
+                        })}
+                      </CardDescription>
+                    </div>
+                    <StatusBadge variant={queueStatusVariant(entry.status)} dot>
+                      {queueStatusLabel(entry.status, t)}
+                    </StatusBadge>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-3">
+                    <div>
+                      {t("appointments.queue.checkedInAt", { time: formatDate(entry.check_in_at, locale, "time", calendarType) })}
+                    </div>
+                    <div>
+                      {t("appointments.queue.calledAt", { time: entry.called_at ? formatDate(entry.called_at, locale, "time", calendarType) : t("appointments.queue.notYet") })}
+                    </div>
+                    <div>
+                      {t("appointments.queue.completedAt", { time: entry.completed_at ? formatDate(entry.completed_at, locale, "time", calendarType) : t("appointments.queue.notYet") })}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {entry.status === "waiting" && (
+                      <>
+                        <Button size="sm" onClick={() => void onUpdateStatus(entry.id, "called")}>
+                          {t("appointments.queue.actions.callPatient")}
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => void onUpdateStatus(entry.id, "no_show")}>
+                          {t("appointments.queue.actions.markNoShow")}
+                        </Button>
+                      </>
+                    )}
+
+                    {entry.status === "called" && (
+                      <>
+                        <Button size="sm" onClick={() => void onUpdateStatus(entry.id, "in_service")}>
+                          {t("appointments.queue.actions.startVisit")}
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => void onUpdateStatus(entry.id, "waiting")}>
+                          {t("appointments.queue.actions.backToWaiting")}
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => void onUpdateStatus(entry.id, "no_show")}>
+                          {t("appointments.queue.actions.markNoShow")}
+                        </Button>
+                      </>
+                    )}
+
+                    {entry.status === "in_service" && (
+                      <Button size="sm" variant="success" onClick={() => void onUpdateStatus(entry.id, "done")}>
+                        {t("appointments.queue.actions.completeVisit")}
+                      </Button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 };

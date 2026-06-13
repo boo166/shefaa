@@ -27,6 +27,8 @@ export const TRANSLATION_NAMESPACES = [
   "landing",
   "admin",
   "portal",
+  "ops",
+  "security",
 ] as const;
 
 export type TranslationNamespace = (typeof TRANSLATION_NAMESPACES)[number];

@@ -9,6 +9,7 @@ export const profileSchema = z.object({
   tenant_id: uuidSchema.nullable(),
   full_name: z.string().trim().min(1).max(200),
   avatar_url: z.string().trim().min(1).max(500).optional().nullable(),
+  account_status: z.enum(["active", "suspended"]).optional(),
   created_at: dateTimeStringSchema,
   updated_at: dateTimeStringSchema,
 });

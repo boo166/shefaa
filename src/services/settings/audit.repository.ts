@@ -1,4 +1,5 @@
 import type { AuditLog } from "@/domain/settings/audit.types";
+import { IDENTITY_AUDIT_ACTIONS } from "@/services/auth/identityAudit.types";
 import { platformRepository } from "@/platform/data/platformRepository";
 import type { PlatformRepositoryContext } from "@/platform/data/platformRepository.context";
 import { ServiceError } from "@/services/supabase/errors";
@@ -21,6 +22,7 @@ function auditCtx(
 
 export interface AuditLogRepository {
   listPaged(tenantId: string, limit: number, offset: number): Promise<{ data: AuditLog[]; count: number }>;
+  listIdentityPaged(tenantId: string, limit: number, offset: number): Promise<{ data: AuditLog[]; count: number }>;
   logEvent(input: {
     tenant_id?: string | null;
     user_id: string;
@@ -60,6 +62,25 @@ export const auditLogRepository: AuditLogRepository = {
 
     if (error) {
       throw new ServiceError(error.message ?? "Failed to load audit logs", {
+        code: error.code,
+        details: error,
+      });
+    }
+
+    return { data: (data ?? []) as AuditLog[], count: count ?? 0 };
+  },
+  async listIdentityPaged(tenantId, limit, offset) {
+    const to = Math.max(0, offset + limit - 1);
+    const { data, error, count } = await platformRepository
+      .from("audit_logs", auditCtx("settings.audit.listIdentityPaged", tenantId))
+      .select(AUDIT_COLUMNS, { count: "exact" })
+      .eq("tenant_id", tenantId)
+      .in("action", [...IDENTITY_AUDIT_ACTIONS])
+      .order("created_at", { ascending: false })
+      .range(offset, to);
+
+    if (error) {
+      throw new ServiceError(error.message ?? "Failed to load identity audit logs", {
         code: error.code,
         details: error,
       });

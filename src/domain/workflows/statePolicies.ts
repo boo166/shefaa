@@ -1,13 +1,16 @@
-export type BillingStatus = "paid" | "pending" | "overdue" | "partially_paid" | "void";
+export type BillingStatus = "paid" | "pending" | "overdue" | "partially_paid" | "void" | "partially_refunded" | "refunded" | "written_off";
 export type AppointmentStatus = "scheduled" | "in_progress" | "completed" | "cancelled" | "no_show";
 export type InsuranceStatus = "draft" | "submitted" | "processing" | "approved" | "denied" | "reimbursed";
 export type LabStatus = "pending" | "processing" | "completed";
 
 const billingTransitions: Record<BillingStatus, BillingStatus[]> = {
-  pending: ["overdue", "void"],
-  overdue: ["pending", "void"],
-  partially_paid: ["overdue", "void"],
-  paid: [],
+  pending: ["overdue", "void", "written_off"],
+  overdue: ["pending", "void", "written_off"],
+  partially_paid: ["overdue", "void", "partially_refunded", "refunded", "written_off"],
+  paid: ["partially_refunded", "refunded"],
+  partially_refunded: ["refunded", "pending", "overdue", "partially_paid", "written_off"],
+  refunded: [],
+  written_off: [],
   void: [],
 };
 

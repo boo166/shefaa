@@ -10,6 +10,13 @@ vi.mock("@/services/auth/auth.repository", () => ({
   },
 }));
 
+vi.mock("@/services/auth/auth.service", () => ({
+  authListenerGuards: {
+    suppressSignedOutCleanup: false,
+    suppressMfaRequiredDuringReauth: false,
+  },
+}));
+
 vi.mock("@/core/auth/authStore", () => ({
   useAuth: { getState },
 }));

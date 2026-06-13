@@ -65,4 +65,58 @@ test.describe("appointment lifecycle", () => {
     await page.getByTestId("appointments-view-list").click();
     await expect(appointmentRow()).toContainText("Completed", { timeout: 30_000 });
   });
+
+  test("cancels a scheduled appointment from the list view", async ({ page }) => {
+    const config = getClinicConfig();
+    test.skip(!hasClinicConfig(config), "E2E credentials not configured");
+
+    const patientName = `E2E Cancel ${Date.now()}`;
+    const appointmentDate = new Date();
+    appointmentDate.setDate(appointmentDate.getDate() + 3);
+    appointmentDate.setHours(11, 0, 0, 0);
+
+    await loginToClinic(page, config);
+    await createPatient(page, config.clinicSlug!, patientName);
+    await seedAppointment(config, { patientName, appointmentDate });
+
+    await page.goto(`/tenant/${config.clinicSlug}/appointments`);
+    await page.getByTestId("appointments-view-list").click();
+    const appointmentRow = () => page.locator("tbody tr", { hasText: patientName }).first();
+    await expect(appointmentRow()).toBeVisible({ timeout: 30_000 });
+    await appointmentRow().getByRole("button", { name: "Cancel" }).click();
+    await expect(appointmentRow()).toContainText("Cancelled", { timeout: 30_000 });
+  });
+
+  test("marks a checked-in appointment as no-show", async ({ page }) => {
+    const config = getClinicConfig();
+    test.skip(!hasClinicConfig(config), "E2E credentials not configured");
+
+    const patientName = `E2E NoShow ${Date.now()}`;
+    const appointmentDate = new Date();
+    appointmentDate.setDate(appointmentDate.getDate() + 4);
+    appointmentDate.setHours(12, 0, 0, 0);
+
+    await loginToClinic(page, config);
+    await createPatient(page, config.clinicSlug!, patientName);
+    await seedAppointment(config, { patientName, appointmentDate });
+
+    await page.goto(`/tenant/${config.clinicSlug}/appointments`);
+    await page.getByTestId("appointments-view-list").click();
+    const appointmentRow = () => page.locator("tbody tr", { hasText: patientName }).first();
+    await expect(appointmentRow()).toBeVisible({ timeout: 30_000 });
+    await appointmentRow().getByRole("button", { name: "Check in" }).click();
+    await expect(page.getByRole("tab", { name: "Waiting room" })).toHaveAttribute("data-state", "active");
+
+    const waitingRoomCard = () =>
+      page
+        .getByRole("heading", { name: patientName })
+        .locator("xpath=ancestor::div[contains(@class,'rounded') and contains(@class,'border')][1]");
+
+    await expect(waitingRoomCard()).toBeVisible({ timeout: 30_000 });
+    await waitingRoomCard().getByRole("button", { name: "Mark no-show" }).click();
+
+    await page.getByRole("tab", { name: "Schedule" }).click();
+    await page.getByTestId("appointments-view-list").click();
+    await expect(appointmentRow()).toContainText("No-show", { timeout: 30_000 });
+  });
 });

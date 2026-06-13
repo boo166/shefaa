@@ -417,4 +417,72 @@ export const billingService = {
       throw toServiceError(err, "Failed to restore invoice");
     }
   },
+  async refundInvoice(invoiceId: string, input: { amount: number; reason: string; reference?: string | null }) {
+    try {
+      assertAnyPermission(["manage_billing"]);
+      await featureAccessService.assertFeatureAccess("billing");
+      const parsedId = uuidSchema.parse(invoiceId);
+      const { tenantId, userId } = getTenantContext();
+      const trace = buildTracePayload({ tenantId, actorId: userId ?? undefined });
+      const result = await billingRepository.commandInvoiceRefund({
+        invoiceId: parsedId,
+        tenantId,
+        amount: toMoney(input.amount),
+        reason: input.reason,
+        reference: input.reference ?? null,
+        userId,
+        trace,
+      });
+      if (!result.invoice) {
+        throw new ConflictError(result.message ?? "Refund command incomplete", { code: "INVOICE_REFUND_INCOMPLETE" });
+      }
+      return invoiceSchema.parse(result.invoice);
+    } catch (err) {
+      throw toServiceError(err, "Failed to refund invoice");
+    }
+  },
+  async reversePayment(paymentId: string, reason: string) {
+    try {
+      assertAnyPermission(["manage_billing"]);
+      await featureAccessService.assertFeatureAccess("billing");
+      const parsedId = uuidSchema.parse(paymentId);
+      const { tenantId, userId } = getTenantContext();
+      const trace = buildTracePayload({ tenantId, actorId: userId ?? undefined });
+      const result = await billingRepository.commandPaymentReversal({
+        paymentId: parsedId,
+        tenantId,
+        reason,
+        userId,
+        trace,
+      });
+      if (!result.invoice) {
+        throw new ConflictError(result.message ?? "Payment reversal incomplete", { code: "PAYMENT_REVERSAL_INCOMPLETE" });
+      }
+      return { invoice: invoiceSchema.parse(result.invoice), payment: result.payment ? invoicePaymentSchema.parse(result.payment) : null };
+    } catch (err) {
+      throw toServiceError(err, "Failed to reverse payment");
+    }
+  },
+  async writeOffInvoice(invoiceId: string, reason: string) {
+    try {
+      assertAnyPermission(["manage_billing"]);
+      await featureAccessService.assertFeatureAccess("billing");
+      const parsedId = uuidSchema.parse(invoiceId);
+      const { tenantId, userId } = getTenantContext();
+      const trace = buildTracePayload({ tenantId, actorId: userId ?? undefined });
+      const result = await billingRepository.commandInvoiceWriteOff({
+        invoiceId: parsedId,
+        tenantId,
+        reason,
+        userId,
+        trace,
+      });
+      if (!result.invoice) {
+        throw new ConflictError(result.message ?? "Write-off command incomplete", { code: "INVOICE_WRITE_OFF_INCOMPLETE" });
+      }
+      return invoiceSchema.parse(result.invoice);
+    } catch (err) {
+      throw toServiceError(err, "Failed to write off invoice");
+    }
+  },
 };

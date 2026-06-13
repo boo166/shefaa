@@ -2,13 +2,25 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
-const tenantId = "00000000-0000-0000-0000-000000000111";
+const { tenantId, authState } = vi.hoisted(() => {
+  const tenantId = "00000000-0000-0000-0000-000000000111";
+  return {
+    tenantId,
+    authState: {
+      user: {
+        id: "user-1",
+        tenantId,
+        globalRoles: ["super_admin"] as const,
+        tenantRoles: [] as string[],
+        tenantStatus: "active" as const,
+      },
+      tenantOverride: { id: tenantId, slug: "tenant-one", name: "Tenant One" },
+    },
+  };
+});
 
 vi.mock("@/core/auth/authStore", () => ({
-  useAuth: () => ({
-    user: { id: "user-1", tenantId, globalRoles: ["super_admin"], tenantRoles: [] },
-    tenantOverride: { id: tenantId, slug: "tenant-one", name: "Tenant One" },
-  }),
+  useAuth: Object.assign(() => authState, { getState: () => authState }),
   selectEffectiveTenantId: () => tenantId,
 }));
 
@@ -237,6 +249,30 @@ vi.mock("@/services/events/eventOutbox.repository", () => ({
       updated_at: "2026-05-10T10:00:00.000Z",
     }]),
     replay: vi.fn(async () => []),
+  },
+}));
+
+vi.mock("@/services/notifications/notification.repository", () => ({
+  notificationRepository: {
+    listRecentDeliveryAuditEvidence: vi.fn(async () => []),
+  },
+}));
+
+vi.mock("@/services/patients/patientReconciliation.repository", () => ({
+  patientReconciliationRepository: {
+    run: vi.fn(async () => ({ run_id: null, finding_count: 0, critical_count: 0, warning_count: 0 })),
+  },
+}));
+
+vi.mock("@/services/notifications/notificationReconciliation.repository", () => ({
+  notificationReconciliationRepository: {
+    run: vi.fn(async () => ({ run_id: null, finding_count: 0, critical_count: 0, warning_count: 0 })),
+  },
+}));
+
+vi.mock("@/services/appointments/appointmentReconciliation.repository", () => ({
+  appointmentReconciliationRepository: {
+    run: vi.fn(async () => ({ run_id: null, finding_count: 0, critical_count: 0, warning_count: 0 })),
   },
 }));
 

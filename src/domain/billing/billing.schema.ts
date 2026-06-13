@@ -3,7 +3,7 @@ import { dateStringSchema, dateTimeStringSchema } from "../shared/date.schema";
 import { listParamsSchema } from "../shared/pagination.schema";
 import { uuidSchema } from "../shared/identifiers.schema";
 
-export const invoiceStatusEnum = z.enum(["paid", "pending", "overdue", "partially_paid", "void"]);
+export const invoiceStatusEnum = z.enum(["paid", "pending", "overdue", "partially_paid", "void", "partially_refunded", "refunded", "written_off"]);
 export const paymentMethodEnum = z.enum(["cash", "card", "bank_transfer", "mobile_wallet", "insurance", "other"]);
 
 export const invoiceSchema = z.object({

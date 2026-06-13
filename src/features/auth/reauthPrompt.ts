@@ -1,10 +1,12 @@
 import { create } from "zustand";
+import { authListenerGuards } from "@/services/auth/auth.service";
 
-type ReauthPromptConfig = {
+export type ReauthPromptConfig = {
   title: string;
   description: string;
   actionLabel?: string;
   cancelLabel?: string;
+  initialStep?: "password" | "mfa";
 };
 
 type ReauthPromptState = {
@@ -17,6 +19,14 @@ type ReauthPromptState = {
 let pendingResolve: (() => void) | null = null;
 let pendingReject: ((reason?: unknown) => void) | null = null;
 
+function setInlineReauthActive(active: boolean) {
+  authListenerGuards.suppressMfaRequiredDuringReauth = active;
+}
+
+export function isReauthPromptActive(): boolean {
+  return useReauthPromptStore.getState().request !== null;
+}
+
 export const useReauthPromptStore = create<ReauthPromptState>((set) => ({
   request: null,
   open: (config) =>
@@ -26,15 +36,18 @@ export const useReauthPromptStore = create<ReauthPromptState>((set) => ({
       }
       pendingResolve = resolve;
       pendingReject = reject;
+      setInlineReauthActive(true);
       set({ request: config });
     }),
   resolve: () => {
+    setInlineReauthActive(false);
     pendingResolve?.();
     pendingResolve = null;
     pendingReject = null;
     set({ request: null });
   },
   reject: (reason) => {
+    setInlineReauthActive(false);
     pendingReject?.(reason);
     pendingResolve = null;
     pendingReject = null;
@@ -43,5 +56,9 @@ export const useReauthPromptStore = create<ReauthPromptState>((set) => ({
 }));
 
 export function requestReauthentication(config: ReauthPromptConfig) {
-  return useReauthPromptStore.getState().open(config);
+  return useReauthPromptStore.getState().open({ ...config, initialStep: config.initialStep ?? "password" });
+}
+
+export function requestMfaSessionVerification(config: ReauthPromptConfig) {
+  return useReauthPromptStore.getState().open({ ...config, initialStep: "mfa" });
 }

@@ -5,6 +5,7 @@ import { authRepository, isTransientAuthNetworkError } from "./auth.repository";
 import { env } from "@/core/env/env";
 import { rateLimitService } from "@/services/security/rateLimit.service";
 import { emitAuthMetric } from "./authMetrics";
+import { identityAuditService } from "./identityAudit.service";
 import { isAuthKillSwitchActive } from "./authKillSwitch";
 import {
   broadcastAuthEvent,
@@ -19,7 +20,11 @@ import type { User as SupabaseUser } from "@supabase/supabase-js";
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** When true, `onAuthStateChange(SIGNED_OUT)` cleanup is handled by `logout()` finally (avoids double boundary reset). */
-export const authListenerGuards = { suppressSignedOutCleanup: false };
+export const authListenerGuards = {
+  suppressSignedOutCleanup: false,
+  /** When true, password re-auth must not redirect the app to /mfa (inline challenge handles MFA). */
+  suppressMfaRequiredDuringReauth: false,
+};
 
 let unauthorizedWindowStart = Date.now();
 let unauthorizedCount = 0;
@@ -71,7 +76,7 @@ async function runRefreshWithRetriesInternal(authTraceId: string) {
 }
 
 const emailSchema = z.string().trim().email();
-const passwordSchema = z.string().min(8).max(128);
+const passwordSchema = z.string().min(12).max(128);
 const nonEmptySchema = z.string().trim().min(2).max(120);
 const slugSchema = z.string().trim().min(2).max(60);
 
@@ -111,12 +116,13 @@ export const authService = {
   },
 
   async login(email: string, password: string) {
+    let parsedEmail = "";
     try {
       if (isAuthKillSwitchActive()) {
         emitAuthMetric("auth_kill_switch_activated", {});
         throw new AuthorizationError("Authentication is temporarily unavailable.");
       }
-      const parsedEmail = emailSchema.parse(email);
+      parsedEmail = emailSchema.parse(email);
       const parsedPassword = z.string().min(1).parse(password);
       await rateLimitService.assertAllowed("login", [parsedEmail]);
       const user = await authRepository.signInWithPassword(parsedEmail, parsedPassword);
@@ -129,15 +135,29 @@ export const authService = {
       if (user) {
         const { profile, roles } = await authService.loadUserProfile(user.id);
         const hasAnyRole = roles.globalRoles.length > 0 || roles.tenantRoles.length > 0;
+        const accountStatus = (profile as { account_status?: string } | null)?.account_status ?? "active";
         if (!profile || !hasAnyRole) {
           await Promise.resolve(authRepository.signOut()).catch(() => undefined);
           throw new AuthorizationError("This clinic is suspended or deactivated.");
         }
+        if (accountStatus === "suspended") {
+          await Promise.resolve(authRepository.signOut()).catch(() => undefined);
+          throw new AuthorizationError("Your account has been suspended.");
+        }
         emitAuthMetric("login_succeeded", { userId: user.id });
+        identityAuditService.logAction("LOGIN_SUCCESS", {
+          userId: user.id,
+          tenantId: (profile as { tenant_id?: string }).tenant_id ?? null,
+          actorUserId: user.id,
+          entityId: user.id,
+        });
       }
     } catch (err) {
       emitAuthMetric("login_failed", {
         errorCode: err instanceof Error ? err.message : "unknown",
+      });
+      identityAuditService.logAction("LOGIN_FAILED", {
+        details: parsedEmail ? { email: parsedEmail } : undefined,
       });
       throw toServiceError(err, "Login failed");
     }
@@ -209,6 +229,16 @@ export const authService = {
     })();
     const session = await authRepository.getSession().catch(() => ({ user: null as SupabaseUser | null }));
     const u = session.user;
+    if (u?.id) {
+      const profile = await authRepository.getProfileByUserId(u.id).catch(() => null);
+      identityAuditService.logAction("LOGOUT", {
+        userId: u.id,
+        tenantId: (profile as { tenant_id?: string } | null)?.tenant_id ?? null,
+        actorUserId: u.id,
+        entityId: u.id,
+        requestTraceId: trace,
+      });
+    }
     const principalKeyResolved = principalKey ?? (u?.id ? `${u.id}:none` : "anon:none");
     const event: AuthTransitionEventV1 = {
       v: 1,
@@ -271,6 +301,9 @@ export const authService = {
       const parsedEmail = emailSchema.parse(email);
       await rateLimitService.assertAllowed("password_reset", [parsedEmail]);
       await authRepository.resetPasswordForEmail(parsedEmail, redirectTo);
+      identityAuditService.logAction("PASSWORD_RESET_REQUESTED", {
+        details: { email_domain: parsedEmail.includes("@") ? parsedEmail.split("@")[1] : undefined },
+      });
     } catch (err) {
       throw toServiceError(err, "Failed to send reset email");
     }
@@ -278,7 +311,18 @@ export const authService = {
   async updatePassword(password: string) {
     try {
       const parsedPassword = passwordSchema.parse(password);
+      const session = await authRepository.getSession();
       await authRepository.updatePassword(parsedPassword);
+      const userId = session.user?.id;
+      if (userId) {
+        const profile = await authRepository.getProfileByUserId(userId).catch(() => null);
+        identityAuditService.logAction("PASSWORD_RESET_COMPLETED", {
+          userId,
+          tenantId: (profile as { tenant_id?: string } | null)?.tenant_id ?? null,
+          actorUserId: userId,
+          entityId: userId,
+        });
+      }
     } catch (err) {
       throw toServiceError(err, "Failed to update password");
     }

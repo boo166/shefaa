@@ -10,9 +10,10 @@ import { reportService } from "@/services";
 import { queryKeys } from "@/services/queryKeys";
 import { useChartColors } from "@/shared/hooks/useChartColors";
 import { PageContainer, SectionHeader } from "@/components/layout/AppLayout";
+import { OperationsCenter } from "./OperationsCenter";
 import {
-  AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+  AreaChart, Area, PieChart, Pie, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
 
 const statusVariant: Record<string, "success" | "info" | "default" | "destructive" | "warning"> = {
@@ -65,7 +66,7 @@ export const DashboardPage = () => {
       { status: "in_progress", label: t("appointments.inProgress"), count: statusCounts.in_progress },
       { status: "completed", label: t("appointments.completed"), count: statusCounts.completed },
       { status: "cancelled", label: t("appointments.cancelled"), count: statusCounts.cancelled },
-      { status: "no_show", label: "No-show", count: statusCounts.no_show },
+      { status: "no_show", label: t("dashboard.ops.clinicHealth.noShowRate"), count: statusCounts.no_show },
     ]),
     [statusCounts, t],
   );
@@ -76,28 +77,32 @@ export const DashboardPage = () => {
   return (
     <PageContainer className="space-y-6">
       <SectionHeader
-        title={t("dashboard.title")}
+        title={t("dashboard.ops.title")}
         subtitle={`${t("dashboard.welcomeBack") || "Welcome back"}, ${user?.name?.split(" ")[0] ?? ""}`}
       />
 
-      {/* KPI Cards */}
+      <OperationsCenter />
+
+      <SectionHeader
+        title={t("dashboard.ops.analyticsTitle")}
+        subtitle={t("dashboard.ops.analyticsSubtitle")}
+      />
+
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
         <StatCard title={t("dashboard.totalPatients")} value={totalPatients} icon={Users} accent="primary" />
         <StatCard title={t("reports.totalAppointments")} value={String(totalAppointments)} icon={CalendarDays} accent="info" />
         <StatCard title={t("reports.avgDoctorRating")} value={averageRating ? Number(averageRating).toFixed(1) : "0.0"} icon={Stethoscope} accent="success" />
         <StatCard title={t("dashboard.periodRevenue")} value={formatCurrency(Number(totalRevenue), locale)} icon={DollarSign} accent="warning" />
         <StatCard
-          title="No-shows"
+          title={t("dashboard.ops.clinicHealth.noShowRate")}
           value={String(statusCounts.no_show)}
           icon={XCircle}
           accent="warning"
-          subtitle={`${noShowRate.toFixed(1)}% of booked appointments`}
+          subtitle={`${noShowRate.toFixed(1)}%`}
         />
       </div>
 
-      {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Revenue Trend */}
         <div className="lg:col-span-2 bg-card rounded-xl border p-5">
           <div className="flex items-center justify-between mb-1">
             <div>
@@ -128,17 +133,16 @@ export const DashboardPage = () => {
                   color: colors.fg,
                   boxShadow: "0 4px 6px -1px rgba(0,0,0,0.1)",
                 }}
-                formatter={(v: any) => [`$${Number(v).toLocaleString()}`, "Revenue"]}
+                formatter={(v: number) => [`$${Number(v).toLocaleString()}`, "Revenue"]}
               />
               <Area type="monotone" dataKey="revenue" stroke={colors.primary} fill="url(#revGrad)" strokeWidth={2} dot={false} activeDot={{ r: 4, fill: colors.primary }} />
             </AreaChart>
           </ResponsiveContainer>
         </div>
 
-        {/* Appointment Types */}
         <div className="bg-card rounded-xl border p-5">
           <h3 className="text-sm font-semibold mb-1">{t("reports.byType") || "By Type"}</h3>
-          <p className="text-xs text-muted-foreground mb-2">Appointment distribution</p>
+          <p className="text-xs text-muted-foreground mb-2">{t("dashboard.ops.appointmentDistribution")}</p>
           <ResponsiveContainer width="100%" height={200}>
             <PieChart>
               <Pie data={apptTypes} cx="50%" cy="50%" innerRadius={50} outerRadius={75} dataKey="value" paddingAngle={2} strokeWidth={0}>
@@ -166,7 +170,6 @@ export const DashboardPage = () => {
         </div>
       </div>
 
-      {/* Appointment Status Summary */}
       <div className="bg-card rounded-xl border p-5">
         <div className="flex items-center justify-between mb-4">
           <div>

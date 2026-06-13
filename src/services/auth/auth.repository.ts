@@ -7,7 +7,7 @@ import type {
 import { supabase } from "@/services/supabase/client";
 import { ServiceError } from "@/services/supabase/errors";
 
-const PROFILE_COLUMNS = "id, user_id, tenant_id, full_name, avatar_url, tenants:tenant_id(name, slug, status, status_reason)";
+const PROFILE_COLUMNS = "id, user_id, tenant_id, full_name, avatar_url, account_status, tenants:tenant_id(name, slug, status, status_reason)";
 
 function isInvalidRefreshTokenError(error: { message?: string | null }) {
   const message = error.message?.toLowerCase() ?? "";

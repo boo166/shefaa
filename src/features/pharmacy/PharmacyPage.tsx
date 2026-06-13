@@ -6,7 +6,8 @@ import { StatusFilter } from "@/shared/components/StatusFilter";
 import { StatCard } from "@/shared/components/StatCard";
 import { Button } from "@/components/primitives/Button";
 import { PageContainer, SectionHeader } from "@/components/layout/AppLayout";
-import { Pill, Package, AlertTriangle, Plus, Trash2 } from "lucide-react";
+import { Pill, Package, AlertTriangle, Plus, Trash2, Workflow } from "lucide-react";
+import { MedicationWorkflowDialog } from "./MedicationWorkflowDialog";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { useAuth } from "@/core/auth/authStore";
 import { AddMedicationModal } from "./AddMedicationModal";
@@ -34,6 +35,7 @@ export const PharmacyPage = () => {
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [workflowMedication, setWorkflowMedication] = useState<Medication | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [page, setPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState("");
@@ -112,16 +114,6 @@ export const PharmacyPage = () => {
     }
   };
 
-  const handleUpdateStock = async (id: string, newStock: number) => {
-    try {
-      await pharmacyService.update(id, { stock: newStock });
-      invalidateMedications();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : t("common.error");
-      toast({ title: t("common.error"), description: message, variant: "destructive" });
-    }
-  };
-
   const getMedStatusLabel = (status: string) => {
     if (status === "in_stock") return t("pharmacy.inStock");
     if (status === "low_stock") return t("pharmacy.lowStock");
@@ -139,28 +131,15 @@ export const PharmacyPage = () => {
       render: (m) => (
         <div className="flex items-center gap-2">
           <span>{m.stock} {m.unit}</span>
-          <div className="flex gap-1">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => handleUpdateStock(m.id, m.stock + 10)}
-              className="h-5 w-5 p-0 rounded bg-muted hover:bg-muted-foreground/20 text-xs font-medium"
-              aria-label={t("pharmacy.increaseStock")}
-            >
-              +
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => handleUpdateStock(m.id, Math.max(0, m.stock - 10))}
-              className="h-5 w-5 p-0 rounded bg-muted hover:bg-muted-foreground/20 text-xs font-medium"
-              aria-label={t("pharmacy.decreaseStock")}
-            >
-              -
-            </Button>
-          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setWorkflowMedication(liveMeds.find((med) => med.id === m.id) ?? null)}
+          >
+            <Workflow className="h-4 w-4 me-1" />
+            {t("pharmacy.workflow.title")}
+          </Button>
         </div>
       ),
     },
@@ -239,6 +218,13 @@ export const PharmacyPage = () => {
         onSuccess={() => {
           invalidateMedications();
         }}
+      />
+
+      <MedicationWorkflowDialog
+        medication={workflowMedication}
+        open={!!workflowMedication}
+        onClose={() => setWorkflowMedication(null)}
+        onSuccess={invalidateMedications}
       />
 
       <ConfirmDialog

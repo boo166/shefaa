@@ -159,7 +159,7 @@ Deno.serve(async (req) => {
     }
 
     const passwordStr = String(password);
-    if (passwordStr.length < 8 || passwordStr.length > 128) {
+    if (passwordStr.length < 12 || passwordStr.length > 128) {
       return new Response(JSON.stringify({ error: "Invalid password" }), {
         status: 400,
         headers: baseHeaders,

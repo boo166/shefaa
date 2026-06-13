@@ -10,6 +10,7 @@ import type {
 import {
   evidenceFromDryReconciliationSummary,
   evidenceFromEventOutbox,
+  evidenceFromNotificationDelivery,
   evidenceFromReconciliationFinding,
   evidenceFromReconciliationRun,
   evidenceFromRecoveryAction,
@@ -36,6 +37,13 @@ import {
   type EventOutboxRow,
   type EventOutboxSummary,
 } from "@/services/events/eventOutbox.repository";
+import {
+  notificationRepository,
+  type NotificationDeliveryAuditRow,
+} from "@/services/notifications/notification.repository";
+import { patientReconciliationRepository } from "@/services/patients/patientReconciliation.repository";
+import { notificationReconciliationRepository } from "@/services/notifications/notificationReconciliation.repository";
+import { appointmentReconciliationRepository } from "@/services/appointments/appointmentReconciliation.repository";
 
 const OPS_FLAG = import.meta.env.VITE_RUNTIME_OPS_CONSOLE === "1" || import.meta.env.DEV;
 
@@ -74,6 +82,7 @@ function buildIncidentTimeline(input: {
   incidentRows: RuntimeIncidentTimelineRow[];
   recoveryActionRows: RuntimeRecoveryActionRow[];
   eventOutboxRows: EventOutboxRow[];
+  notificationDeliveryAuditRows: NotificationDeliveryAuditRow[];
 }): OperationalEvidenceEnvelope[] {
   return sortOperationalEvidence([
     ...(input.latestRun ? [evidenceFromReconciliationRun(input.latestRun)] : []),
@@ -83,6 +92,7 @@ function buildIncidentTimeline(input: {
     ...input.incidentRows.map(evidenceFromRuntimeIncident),
     ...input.recoveryActionRows.map(evidenceFromRecoveryAction),
     ...input.eventOutboxRows.map(evidenceFromEventOutbox),
+    ...input.notificationDeliveryAuditRows.map(evidenceFromNotificationDelivery),
   ]);
 }
 
@@ -101,6 +111,7 @@ function evidenceKind(item: OperationalEvidenceEnvelope) {
   if (item.source === "billing_reconciliation_runs") return "Reconciliation run";
   if (item.source === "billing_reconciliation_dry_run") return "Dry reconciliation";
   if (item.source === "event_outbox") return "Event outbox";
+  if (item.source === "audit_logs" && item.category === "notification") return "Notification delivery";
   if (item.source === "runtime_incident_timeline") return "Runtime incident";
   if (item.source === "runtime_recovery_actions") return "Recovery action";
   if (item.source === "runtime_transition_log") return "Runtime transition";
@@ -295,6 +306,13 @@ export function RuntimeOpsPage() {
   const [recoveryActionRows, setRecoveryActionRows] = useState<RuntimeRecoveryActionRow[]>([]);
   const [eventOutboxSummary, setEventOutboxSummary] = useState<EventOutboxSummary | null>(null);
   const [eventOutboxRows, setEventOutboxRows] = useState<EventOutboxRow[]>([]);
+  const [notificationDeliveryAuditRows, setNotificationDeliveryAuditRows] = useState<NotificationDeliveryAuditRow[]>([]);
+  const [crossDomainRecon, setCrossDomainRecon] = useState<{
+    patient: { finding_count: number; critical_count: number } | null;
+    notification: { finding_count: number; critical_count: number } | null;
+    appointment: { finding_count: number; critical_count: number } | null;
+  }>({ patient: null, notification: null, appointment: null });
+  const [runningCrossDomainRecon, setRunningCrossDomainRecon] = useState(false);
   const [opsError, setOpsError] = useState<string | null>(null);
   const [loadingOps, setLoadingOps] = useState(false);
   const [runningDry, setRunningDry] = useState(false);
@@ -310,7 +328,8 @@ export function RuntimeOpsPage() {
     incidentRows,
     recoveryActionRows,
     eventOutboxRows,
-  }), [latestRun, dryRunSummary, openFindings, transitionRows, incidentRows, recoveryActionRows, eventOutboxRows]);
+    notificationDeliveryAuditRows,
+  }), [latestRun, dryRunSummary, openFindings, transitionRows, incidentRows, recoveryActionRows, eventOutboxRows, notificationDeliveryAuditRows]);
   const incidentSessions = useMemo(() => buildIncidentSessions(incidentTimeline), [incidentTimeline]);
   const selectedSession = incidentSessions.find((session) => session.key === selectedSessionKey) ?? incidentSessions[0] ?? null;
   const selectedEvidenceItems = useMemo(
@@ -342,18 +361,20 @@ export function RuntimeOpsPage() {
       setRecoveryActionRows([]);
       setEventOutboxSummary(null);
       setEventOutboxRows([]);
+      setNotificationDeliveryAuditRows([]);
       return;
     }
     setLoadingOps(true);
     setOpsError(null);
     try {
-      const [reconciliation, transitions, incidents, recoveryActions, outboxSummary, outboxRows] = await Promise.all([
+      const [reconciliation, transitions, incidents, recoveryActions, outboxSummary, outboxRows, notificationDeliveryAudit] = await Promise.all([
         billingReconciliationService.getOpsSnapshot(),
         listRecentRuntimeTransitionLogRows(6),
         listRecentRuntimeIncidents(6),
         listRecentRuntimeRecoveryActions(8),
         eventOutboxRepository.getSummary(effectiveTenantId),
         eventOutboxRepository.listRecent(12, effectiveTenantId),
+        notificationRepository.listRecentDeliveryAuditEvidence(effectiveTenantId, 8),
       ]);
       setLatestRun(reconciliation.latestRun);
       setOpenFindings(reconciliation.openFindings);
@@ -362,6 +383,7 @@ export function RuntimeOpsPage() {
       setRecoveryActionRows(recoveryActions);
       setEventOutboxSummary(outboxSummary);
       setEventOutboxRows(outboxRows);
+      setNotificationDeliveryAuditRows(notificationDeliveryAudit);
     } catch (error) {
       setOpsError(error instanceof Error ? error.message : "Failed to load operations snapshot");
     } finally {
@@ -450,6 +472,41 @@ export function RuntimeOpsPage() {
     URL.revokeObjectURL(url);
   };
 
+  const runCrossDomainDryReconciliation = async () => {
+    if (!effectiveTenantId) return;
+    setRunningCrossDomainRecon(true);
+    setOpsError(null);
+    const windowStart = new Date(Date.now() - 30 * 86_400_000).toISOString();
+    const windowEnd = new Date().toISOString();
+    try {
+      const [patient, notification, appointment] = await Promise.all([
+        patientReconciliationRepository.run({
+          tenantId: effectiveTenantId,
+          windowStart,
+          windowEnd,
+          dryRun: true,
+        }),
+        notificationReconciliationRepository.run({
+          tenantId: effectiveTenantId,
+          windowStart,
+          windowEnd,
+          dryRun: true,
+        }),
+        appointmentReconciliationRepository.run({
+          tenantId: effectiveTenantId,
+          windowStart,
+          windowEnd,
+          dryRun: true,
+        }),
+      ]);
+      setCrossDomainRecon({ patient, notification, appointment });
+    } catch (error) {
+      setOpsError(error instanceof Error ? error.message : "Failed to run cross-domain reconciliation");
+    } finally {
+      setRunningCrossDomainRecon(false);
+    }
+  };
+
   const replayOutboxEvent = async (eventId: string) => {
     setReplayingOutboxId(eventId);
     setOpsError(null);
@@ -495,6 +552,14 @@ export function RuntimeOpsPage() {
       {opsError ? (
         <section className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
           {opsError}
+        </section>
+      ) : null}
+
+      {(eventOutboxSummary?.dead_letter_count ?? 0) > 0 ? (
+        <section className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
+          Event outbox dead letters detected ({eventOutboxSummary?.dead_letter_count}). Follow{" "}
+          <code className="rounded bg-muted px-1">docs/ops/playbooks/notification-dead-letter.md</code>{" "}
+          and replay failed rows below.
         </section>
       ) : null}
 
@@ -945,6 +1010,23 @@ export function RuntimeOpsPage() {
             ))}
           </ul>
         )}
+      </section>
+
+      <section className="rounded-lg border bg-card p-4 text-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="font-medium">Cross-domain reconciliation</h2>
+            <p className="mt-1 text-xs text-muted-foreground">Patient, notification, and appointment drift checks (dry run).</p>
+          </div>
+          <Button size="sm" variant="outline" onClick={() => void runCrossDomainDryReconciliation()} disabled={!effectiveTenantId || runningCrossDomainRecon}>
+            {runningCrossDomainRecon ? "Running…" : "Dry run all"}
+          </Button>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-3 text-xs text-muted-foreground">
+          <div>Patient: {crossDomainRecon.patient ? `${crossDomainRecon.patient.finding_count} findings (${crossDomainRecon.patient.critical_count} critical)` : "-"}</div>
+          <div>Notification: {crossDomainRecon.notification ? `${crossDomainRecon.notification.finding_count} findings (${crossDomainRecon.notification.critical_count} critical)` : "-"}</div>
+          <div>Appointment: {crossDomainRecon.appointment ? `${crossDomainRecon.appointment.finding_count} findings (${crossDomainRecon.appointment.critical_count} critical)` : "-"}</div>
+        </div>
       </section>
 
       <section className="rounded-lg border bg-card p-4 text-sm">

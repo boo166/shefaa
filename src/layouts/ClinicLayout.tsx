@@ -1,5 +1,6 @@
+import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { getPrimaryRole, isSuperAdmin, useAuth } from "@/core/auth/authStore";
+import { getPrimaryRole, isSuperAdmin, selectEffectiveTenantSlug, useAuth } from "@/core/auth/authStore";
 import { Capabilities, type Capability } from "@/platform/authorization/capabilities";
 import { evaluateAuthorize } from "@/platform/authorization/authorize";
 import { useI18n } from "@/core/i18n/i18nStore";
@@ -11,15 +12,14 @@ import { UpgradeBanner } from "@/core/subscription/UpgradeBanner";
 import { useFeatureAccess, type Feature } from "@/core/subscription/useFeatureAccess";
 import {
   LayoutDashboard, Users, CalendarDays, Stethoscope,
-  Receipt, Pill, FlaskConical, Shield, BarChart3,
-  Settings,
+  Receipt, Pill, FlaskConical, Shield, ShieldCheck, BarChart3,
+  Settings, Radar,
 } from "lucide-react";
 import { AppLayout, type AppLayoutLabels, type NavItem, type AppUser } from "@/components/layout/AppLayout";
 import { Button } from "@/components/primitives/Button";
 import { toast } from "@/hooks/use-toast";
 import { adminImpersonationService } from "@/services/admin/adminImpersonation.service";
 import { isFreshAuthRequiredError } from "@/services/auth/recentAuth.service";
-import { useState } from "react";
 import { requestReauthentication } from "@/features/auth/reauthPrompt";
 import { SessionBoundaryBadge } from "@/components/shell/SessionBoundaryBadge";
 import { IncidentBannerSlot } from "@/components/shell/IncidentBannerSlot";
@@ -43,16 +43,28 @@ const navItems: NavConfigItem[] = [
   { path: "laboratory", icon: FlaskConical, labelKey: "common.laboratory", capability: Capabilities.laboratory.manage, feature: "laboratory" },
   { path: "insurance", icon: Shield, labelKey: "common.insurance", capability: Capabilities.billing.view, feature: "insurance" },
   { path: "reports", icon: BarChart3, labelKey: "common.reports", capability: Capabilities.reports.view, feature: "reports" },
+  { path: "ops", icon: Radar, labelKey: "common.ops", capability: Capabilities.billing.view },
+  { path: "security", icon: ShieldCheck, labelKey: "common.security", capability: Capabilities.clinic.manage },
   { path: "settings", icon: Settings, labelKey: "common.settings", capability: Capabilities.clinic.manage },
 ] as const;
 
 export const ClinicLayout = () => {
   const { clinicSlug } = useParams();
-  const { user, logout, hasPermission, tenantOverride, sessionVersion } = useAuth();
+  const authState = useAuth();
+  const { user, logout, hasPermission, tenantOverride, sessionVersion } = authState;
   const { hasFeature } = useFeatureAccess();
   const { t } = useI18n(["admin"]);
   const navigate = useNavigate();
   const [isExitingImpersonation, setIsExitingImpersonation] = useState(false);
+
+  useEffect(() => {
+    if (!user || !clinicSlug) return;
+    const canonicalSlug = selectEffectiveTenantSlug(authState);
+    if (canonicalSlug && clinicSlug !== canonicalSlug) {
+      const path = window.location.pathname.replace(`/tenant/${clinicSlug}`, `/tenant/${canonicalSlug}`);
+      navigate(path, { replace: true });
+    }
+  }, [authState, clinicSlug, navigate, user]);
 
   const handleLogout = async () => {
     await logout();

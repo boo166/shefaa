@@ -2,6 +2,9 @@ export type DomainEventName =
   | "AppointmentCreated"
   | "AppointmentLifecycleTransitioned"
   | "InvoicePaid"
+  | "InvoiceRefunded"
+  | "PaymentReversed"
+  | "InvoiceWrittenOff"
   | "LabResultUploaded"
   | "InsuranceClaimTransitioned"
   | "MedicationStockAdjusted"
@@ -31,6 +34,25 @@ export type InvoicePaidPayload = {
   invoiceId: string;
   patientId: string;
   amount: number;
+};
+
+export type InvoiceRefundedPayload = {
+  invoiceId: string;
+  refundId: string;
+  amount: number;
+  reason: string;
+};
+
+export type PaymentReversedPayload = {
+  paymentId: string;
+  invoiceId: string;
+  amount: number;
+  reason: string;
+};
+
+export type InvoiceWrittenOffPayload = {
+  invoiceId: string;
+  reason: string;
 };
 
 export type LabResultUploadedPayload = {
@@ -69,6 +91,9 @@ export type DomainEventPayloads = {
   AppointmentCreated: AppointmentCreatedPayload;
   AppointmentLifecycleTransitioned: AppointmentLifecycleTransitionedPayload;
   InvoicePaid: InvoicePaidPayload;
+  InvoiceRefunded: InvoiceRefundedPayload;
+  PaymentReversed: PaymentReversedPayload;
+  InvoiceWrittenOff: InvoiceWrittenOffPayload;
   LabResultUploaded: LabResultUploadedPayload;
   InsuranceClaimTransitioned: InsuranceClaimTransitionedPayload;
   MedicationStockAdjusted: MedicationStockAdjustedPayload;

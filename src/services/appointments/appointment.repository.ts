@@ -374,7 +374,7 @@ export const appointmentRepository: AppointmentRepository = {
       capabilityAware: true,
       reconciliationAware: false,
       recoveryAware: false,
-      evidenceAware: false,
+      evidenceAware: true,
       retryAware: true,
       staleContextSafe: true,
       metricsEnabled: true,

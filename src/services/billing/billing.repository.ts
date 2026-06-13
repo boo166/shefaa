@@ -126,6 +126,32 @@ export interface BillingRepository {
     userId?: string | null,
     trace?: PlatformRepositoryContext["trace"],
   ): Promise<InvoicePaymentCommandResult>;
+  commandInvoiceRefund(input: {
+    invoiceId: string;
+    tenantId: string;
+    amount: number;
+    reason: string;
+    reference?: string | null;
+    userId?: string | null;
+    idempotencyKey?: string | null;
+    trace?: PlatformRepositoryContext["trace"];
+  }): Promise<InvoicePaymentCommandResult & { refund?: Record<string, unknown> | null }>;
+  commandPaymentReversal(input: {
+    paymentId: string;
+    tenantId: string;
+    reason: string;
+    userId?: string | null;
+    idempotencyKey?: string | null;
+    trace?: PlatformRepositoryContext["trace"];
+  }): Promise<InvoicePaymentCommandResult>;
+  commandInvoiceWriteOff(input: {
+    invoiceId: string;
+    tenantId: string;
+    reason: string;
+    userId?: string | null;
+    idempotencyKey?: string | null;
+    trace?: PlatformRepositoryContext["trace"];
+  }): Promise<BillingInvoiceCommandResult>;
   createPayment(invoiceId: string, patientId: string, input: InvoicePaymentCreateInput, tenantId: string, userId?: string | null): Promise<InvoicePayment>;
   archive(id: string, tenantId: string, userId: string, trace?: PlatformRepositoryContext["trace"]): Promise<Invoice>;
   restore(id: string, tenantId: string, userId?: string | null, trace?: PlatformRepositoryContext["trace"]): Promise<Invoice>;
@@ -469,6 +495,82 @@ export const billingRepository: BillingRepository = {
       payment: row.payment ?? null,
     } as InvoicePaymentCommandResult;
   },
+  async commandInvoiceRefund(input) {
+    const requestHash = JSON.stringify({
+      invoiceId: input.invoiceId,
+      amount: input.amount,
+      reason: input.reason,
+      reference: input.reference ?? null,
+    });
+    const { data, error } = await platformRepository.rpc("command_invoice_refund", {
+      p_invoice_id: input.invoiceId,
+      p_tenant_id: input.tenantId,
+      p_amount: input.amount,
+      p_reason: input.reason,
+      p_reference: input.reference ?? null,
+      p_idempotency_key: input.idempotencyKey ?? `invoice_refund:${input.invoiceId}:${input.amount}`,
+      p_request_hash: requestHash,
+      p_user_id: input.userId ?? null,
+      ...commandTraceParams(input.trace),
+    }, billingCtx(input.tenantId, "billing.invoice.refund", "financial", input.trace ? { trace: input.trace } : undefined));
+    if (error) throw new ServiceError(error.message ?? "Failed to refund invoice", { code: error.code, details: error });
+    const row = (data as any)?.[0];
+    if (!row) throw new ServiceError("Invoice refund command returned no result", { code: "INVOICE_REFUND_EMPTY_RESULT" });
+    return {
+      result_code: row.result_code,
+      retryable: Boolean(row.retryable),
+      idempotency_replay: Boolean(row.idempotency_replay),
+      message: row.message ?? null,
+      invoice: (row.invoice ?? null) as Invoice | null,
+      payment: null,
+      refund: row.refund ?? null,
+    };
+  },
+  async commandPaymentReversal(input) {
+    const requestHash = JSON.stringify({ paymentId: input.paymentId, reason: input.reason });
+    const { data, error } = await platformRepository.rpc("command_invoice_payment_reversal", {
+      p_payment_id: input.paymentId,
+      p_tenant_id: input.tenantId,
+      p_reason: input.reason,
+      p_idempotency_key: input.idempotencyKey ?? `payment_reversal:${input.paymentId}`,
+      p_request_hash: requestHash,
+      p_user_id: input.userId ?? null,
+      ...commandTraceParams(input.trace),
+    }, billingCtx(input.tenantId, "billing.payment.reversal", "financial", input.trace ? { trace: input.trace } : undefined));
+    if (error) throw new ServiceError(error.message ?? "Failed to reverse payment", { code: error.code, details: error });
+    const row = (data as any)?.[0];
+    if (!row) throw new ServiceError("Payment reversal command returned no result", { code: "PAYMENT_REVERSAL_EMPTY_RESULT" });
+    return {
+      result_code: row.result_code,
+      retryable: Boolean(row.retryable),
+      idempotency_replay: Boolean(row.idempotency_replay),
+      message: row.message ?? null,
+      invoice: (row.invoice ?? null) as Invoice | null,
+      payment: (row.payment ?? null) as InvoicePayment | null,
+    };
+  },
+  async commandInvoiceWriteOff(input) {
+    const requestHash = JSON.stringify({ invoiceId: input.invoiceId, reason: input.reason });
+    const { data, error } = await platformRepository.rpc("command_invoice_write_off", {
+      p_invoice_id: input.invoiceId,
+      p_tenant_id: input.tenantId,
+      p_reason: input.reason,
+      p_idempotency_key: input.idempotencyKey ?? `invoice_write_off:${input.invoiceId}`,
+      p_request_hash: requestHash,
+      p_user_id: input.userId ?? null,
+      ...commandTraceParams(input.trace),
+    }, billingCtx(input.tenantId, "billing.invoice.writeOff", "financial", input.trace ? { trace: input.trace } : undefined));
+    if (error) throw new ServiceError(error.message ?? "Failed to write off invoice", { code: error.code, details: error });
+    const row = (data as any)?.[0];
+    if (!row) throw new ServiceError("Invoice write-off command returned no result", { code: "INVOICE_WRITE_OFF_EMPTY_RESULT" });
+    return {
+      result_code: row.result_code,
+      retryable: Boolean(row.retryable),
+      idempotency_replay: Boolean(row.idempotency_replay),
+      message: row.message ?? null,
+      invoice: (row.invoice ?? null) as Invoice | null,
+    };
+  },
   async createPayment(invoiceId, patientId, input, tenantId, userId) {
     const payload: Record<string, unknown> = {
       tenant_id: tenantId,
@@ -545,9 +647,6 @@ export const billingRepository: BillingRepository = {
       staleContextSafe: true,
       metricsEnabled: true,
       requiredCapabilities: [Capabilities.billing.view, Capabilities.billing.manage],
-      exceptions: [
-        "Refund and reversal authority is not implemented yet; payment posting and invoice lifecycle mutations are DB-command authoritative.",
-      ],
     };
   },
 };

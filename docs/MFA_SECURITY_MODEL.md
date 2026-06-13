@@ -5,7 +5,8 @@ This document defines how multi-factor authentication (MFA) is modeled in the pr
 ## Goals
 
 - MFA is a **governed assurance subsystem**, not a one-time OTP prompt.
-- **Optional MFA** for all users (Phase 1); tenant-wide mandates and step-up are later phases.
+- **MFA required** for: `super_admin`, `clinic_admin`, `doctor`, `accountant`, `pharmacist`, `lab_technician` (see `MFA_REQUIRED_ROLES` in `authStore.ts`).
+- **Optional** for: `receptionist`, `nurse`.
 - **Login-time MFA** is required when the user has at least one **verified** MFA factor but the current session’s authenticator assurance is below **AAL2** (see Supabase `getAuthenticatorAssuranceLevel`).
 
 ## Assurance semantics
@@ -65,14 +66,11 @@ When assurance changes (e.g. password login → MFA verify), `sessionVersion` **
 
 Supabase Auth’s JWT **AAL claim** is updated when the user completes **`auth.mfa.verify`** for a TOTP (or other supported) factor. **Consuming an app-managed recovery code does not automatically raise Supabase JWT AAL to AAL2.**
 
-**Current product behavior (Phase 1):**
+**Production policy (Option B):**
 
-- Recovery codes are **first-class** for **unlocking the app session** after login (same navigation outcome as a successful TOTP challenge on `/mfa`).
-- Operators who rely on **Postgres RLS or RPC checks** that read JWT MFA claims must either:
-  - Also accept a **server-side** signal that a valid recovery redemption occurred (e.g. custom claim via **Custom Access Token Hook**), or
-  - Keep critical RPCs gated on **TOTP-only** until that hook exists.
-
-Document the recommended hook path in production hardening runbooks.
+- Recovery codes **unlock login** (dashboard access) with **AAL1** JWT and session version tag `1`.
+- **Privileged actions** (staff invite, admin RPCs, privileged routes) still require **TOTP → AAL2**.
+- Custom Access Token Hook (Option A) is deferred post-go-live.
 
 ## Recovery orchestration
 

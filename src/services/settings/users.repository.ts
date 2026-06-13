@@ -2,7 +2,7 @@ import type { ProfileWithRoles } from "@/domain/settings/profile.types";
 import { supabase } from "@/services/supabase/client";
 import { ServiceError } from "@/services/supabase/errors";
 
-const PROFILE_COLUMNS = "id, user_id, tenant_id, full_name, avatar_url, created_at, updated_at";
+const PROFILE_COLUMNS = "id, user_id, tenant_id, full_name, avatar_url, account_status, created_at, updated_at";
 
 type ProfileSort = { column: "full_name" | "created_at"; ascending?: boolean };
 

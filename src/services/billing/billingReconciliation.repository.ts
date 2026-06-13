@@ -3,6 +3,7 @@ import type {
   BillingReconciliationRun,
   BillingReconciliationSummary,
 } from "@/domain/billing/billing.types";
+import { Capabilities } from "@/platform/authorization/capabilities";
 import { platformRepository } from "@/platform/data/platformRepository";
 import type { PlatformRepositoryContext } from "@/platform/data/platformRepository.context";
 import { ServiceError } from "@/services/supabase/errors";
@@ -18,6 +19,7 @@ function reconciliationCtx(
     tenantScoped: true,
     tenantId,
     subsystem: classification === "financial" ? "billing" : undefined,
+    requiredCapabilities: [Capabilities.billing.view, Capabilities.billing.manage],
   };
 }
 
@@ -176,21 +178,18 @@ export const billingReconciliationRepository = {
 
   describe() {
     return {
-      certified: false,
+      certified: true,
       tenantBound: true,
       traceAware: true,
       runtimeAware: true,
-      capabilityAware: false,
+      capabilityAware: true,
       reconciliationAware: true,
       recoveryAware: true,
       evidenceAware: true,
       retryAware: true,
       staleContextSafe: true,
       metricsEnabled: true,
-      requiredCapabilities: [],
-      exceptions: [
-        "Billing reconciliation is operationally converged but still lacks repository-level capability metadata.",
-      ],
+      requiredCapabilities: [Capabilities.billing.view, Capabilities.billing.manage],
     };
   },
 };

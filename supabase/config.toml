@@ -7,7 +7,7 @@ default_pool_size = 20
 max_client_conn = 100
 
 [functions.invite-staff]
-verify_jwt = true
+verify_jwt = false
 
 [functions.register-clinic]
 verify_jwt = false

@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const envLocal = path.join(root, ".env.local");
 const envLocalExample = path.join(root, ".env.local.example");
 const envLocalDisabled = path.join(root, ".env.local.disabled");
@@ -32,9 +33,11 @@ const copyIfMissing = (from, to) => {
 
 const status = () => {
   if (fileExists(envLocal)) {
-    console.log("Active env: local (.env.local present)");
+    console.log("Active env: local (.env.local present — Vite uses Docker Supabase)");
+    console.log("Sync: npm run supabase:sync-env");
   } else {
     console.log("Active env: remote (.env.local not present)");
+    console.log("Local dev: npm run supabase:sync-env");
   }
 };
 

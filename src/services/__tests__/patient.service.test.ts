@@ -56,6 +56,18 @@ vi.mock("@/core/auth/authStore", () => ({
 
 import { patientService } from "@/services/patients/patient.service";
 
+const buildPatient = (overrides: Record<string, unknown> = {}) => ({
+  id: "00000000-0000-0000-0000-000000000333",
+  tenant_id: tenantId,
+  patient_code: "PT-1001",
+  full_name: "Test Patient",
+  status: "active" as const,
+  created_at: "2026-03-14T10:00:00.000Z",
+  updated_at: "2026-03-14T10:00:00.000Z",
+  deleted_at: null,
+  ...overrides,
+});
+
 describe("patientService permissions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -117,5 +129,63 @@ describe("patientService permissions", () => {
     await expect(
       patientService.update("00000000-0000-0000-0000-000000000333", { status: "inactive" } as any),
     ).rejects.toThrow("active appointments");
+  });
+
+  it("blocks archive when patient has active appointments", async () => {
+    const repo = vi.mocked(patientRepository, true);
+    repo.hasActiveAppointments.mockResolvedValue(true);
+
+    await expect(
+      patientService.archive("00000000-0000-0000-0000-000000000333"),
+    ).rejects.toThrow("Cannot archive patient with active appointments");
+    expect(repo.archive).not.toHaveBeenCalled();
+  });
+
+  it("archives a patient without active appointments", async () => {
+    const repo = vi.mocked(patientRepository, true);
+    repo.hasActiveAppointments.mockResolvedValue(false);
+    repo.archive.mockResolvedValue(buildPatient({
+      status: "inactive",
+      deleted_at: "2026-06-13T10:00:00.000Z",
+    }) as any);
+
+    const result = await patientService.archive("00000000-0000-0000-0000-000000000333");
+
+    expect(repo.archive).toHaveBeenCalledWith(
+      "00000000-0000-0000-0000-000000000333",
+      tenantId,
+      userId,
+    );
+    expect(result.deleted_at).toBeTruthy();
+  });
+
+  it("restores an archived patient", async () => {
+    const repo = vi.mocked(patientRepository, true);
+    repo.restore.mockResolvedValue(buildPatient({
+      full_name: "Restored Patient",
+      deleted_at: null,
+    }) as any);
+
+    const result = await patientService.restore("00000000-0000-0000-0000-000000000333");
+
+    expect(repo.restore).toHaveBeenCalledWith(
+      "00000000-0000-0000-0000-000000000333",
+      tenantId,
+      userId,
+    );
+    expect(result.deleted_at).toBeNull();
+  });
+
+  it("bulk archives patients through repository command", async () => {
+    const repo = vi.mocked(patientRepository, true);
+    const ids = [
+      "00000000-0000-0000-0000-000000000401",
+      "00000000-0000-0000-0000-000000000402",
+    ];
+    repo.deleteBulk.mockResolvedValue(undefined);
+
+    await patientService.deleteBulk(ids);
+
+    expect(repo.deleteBulk).toHaveBeenCalledWith(ids, tenantId, userId);
   });
 });

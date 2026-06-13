@@ -7,4 +7,6 @@ export const appRoleEnum = z.enum([
   "receptionist",
   "nurse",
   "accountant",
+  "pharmacist",
+  "lab_technician",
 ]);

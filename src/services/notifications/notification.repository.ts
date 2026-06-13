@@ -9,6 +9,70 @@ import { ServiceError } from "@/services/supabase/errors";
 const NOTIFICATION_COLUMNS =
   "id, tenant_id, user_id, title, body, type, read, created_at, delivery_key, source_event_id, source_outbox_id, delivered_at, acknowledged_at, updated_at";
 
+const NOTIFICATION_COLUMNS_LEGACY =
+  "id, tenant_id, user_id, title, body, type, read, created_at";
+
+const NOTIFICATION_COLUMN_SET_KEY = "shefaa:notifications:list-column-set";
+
+type NotificationListColumnSet = "extended" | "legacy";
+
+let notificationListColumnSet: NotificationListColumnSet | null = readCachedNotificationColumnSet();
+
+function readCachedNotificationColumnSet(): NotificationListColumnSet | null {
+  if (typeof sessionStorage === "undefined") return null;
+  try {
+    const value = sessionStorage.getItem(NOTIFICATION_COLUMN_SET_KEY);
+    return value === "extended" || value === "legacy" ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function cacheNotificationColumnSet(set: NotificationListColumnSet) {
+  notificationListColumnSet = set;
+  if (typeof sessionStorage === "undefined") return;
+  try {
+    sessionStorage.setItem(NOTIFICATION_COLUMN_SET_KEY, set);
+  } catch {
+    /* ignore */
+  }
+}
+
+function notificationListColumns(): string {
+  return notificationListColumnSet === "legacy"
+    ? NOTIFICATION_COLUMNS_LEGACY
+    : NOTIFICATION_COLUMNS;
+}
+
+function isMissingNotificationColumnError(error: {
+  message?: string | null;
+  code?: string | number | null;
+  details?: string | null;
+  hint?: string | null;
+}) {
+  const code = error.code != null ? String(error.code) : "";
+  const combined = [error.message, error.details, error.hint]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return code === "42703"
+    || code === "PGRST204"
+    || combined.includes("delivery_key")
+    || combined.includes("could not find")
+    || (combined.includes("column") && combined.includes("does not exist"));
+}
+
+/** Test hook: reset cached notification list column resolution. */
+export function resetNotificationListColumnSetForTests() {
+  notificationListColumnSet = null;
+  if (typeof sessionStorage === "undefined") return;
+  try {
+    sessionStorage.removeItem(NOTIFICATION_COLUMN_SET_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
 const NOTIFICATION_READ_CAPS = [Capabilities.notifications.read] as const;
 const NOTIFICATION_WRITE_CAPS = [Capabilities.notifications.write] as const;
 
@@ -36,6 +100,14 @@ export type NotificationCommandResult = {
   idempotency_replay: boolean;
   message: string | null;
   notification: Notification | null;
+};
+
+export type NotificationDeliveryAuditRow = {
+  id: string;
+  tenant_id: string | null;
+  action: string;
+  created_at: string;
+  details: Record<string, string | null | undefined> | null;
 };
 
 export interface NotificationRepository {
@@ -73,6 +145,8 @@ export interface NotificationRepository {
     userId: string,
     onInsert: (payload: Notification) => void,
   ): { unsubscribe: () => void };
+  listRecentDeliveryAuditEvidence(tenantId: string, limit?: number): Promise<NotificationDeliveryAuditRow[]>;
+  listDeliveryAuditByWorkflowTraceId(tenantId: string, workflowTraceId: string, limit?: number): Promise<NotificationDeliveryAuditRow[]>;
   describe?(): {
     certified: boolean;
     tenantBound: boolean;
@@ -93,13 +167,31 @@ export interface NotificationRepository {
 export const notificationRepository: NotificationRepository = {
   async listByUserPaged(tenantId, userId, limit, offset) {
     const to = Math.max(0, offset + limit - 1);
-    const { data, error, count } = await platformRepository
-      .from("notifications", notificationCtx(tenantId, "notifications.listByUserPaged", "readonly", [...NOTIFICATION_READ_CAPS]))
-      .select(NOTIFICATION_COLUMNS, { count: "exact" })
+    const ctx = notificationCtx(tenantId, "notifications.listByUserPaged", "readonly", [...NOTIFICATION_READ_CAPS]);
+    const buildQuery = (columns: string) => platformRepository
+      .from("notifications", ctx)
+      .select(columns, { count: "exact" })
       .eq("tenant_id", tenantId)
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
       .range(offset, to);
+
+    let columns = notificationListColumns();
+    let { data, error, count } = await buildQuery(columns);
+
+    if (
+      error
+      && notificationListColumnSet === null
+      && columns === NOTIFICATION_COLUMNS
+      && isMissingNotificationColumnError(error)
+    ) {
+      cacheNotificationColumnSet("legacy");
+      columns = NOTIFICATION_COLUMNS_LEGACY;
+      ({ data, error, count } = await buildQuery(columns));
+    } else if (!error) {
+      cacheNotificationColumnSet(columns === NOTIFICATION_COLUMNS ? "extended" : "legacy");
+    }
+
     if (error) {
       throw new ServiceError(error.message ?? "Failed to load notifications", { code: error.code, details: error });
     }
@@ -208,6 +300,43 @@ export const notificationRepository: NotificationRepository = {
       },
     });
   },
+  async listRecentDeliveryAuditEvidence(tenantId, limit = 8) {
+    const { data, error } = await platformRepository
+      .from("audit_logs", notificationCtx(tenantId, "notifications.deliveryAuditEvidence", "readonly", [...NOTIFICATION_READ_CAPS]))
+      .select("id, tenant_id, action, created_at, details")
+      .eq("tenant_id", tenantId)
+      .eq("action", "notification_delivered")
+      .order("created_at", { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      throw new ServiceError(error.message ?? "Failed to load notification delivery audit evidence", {
+        code: error.code,
+        details: error,
+      });
+    }
+
+    return (data ?? []) as NotificationDeliveryAuditRow[];
+  },
+  async listDeliveryAuditByWorkflowTraceId(tenantId, workflowTraceId, limit = 20) {
+    const { data, error } = await platformRepository
+      .from("audit_logs", notificationCtx(tenantId, "notifications.deliveryAuditByTrace", "readonly", [...NOTIFICATION_READ_CAPS]))
+      .select("id, tenant_id, action, created_at, details")
+      .eq("tenant_id", tenantId)
+      .eq("action", "notification_delivered")
+      .contains("details", { workflowTraceId })
+      .order("created_at", { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      throw new ServiceError(error.message ?? "Failed to load notification delivery audit by trace", {
+        code: error.code,
+        details: error,
+      });
+    }
+
+    return (data ?? []) as NotificationDeliveryAuditRow[];
+  },
   describe() {
     return {
       certified: true,
@@ -222,9 +351,6 @@ export const notificationRepository: NotificationRepository = {
       staleContextSafe: true,
       metricsEnabled: true,
       requiredCapabilities: [Capabilities.notifications.read, Capabilities.notifications.write],
-      exceptions: [
-        "Notification reconciliation is declared with a drift query; no scheduled reconciler job exists yet.",
-      ],
     };
   },
 };

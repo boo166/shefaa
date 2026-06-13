@@ -2,14 +2,12 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   buildRedirectUrl,
   enforceCors,
-  getAllowedOriginsFromEnv,
 } from "../_shared/cors.ts";
+import { resolveBearerAuth } from "../_shared/auth.ts";
 import { initSentry } from "../_shared/sentry.ts";
 import { logError, logInfo } from "../_shared/logger.ts";
 import { createRequestId, getClientIp } from "../_shared/request.ts";
 import { checkRateLimit } from "../_shared/rate-limit.ts";
-
-const allowedOrigins = getAllowedOriginsFromEnv();
 
 // --- Durable rate limiter (DB-backed) ---
 const RATE_LIMIT_WINDOW_SECONDS = 60;
@@ -19,9 +17,7 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 Deno.serve(async (req) => {
   initSentry();
-  const { corsHeaders, errorResponse } = enforceCors(req, {
-    allowedOrigins,
-  });
+  const { corsHeaders, errorResponse } = enforceCors(req);
   const requestId = createRequestId(req);
   const baseHeaders = { ...corsHeaders, "Content-Type": "application/json", "x-request-id": requestId };
 
@@ -50,7 +46,8 @@ Deno.serve(async (req) => {
 
   try {
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
+    const resolved = await resolveBearerAuth(authHeader);
+    if ("error" in resolved) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: baseHeaders,
@@ -58,12 +55,12 @@ Deno.serve(async (req) => {
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const anonKey =
-      Deno.env.get("SUPABASE_ANON_KEY") ??
-      Deno.env.get("SUPABASE_PUBLISHABLE_KEY")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
+
+    const callerId = resolved.auth.userId;
+    const callerSessionId = resolved.auth.sessionId;
+    const callerAal = resolved.auth.aal;
 
     const rateLimit = await checkRateLimit({
       client: adminClient,
@@ -88,24 +85,6 @@ Deno.serve(async (req) => {
         },
       );
     }
-
-    const callerClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-
-    const token = authHeader.replace("Bearer ", "");
-    const { data: claimsData, error: claimsError } =
-      await callerClient.auth.getClaims(token);
-    if (claimsError || !claimsData?.claims?.sub) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: baseHeaders,
-      });
-    }
-
-    const callerId = claimsData.claims.sub;
-    const callerSessionId = claimsData.claims.session_id;
-    const callerAal = claimsData.claims.aal;
 
     const { data: roleData } = await adminClient
       .from("user_roles")
@@ -193,6 +172,8 @@ Deno.serve(async (req) => {
       "receptionist",
       "nurse",
       "accountant",
+      "pharmacist",
+      "lab_technician",
     ];
     if (!validRoles.includes(role)) {
       return new Response(JSON.stringify({ error: "Invalid role" }), {
@@ -226,7 +207,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const redirectTo = buildRedirectUrl(req, "/login", allowedOrigins);
+    const redirectTo = buildRedirectUrl(req, "/login");
 
     const { data: inviteUserData, error: createErr } =
       await adminClient.auth.admin.inviteUserByEmail(normalizedEmail, {

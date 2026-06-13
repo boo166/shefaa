@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useI18n } from "@/core/i18n/i18nStore";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -7,8 +8,14 @@ import { Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } 
 import { toast } from "@/hooks/use-toast";
 import { userInviteService } from "@/services/settings/userInvite.service";
 import type { InviteStaffInput } from "@/domain/settings/invite.types";
+import { ensurePrivilegedActionSession } from "@/services/auth/privilegedActionSession.service";
 import { isFreshAuthRequiredError } from "@/services/auth/recentAuth.service";
 import { requestReauthentication } from "@/features/auth/reauthPrompt";
+import {
+  isMfaRequiredError,
+  isPrivilegedMfaEnrollmentRequiredError,
+} from "@/services/auth/privilegedAccess.service";
+import { AuthorizationError } from "@/services/supabase/errors";
 
 interface AddUserModalProps {
   open: boolean;
@@ -22,10 +29,13 @@ const ROLES = [
   { value: "receptionist", labelKey: "roles.receptionist" },
   { value: "nurse", labelKey: "roles.nurse" },
   { value: "accountant", labelKey: "roles.accountant" },
+  { value: "pharmacist", labelKey: "roles.pharmacist" },
+  { value: "lab_technician", labelKey: "roles.lab_technician" },
 ] as const;
 
 export const AddUserModal = ({ open, onClose, onSuccess }: AddUserModalProps) => {
-  const { t } = useI18n();
+  const { t } = useI18n(["auth", "common", "settings"]);
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     full_name: "",
@@ -48,12 +58,22 @@ export const AddUserModal = ({ open, onClose, onSuccess }: AddUserModalProps) =>
 
     setLoading(true);
 
+    const invitePayload = {
+      email,
+      full_name: fullName,
+      role: form.role as InviteStaffInput["role"],
+    };
+
+    const reauthConfig = {
+      title: t("auth.reauthTitle"),
+      description: t("auth.reauthAdminActionDesc"),
+      actionLabel: t("auth.reauthAction"),
+      cancelLabel: t("common.cancel"),
+    };
+
     try {
-      await userInviteService.inviteStaff({
-        email,
-        full_name: fullName,
-        role: form.role as InviteStaffInput["role"],
-      });
+      await ensurePrivilegedActionSession(reauthConfig);
+      await userInviteService.inviteStaff(invitePayload);
       toast({
         title: t("settings.addUser"),
         description: t("auth.confirmationSent"),
@@ -62,18 +82,55 @@ export const AddUserModal = ({ open, onClose, onSuccess }: AddUserModalProps) =>
       onClose();
       setForm({ full_name: "", email: "", role: "doctor" });
     } catch (err) {
+      if (isPrivilegedMfaEnrollmentRequiredError(err)) {
+        toast({
+          title: t("auth.access.privilegedRequiredTitle"),
+          description: t("auth.mfa.clinicAdminDescription"),
+          variant: "destructive",
+        });
+        onClose();
+        navigate("/security/privileged");
+        return;
+      }
+      if (isMfaRequiredError(err)) {
+        toast({
+          title: t("auth.mfa.sessionActionRequired"),
+          description: err.message || t("auth.mfa.clinicAdminDescription"),
+          variant: "destructive",
+        });
+        return;
+      }
+      if (err instanceof AuthorizationError && err.code === "NOT_AUTHENTICATED") {
+        toast({
+          title: t("common.error"),
+          description: err.message,
+          variant: "destructive",
+        });
+        onClose();
+        navigate("/login");
+        return;
+      }
       if (allowRetry && isFreshAuthRequiredError(err)) {
         try {
-          await requestReauthentication({
-            title: t("auth.reauthTitle"),
-            description: t("auth.reauthAdminActionDesc"),
-            actionLabel: t("auth.reauthAction"),
-            cancelLabel: t("common.cancel"),
+          await requestReauthentication(reauthConfig);
+          await userInviteService.inviteStaff(invitePayload);
+          toast({
+            title: t("settings.addUser"),
+            description: t("auth.confirmationSent"),
           });
-          await handleSubmit(e, false);
-        } catch {
-          return;
+          onSuccess();
+          onClose();
+          setForm({ full_name: "", email: "", role: "doctor" });
+        } catch (retryErr) {
+          if (retryErr instanceof Error && retryErr.message.includes("cancelled")) {
+            return;
+          }
+          const message = retryErr instanceof Error ? retryErr.message : t("common.error");
+          toast({ title: t("common.error"), description: message, variant: "destructive" });
         }
+        return;
+      }
+      if (err instanceof Error && err.message.includes("cancelled")) {
         return;
       }
       const message = err instanceof Error ? err.message : t("common.error");
@@ -129,4 +186,3 @@ export const AddUserModal = ({ open, onClose, onSuccess }: AddUserModalProps) =>
     </Dialog>
   );
 };
-

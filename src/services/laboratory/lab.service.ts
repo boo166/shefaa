@@ -182,9 +182,15 @@ export const labService = {
           updates.abnormal_flag !== undefined ||
           updates.result_notes !== undefined;
 
-        const result = shouldUseFinalizeCommand
-          ? await labRepository.finalizeResult(parsedId, normalizedUpdate, tenantId, userId, expected_updated_at)
-          : await labRepository.update(parsedId, normalizedUpdate, tenantId, expected_updated_at);
+        const shouldUseAmendCommand = existing.status === "completed" && shouldUseFinalizeCommand;
+        const result = shouldUseAmendCommand
+          ? await labRepository.amendResult(parsedId, {
+              ...normalizedUpdate,
+              amendment_reason: (updates as LabResultUpdateInput & { amendment_reason?: string }).amendment_reason ?? null,
+            }, tenantId, userId, expected_updated_at)
+          : shouldUseFinalizeCommand
+            ? await labRepository.finalizeResult(parsedId, normalizedUpdate, tenantId, userId, expected_updated_at)
+            : await labRepository.update(parsedId, normalizedUpdate, tenantId, expected_updated_at);
         if (!result) {
           if (expected_updated_at) {
             throw new ConflictError("Lab order was modified by another user", {
@@ -197,6 +203,19 @@ export const labService = {
       });
     } catch (err) {
       throw toServiceError(err, "Failed to update lab order");
+    }
+  },
+  async listResultVersions(labOrderId: string) {
+    try {
+      assertAnyPermission(["view_medical_records", "manage_medical_records", "manage_laboratory"]);
+      await featureAccessService.assertFeatureAccess("laboratory");
+      return await withAuthStaleGuard(async () => {
+        const parsedId = uuidSchema.parse(labOrderId);
+        const { tenantId } = getTenantContext();
+        return await labRepository.listResultVersions(parsedId, tenantId);
+      });
+    } catch (err) {
+      throw toServiceError(err, "Failed to load lab result versions");
     }
   },
   async archive(id: string) {

@@ -4,6 +4,7 @@ import { assertAnyPermission } from "@/services/supabase/permissions";
 import { recentAuthService } from "./recentAuth.service";
 import { privilegedSessionService } from "./privilegedSession.service";
 import { privilegedStepUpService } from "./privilegedStepUp.service";
+import { STEP_UP_PASSWORD_MAX_AGE_MS } from "./privilegedActionSession.service";
 
 type PrivilegedActionOptions = {
   action: string;
@@ -50,7 +51,10 @@ export const privilegedAccessService = {
         return { stepUpGrantId: null };
       }
 
-      recentAuthService.assertRecentAuth({ action: options.action });
+      recentAuthService.assertRecentAuth({
+        action: options.action,
+        maxAgeMs: STEP_UP_PASSWORD_MAX_AGE_MS,
+      });
       const stepUpGrantId = await privilegedStepUpService.issueGrant({
         action: options.action,
         roleTier: options.roleTier,

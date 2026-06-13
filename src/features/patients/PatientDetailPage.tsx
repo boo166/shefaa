@@ -13,7 +13,7 @@ import {
   ArrowLeft, FileText, Pill, Activity, Stethoscope,
   Calendar, Phone, Mail, Droplets, User, Loader2,
   FlaskConical, Receipt, CalendarDays, Clock, CheckCircle2, XCircle,
-  Printer, Pencil, Trash2, Plus,
+  Printer, Pencil, Trash2, Plus, History,
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -21,6 +21,7 @@ import { formatDate, formatCurrency } from "@/shared/utils/formatDate";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { PatientDocuments } from "./PatientDocuments";
 import { PrescriptionManagementSection } from "./PrescriptionManagementSection";
+import { PatientTimeline } from "./PatientTimeline";
 import { generatePatientReportPDF } from "@/shared/utils/pdfGenerator";
 import { patientService } from "@/services/patients/patient.service";
 import { medicalRecordsService } from "@/services/patients/medicalRecords.service";
@@ -35,7 +36,7 @@ import { useDebouncedValue } from "@/shared/hooks/useDebouncedValue";
 import { formatPrescriptionSig } from "@/shared/utils/prescription";
 import { toast } from "@/hooks/use-toast";
 
-type Tab = "overview" | "history" | "prescriptions" | "notes" | "lab_orders" | "invoices" | "appointments" | "documents";
+type Tab = "timeline" | "overview" | "history" | "prescriptions" | "notes" | "lab_orders" | "invoices" | "appointments" | "documents";
 
 
 const labStatusVariant: Record<string, "default" | "warning" | "success"> = {
@@ -61,7 +62,7 @@ export const PatientDetailPage = () => {
   const { user, hasPermission } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<Tab>("overview");
+  const [activeTab, setActiveTab] = useState<Tab>("timeline");
   const canManageRecords = hasPermission("manage_medical_records");
   const [recordModalOpen, setRecordModalOpen] = useState(false);
   const [recordMode, setRecordMode] = useState<"create" | "edit">("create");
@@ -86,6 +87,7 @@ export const PatientDetailPage = () => {
   });
 
   const tabs: { key: Tab; icon: any; label: string }[] = [
+    { key: "timeline", icon: History, label: t("patients.timeline.title") },
     { key: "overview", icon: User, label: t("patients.overview") },
     { key: "appointments", icon: CalendarDays, label: t("common.appointments") },
     { key: "history", icon: Activity, label: t("patients.medicalHistory") },
@@ -398,6 +400,13 @@ export const PatientDetailPage = () => {
           </Button>
         ))}
       </div>
+
+      {/* ── TIMELINE ── */}
+      {activeTab === "timeline" && patientId && (
+        <div className="bg-card rounded-lg border p-5">
+          <PatientTimeline patientId={patientId} tenantId={user?.tenantId} />
+        </div>
+      )}
 
       {/* ── OVERVIEW ── */}
       {activeTab === "overview" && (

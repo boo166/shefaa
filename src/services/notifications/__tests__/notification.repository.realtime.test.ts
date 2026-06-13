@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { Capabilities } from "@/platform/authorization/capabilities";
 
 const subscribeEntity = vi.hoisted(() => vi.fn(() => ({ unsubscribe: vi.fn() })));
+const from = vi.hoisted(() => vi.fn());
 const rpc = vi.hoisted(() => vi.fn(() => Promise.resolve({
   data: [{
     result_code: "OK",
@@ -38,14 +39,36 @@ vi.mock("@/platform/sdk", () => ({
 
 vi.mock("@/platform/data/platformRepository", () => ({
   platformRepository: {
-    from: vi.fn(),
+    from,
     rpc,
   },
 }));
 
-import { notificationRepository } from "../notification.repository";
+import {
+  notificationRepository,
+  resetNotificationListColumnSetForTests,
+} from "../notification.repository";
+
+function mockListQuery(results: Array<{ data?: unknown[]; error?: { message: string; code: string } | null; count?: number }>) {
+  let call = 0;
+  from.mockImplementation(() => {
+    const result = results[call] ?? results[results.length - 1];
+    call += 1;
+    const chain = {
+      select: vi.fn(() => chain),
+      eq: vi.fn(() => chain),
+      order: vi.fn(() => chain),
+      range: vi.fn(async () => result),
+    };
+    return chain;
+  });
+}
 
 describe("notificationRepository realtime convergence", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetNotificationListColumnSetForTests();
+  });
   it("describes certified notification operational authority metadata", () => {
     const meta = notificationRepository.describe?.();
 
@@ -63,6 +86,7 @@ describe("notificationRepository realtime convergence", () => {
       metricsEnabled: true,
       requiredCapabilities: [Capabilities.notifications.read, Capabilities.notifications.write],
     }));
+    expect(meta?.exceptions).toBeUndefined();
   });
 
   it("delivers notifications through DB command authority with trace ids", async () => {
@@ -178,5 +202,53 @@ describe("notificationRepository realtime convergence", () => {
     expect(onInsert).toHaveBeenCalledTimes(1);
     expect(onInsert).toHaveBeenCalledWith(expect.objectContaining({ id: "n-1" }));
     sub.unsubscribe();
+  });
+
+  it("falls back to legacy notification columns and caches the resolution", async () => {
+    mockListQuery([
+      {
+        error: {
+          code: "42703",
+          message: "column notifications.delivery_key does not exist",
+        },
+      },
+      {
+        data: [{
+          id: "n-1",
+          tenant_id: "tenant-1",
+          user_id: "user-1",
+          title: "Hello",
+          body: null,
+          type: "system",
+          read: false,
+          created_at: "2026-05-21T10:00:00.000Z",
+        }],
+        count: 1,
+      },
+      {
+        data: [{
+          id: "n-1",
+          tenant_id: "tenant-1",
+          user_id: "user-1",
+          title: "Hello",
+          body: null,
+          type: "system",
+          read: false,
+          created_at: "2026-05-21T10:00:00.000Z",
+        }],
+        count: 1,
+      },
+    ]);
+
+    const first = await notificationRepository.listByUserPaged("tenant-1", "user-1", 20, 0);
+    const second = await notificationRepository.listByUserPaged("tenant-1", "user-1", 20, 0);
+
+    expect(first.data).toHaveLength(1);
+    expect(second.data).toHaveLength(1);
+    expect(from).toHaveBeenCalledTimes(3);
+    const firstSelect = from.mock.results[0].value.select.mock.calls[0][0] as string;
+    const thirdSelect = from.mock.results[2].value.select.mock.calls[0][0] as string;
+    expect(firstSelect).toContain("delivery_key");
+    expect(thirdSelect).not.toContain("delivery_key");
   });
 });

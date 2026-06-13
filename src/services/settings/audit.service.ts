@@ -24,6 +24,20 @@ export const auditLogService = {
       throw toServiceError(err, "Failed to load audit logs");
     }
   },
+  async listIdentityPaged(input?: { page?: number; pageSize?: number }) {
+    try {
+      const parsed = paginationSchema.parse(input ?? {});
+      const { tenantId } = getTenantContext();
+      const { data, count } = await auditLogRepository.listIdentityPaged(
+        tenantId,
+        parsed.pageSize,
+        (parsed.page - 1) * parsed.pageSize
+      );
+      return { data: z.array(auditLogSchema).parse(data), total: count };
+    } catch (err) {
+      throw toServiceError(err, "Failed to load identity audit logs");
+    }
+  },
   async logEvent(input: {
     tenant_id?: string | null;
     user_id: string;

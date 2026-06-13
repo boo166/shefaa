@@ -115,6 +115,7 @@ export const SettingsPage = () => {
             <UsersTab
               profiles={profiles}
               onAddUser={() => setShowAddUser(true)}
+              onUsersChanged={() => void refetchProfiles()}
               isLoading={loadingProfiles}
               page={userPage}
               pageSize={pageSize}

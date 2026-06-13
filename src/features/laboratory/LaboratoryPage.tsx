@@ -180,7 +180,7 @@ export const LaboratoryPage = () => {
               }}
               className="h-7 px-2 text-xs"
             >
-              Edit result
+              {t("laboratory.amend.action")}
             </Button>
           )}
         </div>

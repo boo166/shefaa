@@ -1,6 +1,6 @@
 begin;
 
-select plan(20);
+select plan(33);
 
 set local role postgres;
 set local session_replication_role = replica;
@@ -9,6 +9,8 @@ select set_config('request.jwt.claim.role', '', true);
 select set_config('request.jwt.claims', '', true);
 
 truncate
+  public.notification_reconciliation_findings,
+  public.notification_reconciliation_runs,
   public.dead_letter_events,
   public.event_delivery_attempts,
   public.event_outbox,
@@ -404,6 +406,337 @@ select throws_ok(
   '42501',
   'new row violates row-level security policy for table "notifications"',
   'foreign tenant user cannot mutate notification'
+);
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '81000000-0000-0000-0000-000000000001', true);
+select set_config('request.jwt.claim.role', 'authenticated', true);
+select set_config('request.jwt.claims', '{"sub":"81000000-0000-0000-0000-000000000001","role":"authenticated"}', true);
+
+select is(
+  (select result_code from public.command_notification_delivery(
+    '80000000-0000-0000-0000-000000000001',
+    '81000000-0000-0000-0000-000000000002',
+    'Invoice emails sent',
+    'Sent 3, failed 0, skipped 1.',
+    'billing_email_job',
+    'billing-email-job:80000000-0000-0000-0000-000000000001:88000000-0000-0000-0000-000000000001:81000000-0000-0000-0000-000000000002',
+    null,
+    null,
+    false,
+    'billing-email-job:80000000-0000-0000-0000-000000000001:88000000-0000-0000-0000-000000000001:81000000-0000-0000-0000-000000000002',
+    '{"type":"billing_email_job","sent":3,"failed":0,"skipped":1}',
+    '81000000-0000-0000-0000-000000000001',
+    '88000000-0000-0000-0000-000000000001',
+    'send-invoice-emails',
+    'billing-email-delivery'
+  )),
+  'OK',
+  'invoice-email style delivery uses deterministic billing-email-job key'
+);
+
+select ok(
+  (select idempotency_replay from public.command_notification_delivery(
+    '80000000-0000-0000-0000-000000000001',
+    '81000000-0000-0000-0000-000000000002',
+    'Invoice emails sent',
+    'Sent 3, failed 0, skipped 1.',
+    'billing_email_job',
+    'billing-email-job:80000000-0000-0000-0000-000000000001:88000000-0000-0000-0000-000000000001:81000000-0000-0000-0000-000000000002',
+    null,
+    null,
+    false,
+    'billing-email-job:80000000-0000-0000-0000-000000000001:88000000-0000-0000-0000-000000000001:81000000-0000-0000-0000-000000000002',
+    '{"type":"billing_email_job","sent":3,"failed":0,"skipped":1}',
+    '81000000-0000-0000-0000-000000000001',
+    '88000000-0000-0000-0000-000000000001',
+    'send-invoice-emails',
+    'billing-email-delivery'
+  )),
+  'invoice-email style delivery replays idempotently by deterministic key'
+);
+
+select is(
+  (select result_code from public.command_notification_delivery(
+    '80000000-0000-0000-0000-000000000001',
+    '81000000-0000-0000-0000-000000000002',
+    'Upcoming Appointment Reminder',
+    'Appointment with patient starts in 30 minutes.',
+    'appointment_reminder',
+    'appointment-reminder:80000000-0000-0000-0000-000000000001:85000000-0000-0000-0000-000000000001:81000000-0000-0000-0000-000000000002:in_app',
+    null,
+    null,
+    false,
+    'appointment-reminder:80000000-0000-0000-0000-000000000001:85000000-0000-0000-0000-000000000001:81000000-0000-0000-0000-000000000002:in_app',
+    '{"type":"appointment_reminder","appointment_id":"85000000-0000-0000-0000-000000000001","user_id":"81000000-0000-0000-0000-000000000002","channel":"in_app"}',
+    '81000000-0000-0000-0000-000000000002',
+    '88000000-0000-0000-0000-000000000002',
+    'appointment-reminders',
+    'appointment-reminder-delivery'
+  )),
+  'OK',
+  'appointment-reminder style delivery uses deterministic in_app key'
+);
+
+select ok(
+  (select idempotency_replay from public.command_notification_delivery(
+    '80000000-0000-0000-0000-000000000001',
+    '81000000-0000-0000-0000-000000000002',
+    'Upcoming Appointment Reminder',
+    'Appointment with patient starts in 30 minutes.',
+    'appointment_reminder',
+    'appointment-reminder:80000000-0000-0000-0000-000000000001:85000000-0000-0000-0000-000000000001:81000000-0000-0000-0000-000000000002:in_app',
+    null,
+    null,
+    false,
+    'appointment-reminder:80000000-0000-0000-0000-000000000001:85000000-0000-0000-0000-000000000001:81000000-0000-0000-0000-000000000002:in_app',
+    '{"type":"appointment_reminder","appointment_id":"85000000-0000-0000-0000-000000000001","user_id":"81000000-0000-0000-0000-000000000002","channel":"in_app"}',
+    '81000000-0000-0000-0000-000000000002',
+    '88000000-0000-0000-0000-000000000002',
+    'appointment-reminders',
+    'appointment-reminder-delivery'
+  )),
+  'appointment-reminder style delivery replays idempotently by deterministic key'
+);
+
+set local role postgres;
+
+insert into public.notifications (
+  id, tenant_id, user_id, title, body, type, read, delivery_key, created_at, updated_at
+)
+values (
+  '89000000-0000-0000-0000-000000000001',
+  '80000000-0000-0000-0000-000000000001',
+  '81000000-0000-0000-0000-000000000002',
+  'Manual bypass',
+  'Inserted without command evidence',
+  'system_event',
+  false,
+  'manual:bypass-evidence',
+  now(),
+  now()
+);
+
+set local session_replication_role = replica;
+
+insert into public.notifications (
+  id, tenant_id, user_id, title, body, type, read, delivery_key,
+  source_outbox_id, created_at, updated_at
+)
+values (
+  '89000000-0000-0000-0000-000000000002',
+  '80000000-0000-0000-0000-000000000001',
+  '81000000-0000-0000-0000-000000000002',
+  'Orphan source',
+  'Missing source outbox row',
+  'system_event',
+  false,
+  'manual:orphan-source',
+  '87000000-0000-0000-0000-000000000099',
+  now(),
+  now()
+);
+
+set local session_replication_role = origin;
+
+insert into public.notifications (
+  id, tenant_id, user_id, title, body, type, read, delivery_key, created_at, updated_at
+)
+values (
+  '89000000-0000-0000-0000-000000000003',
+  '80000000-0000-0000-0000-000000000001',
+  '81000000-0000-0000-0000-000000000002',
+  'Inconsistent ack',
+  'Read without acknowledged_at',
+  'system_event',
+  true,
+  'manual:inconsistent-ack',
+  now(),
+  now()
+);
+
+insert into public.event_outbox (
+  id,
+  tenant_id,
+  domain_event_id,
+  handler_name,
+  event_type,
+  aggregate_type,
+  payload,
+  status,
+  attempts,
+  processed_at,
+  created_at,
+  updated_at
+)
+values (
+  '87000000-0000-0000-0000-000000000010',
+  '80000000-0000-0000-0000-000000000001',
+  null,
+  'notifications',
+  'AppointmentLifecycleTransitioned',
+  'appointment',
+  '{}'::jsonb,
+  'DELIVERED',
+  1,
+  now(),
+  now(),
+  now()
+);
+
+insert into public.event_outbox (
+  id,
+  tenant_id,
+  domain_event_id,
+  handler_name,
+  event_type,
+  aggregate_type,
+  payload,
+  status,
+  attempts,
+  next_retry_at,
+  created_at,
+  updated_at
+)
+values (
+  '87000000-0000-0000-0000-000000000011',
+  '80000000-0000-0000-0000-000000000001',
+  null,
+  'notifications',
+  'AppointmentLifecycleTransitioned',
+  'appointment',
+  '{}'::jsonb,
+  'RETRY',
+  3,
+  now() - interval '30 minutes',
+  now() - interval '2 hours',
+  now() - interval '2 hours'
+);
+
+drop index if exists public.ux_notifications_tenant_delivery_key;
+
+insert into public.notifications (
+  id, tenant_id, user_id, title, body, type, read, delivery_key, created_at, updated_at
+)
+values
+  (
+    '89000000-0000-0000-0000-000000000004',
+    '80000000-0000-0000-0000-000000000001',
+    '81000000-0000-0000-0000-000000000002',
+    'Duplicate one',
+    null,
+    'system_event',
+    false,
+    'manual:duplicate-key',
+    now(),
+    now()
+  ),
+  (
+    '89000000-0000-0000-0000-000000000005',
+    '80000000-0000-0000-0000-000000000001',
+    '81000000-0000-0000-0000-000000000002',
+    'Duplicate two',
+    null,
+    'system_event',
+    false,
+    'manual:duplicate-key',
+    now(),
+    now()
+  );
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '81000000-0000-0000-0000-000000000001', true);
+select set_config('request.jwt.claim.role', 'authenticated', true);
+select set_config('request.jwt.claims', '{"sub":"81000000-0000-0000-0000-000000000001","role":"authenticated"}', true);
+
+select ok(
+  (select finding_count >= 5 from public.run_notification_reconciliation(
+    '80000000-0000-0000-0000-000000000001',
+    now() - interval '24 hours',
+    now() + interval '1 hour',
+    false,
+    '86000000-0000-0000-0000-000000000010',
+    'op-notification-reconcile',
+    'wf-notification-reconcile'
+  )),
+  'notification reconciliation persists findings for drift scenarios'
+);
+
+select ok(
+  exists (
+    select 1
+    from public.notification_reconciliation_findings
+    where finding_code = 'notification_missing_command_evidence'
+      and notification_id = '89000000-0000-0000-0000-000000000001'
+  ),
+  'reconciliation detects direct notification without command evidence'
+);
+
+select ok(
+  exists (
+    select 1
+    from public.notification_reconciliation_findings
+    where finding_code = 'delivered_outbox_without_notification'
+      and outbox_id = '87000000-0000-0000-0000-000000000010'
+  ),
+  'reconciliation detects delivered outbox without matching notification'
+);
+
+select ok(
+  exists (
+    select 1
+    from public.notification_reconciliation_findings
+    where finding_code = 'notification_missing_source_outbox'
+      and notification_id = '89000000-0000-0000-0000-000000000002'
+  ),
+  'reconciliation detects notification with missing source outbox'
+);
+
+select ok(
+  exists (
+    select 1
+    from public.notification_reconciliation_findings
+    where finding_code = 'duplicate_notification_delivery_key'
+      and evidence->>'delivery_key' = 'manual:duplicate-key'
+  ),
+  'reconciliation detects duplicate delivery key drift'
+);
+
+select ok(
+  exists (
+    select 1
+    from public.notification_reconciliation_findings
+    where finding_code = 'notification_acknowledgement_inconsistent'
+      and notification_id = '89000000-0000-0000-0000-000000000003'
+  ),
+  'reconciliation detects read=true without acknowledged_at'
+);
+
+select ok(
+  exists (
+    select 1
+    from public.notification_reconciliation_findings
+    where finding_code = 'pending_notification_outbox_past_sla'
+      and outbox_id = '87000000-0000-0000-0000-000000000011'
+  ),
+  'reconciliation detects notification outbox retry work past SLA'
+);
+
+select ok(
+  exists (
+    select 1
+    from public.audit_logs
+    where action = 'notification_reconciliation_run'
+      and details->>'request_trace_id' = '86000000-0000-0000-0000-000000000010'
+      and details->>'workflow_trace_id' = 'wf-notification-reconcile'
+  ),
+  'reconciliation run writes audit evidence with trace ids'
+);
+
+select is(
+  (select duplicate_delivery_keys from public.notification_delivery_drift('80000000-0000-0000-0000-000000000001')),
+  1::bigint,
+  'notification drift query reports duplicate delivery keys after corruption'
 );
 
 select * from finish();

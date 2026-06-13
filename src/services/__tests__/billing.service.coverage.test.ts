@@ -87,6 +87,9 @@ vi.mock("@/services/billing/billing.repository", () => ({
     update: vi.fn(),
     archive: vi.fn(),
     restore: vi.fn(),
+    commandInvoiceRefund: vi.fn(),
+    commandPaymentReversal: vi.fn(),
+    commandInvoiceWriteOff: vi.fn(),
   },
 }));
 
@@ -192,6 +195,8 @@ describe("billingService permissions", () => {
         due_date: futureDueDate,
       }),
       tenantId,
+      userId,
+      expect.objectContaining({ tenantId, requestTraceId: expect.any(String) }),
     );
     expect(emitDomainEvent).not.toHaveBeenCalled();
   });
@@ -348,8 +353,113 @@ describe("billingService permissions", () => {
       }),
       tenantId,
       undefined,
+      userId,
+      expect.objectContaining({ tenantId, requestTraceId: expect.any(String) }),
     );
     expect(result.status).toBe("void");
+    expect(result.balance_due).toBe(0);
+  });
+
+  it("refunds a paid invoice via command authority", async () => {
+    const repo = vi.mocked(billingRepository, true);
+    repo.commandInvoiceRefund.mockResolvedValue({
+      result_code: "OK",
+      retryable: false,
+      idempotency_replay: false,
+      message: "Refund posted",
+      invoice: buildInvoice({
+        amount_paid: 70,
+        balance_due: 50,
+        status: "partially_refunded",
+      }),
+      payment: null,
+      refund: { id: "00000000-0000-0000-0000-000000000666", amount: 50 },
+    });
+
+    const result = await billingService.refundInvoice(invoiceId, {
+      amount: 50,
+      reason: "Partial refund for overcharge",
+      reference: "REF-1",
+    });
+
+    expect(repo.commandInvoiceRefund).toHaveBeenCalledWith(
+      expect.objectContaining({
+        invoiceId,
+        tenantId,
+        amount: 50,
+        reason: "Partial refund for overcharge",
+        reference: "REF-1",
+      }),
+    );
+    expect(result.status).toBe("partially_refunded");
+    expect(result.amount_paid).toBe(70);
+  });
+
+  it("reverses a payment via command authority", async () => {
+    const repo = vi.mocked(billingRepository, true);
+    repo.commandPaymentReversal.mockResolvedValue({
+      result_code: "OK",
+      retryable: false,
+      idempotency_replay: false,
+      message: "Payment reversed",
+      invoice: buildInvoice({
+        amount_paid: 0,
+        balance_due: 120,
+        status: "pending",
+      }),
+      payment: {
+        id: paymentId,
+        tenant_id: tenantId,
+        invoice_id: invoiceId,
+        patient_id: patientId,
+        amount: 120,
+        payment_method: "card",
+        paid_at: "2026-04-16T10:00:00.000Z",
+        reference: null,
+        notes: null,
+        created_at: "2026-04-16T10:00:00.000Z",
+        created_by: userId,
+      },
+    });
+
+    const result = await billingService.reversePayment(paymentId, "Chargeback");
+
+    expect(repo.commandPaymentReversal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        paymentId,
+        tenantId,
+        reason: "Chargeback",
+      }),
+    );
+    expect(result.invoice.status).toBe("pending");
+    expect(result.payment?.id).toBe(paymentId);
+  });
+
+  it("writes off an overdue invoice via command authority", async () => {
+    const repo = vi.mocked(billingRepository, true);
+    repo.commandInvoiceWriteOff.mockResolvedValue({
+      result_code: "OK",
+      retryable: false,
+      idempotency_replay: false,
+      message: "Invoice written off",
+      invoice: buildInvoice({
+        amount_paid: 0,
+        balance_due: 0,
+        status: "written_off",
+      }),
+      payment: null,
+    });
+
+    const result = await billingService.writeOffInvoice(invoiceId, "Bad debt after 90 days");
+
+    expect(repo.commandInvoiceWriteOff).toHaveBeenCalledWith(
+      expect.objectContaining({
+        invoiceId,
+        tenantId,
+        reason: "Bad debt after 90 days",
+      }),
+    );
+    expect(result.status).toBe("written_off");
     expect(result.balance_due).toBe(0);
   });
 });

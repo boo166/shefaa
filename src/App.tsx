@@ -55,6 +55,8 @@ const PharmacyPage = lazyPage(() => import("./features/pharmacy/PharmacyPage"), 
 const LaboratoryPage = lazyPage(() => import("./features/laboratory/LaboratoryPage"), (m) => m.LaboratoryPage, ["common", "laboratory", "patients", "doctors"]);
 const InsurancePage = lazyPage(() => import("./features/insurance/InsurancePage"), (m) => m.InsurancePage, ["common", "insurance", "patients", "billing"]);
 const ReportsPage = lazyPage(() => import("./features/reports/ReportsPage"), (m) => m.ReportsPage, ["common", "reports"]);
+const ClinicMissionControlPage = lazyPage(() => import("./features/ops/ClinicMissionControlPage"), (m) => m.ClinicMissionControlPage, ["common", "ops"]);
+const SecurityCenterPage = lazyPage(() => import("./features/security/SecurityCenterPage"), (m) => m.SecurityCenterPage, ["common", "auth", "settings", "security"]);
 const SettingsPage = lazyPage(() => import("./features/settings/SettingsPage"), (m) => m.SettingsPage, ["common", "settings", "auth"]);
 const TelemedicineCallPage = lazyPage(() => import("./features/telemedicine/TelemedicineCallPage"), (m) => m.TelemedicineCallPage, ["common", "appointments"]);
 const NotFound = lazy(() => import("./pages/NotFound"));
@@ -123,6 +125,8 @@ const App = () => (
                   <Route path="laboratory" element={<ProtectedRoute requiredPermission="manage_laboratory" requiredFeature="laboratory"><LaboratoryPage /></ProtectedRoute>} />
                   <Route path="insurance" element={<ProtectedRoute requiredPermission="view_billing" requiredFeature="insurance"><InsurancePage /></ProtectedRoute>} />
                   <Route path="reports" element={<ProtectedRoute requiredPermission="view_reports" requiredFeature="reports"><ReportsPage /></ProtectedRoute>} />
+                  <Route path="ops" element={<ProtectedRoute requiredAnyPermission={["manage_clinic", "view_billing", "manage_billing"]}><ClinicMissionControlPage /></ProtectedRoute>} />
+                  <Route path="security" element={<ProtectedRoute requiredPermission="manage_clinic"><SecurityCenterPage /></ProtectedRoute>} />
                   <Route path="settings" element={<ProtectedRoute requiredPermission="manage_clinic"><SettingsPage /></ProtectedRoute>} />
                 </Route>
 

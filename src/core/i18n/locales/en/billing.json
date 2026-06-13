@@ -58,5 +58,29 @@
     "currentPlan": "Current plan",
     "accessEndsOn": "Access ends on: {date}",
     "description": "Renew or upgrade the clinic subscription to continue using restricted modules."
+  },
+  "integrity": {
+    "title": "Financial Integrity",
+    "subtitle": "Reconciliation status and open billing findings",
+    "statusClean": "Clean",
+    "statusFindings": "{count} Findings",
+    "noFindings": "No open billing findings.",
+    "refresh": "Refresh",
+    "viewOps": "Mission Control",
+    "refundTitle": "Refund invoice",
+    "refundDescription": "Issue a partial or full refund against collected payments.",
+    "refundAction": "Issue refund",
+    "refundSuccess": "Refund recorded",
+    "writeOffTitle": "Write off invoice",
+    "writeOffDescription": "Remove an uncollectible balance from active receivables.",
+    "writeOffAction": "Write off",
+    "writeOffSuccess": "Invoice written off",
+    "reversalTitle": "Reverse payment",
+    "reversalDescription": "Reverse a posted payment when it was recorded in error.",
+    "reversalAction": "Reverse payment",
+    "reversalSuccess": "Payment reversed",
+    "reasonRequired": "Reason *",
+    "maxRefund": "Maximum refundable: {amount}",
+    "selectPayment": "Select payment to reverse"
   }
 }

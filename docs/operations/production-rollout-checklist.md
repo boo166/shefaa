@@ -11,6 +11,28 @@
 
 Wire dashboards to `emitPlatformMetric` / existing analytics sinks.
 
+### Load certification gates (staging game-day)
+
+Full runbook: [docs/ops/staging-load-cert-runbook.md](../ops/staging-load-cert-runbook.md).
+
+| Script | Volume default | Pass gate |
+|--------|----------------|-----------|
+| `scripts/load-cert/seed-staging-volume.mjs` | 100k patients / 100k invoices / 1M notifications | target counts reached |
+| `scripts/load-cert/verify-seed.mjs` | same targets | all tables PASS before game-day |
+| `scripts/load-cert/billing-payments.mjs` | 1000 payments (use 100k on game-day) | p95 ≤ 500ms; zero duplicate payments; reconciliation critical = 0 |
+| `scripts/load-cert/appointment-bookings.mjs` | 500 slot attempts | exactly 1 winner; zero overlap violations |
+| `scripts/load-cert/inventory-deductions.mjs` | 200 dispenses | stock never negative |
+| `scripts/load-cert/notification-outbox-deliveries.mjs` | 5000 outbox events | production path drained; reconciliation critical = 0 |
+| `scripts/load-cert/notification-deliveries.mjs` | 5000 direct RPCs | authority stress only (not game-day default) |
+| `scripts/load-cert/concurrent-users.mjs` | 50 users × 20 ops | p95 ≤ 2000ms; error rate ≤ 1% |
+
+```bash
+npm run supabase:sync-env
+npm run load-cert:game-day
+```
+
+CI concurrency proofs: `supabase/tests/load/*.sql` via `npm run test:db`.
+
 ## Alerting
 
 - Page on sustained **5xx** on payment RPC paths.

@@ -8,6 +8,7 @@ import {
   broadcastAuthEvent,
   runAuthCleanupEvent,
   runPrincipalBoundaryIfNeeded,
+  purgeCrossPrincipalScopedStorageLeaderOnly,
   runTenantScopedCacheReset,
 } from "@/services/auth/authSessionOrchestrator";
 import { sessionVersionFromSupabaseUser } from "@/services/auth/sessionVersion";
@@ -18,11 +19,22 @@ import type { AuthTransitionEventV1 } from "@/services/auth/authSessionOrchestra
 import { privilegedSessionService } from "@/services/auth/privilegedSession.service";
 
 export type GlobalRole = "super_admin";
-export type TenantRole = "clinic_admin" | "doctor" | "receptionist" | "nurse" | "accountant";
+export type TenantRole = "clinic_admin" | "doctor" | "receptionist" | "nurse" | "accountant" | "pharmacist" | "lab_technician";
 export type Role = GlobalRole | TenantRole;
 export type PrivilegedRoleTier = GlobalRole | "clinic_admin";
 export type TenantStatus = "active" | "suspended" | "deactivated";
+export type AccountStatus = "active" | "suspended";
 export type AuthenticatorAssuranceLevel = "aal1" | "aal2" | null;
+
+/** Roles that must enroll MFA and satisfy login-time challenge (baseline for clinical/finance). */
+export const MFA_REQUIRED_ROLES: readonly Role[] = [
+  "super_admin",
+  "clinic_admin",
+  "doctor",
+  "accountant",
+  "pharmacist",
+  "lab_technician",
+] as const;
 
 type SupaUser = {
   id: string;
@@ -70,6 +82,12 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   accountant: [
     "view_dashboard", "manage_billing", "view_billing", "view_reports",
   ],
+  pharmacist: [
+    "view_dashboard", "view_patients", "manage_pharmacy",
+  ],
+  lab_technician: [
+    "view_dashboard", "view_patients", "view_medical_records", "manage_laboratory",
+  ],
 };
 
 export interface AppUser {
@@ -80,6 +98,7 @@ export interface AppUser {
   tenantSlug: string | null;
   tenantName: string | null;
   tenantStatus: TenantStatus | null;
+  accountStatus?: AccountStatus | null;
   tenantRoles: TenantRole[];
   globalRoles: GlobalRole[];
   tenantStatusReason?: string | null;
@@ -117,6 +136,32 @@ export type PrivilegedSession = {
   requiresStepUp: boolean;
   canAccessPrivilegedRoutes: boolean;
 };
+
+export type MfaComplianceSession = {
+  mfaRequired: boolean;
+  requiresMfaEnrollment: boolean;
+  canAccessProtectedRoutes: boolean;
+};
+
+export function userRequiresMfa(
+  user?: Pick<AppUser, "tenantRoles" | "globalRoles"> | null,
+): boolean {
+  const roles = getEffectiveRoles(user);
+  return roles.some((role) => (MFA_REQUIRED_ROLES as readonly string[]).includes(role));
+}
+
+export function buildMfaComplianceSession(input: {
+  user: AppUser | null;
+  privilegedAuth: PrivilegedAuthState;
+}): MfaComplianceSession {
+  const mfaRequired = userRequiresMfa(input.user);
+  const isMfaEnrolled = input.privilegedAuth.verifiedFactorCount > 0;
+  return {
+    mfaRequired,
+    requiresMfaEnrollment: mfaRequired && !isMfaEnrolled,
+    canAccessProtectedRoutes: !mfaRequired || isMfaEnrolled,
+  };
+}
 
 type PersistedAuthMetadataV1 = {
   version: 1;
@@ -219,6 +264,8 @@ function isRecentAuthStillValid(user: AppUser | null, lastVerifiedAt: string | n
     receptionist: 30 * 60 * 1000,
     nurse: 30 * 60 * 1000,
     accountant: 30 * 60 * 1000,
+    pharmacist: 30 * 60 * 1000,
+    lab_technician: 30 * 60 * 1000,
   };
 
   return Date.now() - verifiedAt <= windowsMs[primaryRole];
@@ -350,6 +397,13 @@ export function selectEffectiveTenantId(state: Pick<AuthState, "user" | "tenantO
   return user.tenantId ?? null;
 }
 
+export function selectEffectiveTenantSlug(state: Pick<AuthState, "user" | "tenantOverride">): string | null {
+  const { user, tenantOverride } = state;
+  if (!user?.id) return null;
+  if (user.globalRoles.includes("super_admin")) return tenantOverride?.slug ?? null;
+  return user.tenantSlug ?? null;
+}
+
 export const useAuth = create<AuthState>()(
   persist(
     (set, get) => ({
@@ -478,6 +532,13 @@ export const useAuth = create<AuthState>()(
           set({ sessionVersion: nextVer });
           lastPrincipalKeyCommitted = nextKey;
           lastSessionVersionCommitted = nextVer;
+        }
+        const activeUser = get().user;
+        if (activeUser?.id) {
+          purgeCrossPrincipalScopedStorageLeaderOnly({
+            userId: activeUser.id,
+            tenantId: tenant?.id ?? activeUser.tenantId ?? "none",
+          });
         }
       },
       clearTenantOverride: () => {
@@ -655,6 +716,18 @@ async function loadUserProfile(
   }
   const { profile, roles } = await authService.loadUserProfile(supaUser.id);
   const hasAnyRole = roles.globalRoles.length > 0 || roles.tenantRoles.length > 0;
+  const accountStatus = (profile?.account_status as AccountStatus | undefined) ?? "active";
+  if (profile && accountStatus === "suspended" && !roles.globalRoles.includes("super_admin")) {
+    await authService.logout(undefined, principalKeyFromSnapshot(useAuth.getState())).catch(() => undefined);
+    useAuth.setState({
+      user: null,
+      supabaseUser: null,
+      isAuthenticated: false,
+      sessionVersion: null,
+      authMachineState: "unauthenticated",
+    });
+    return;
+  }
   if (profile && hasAnyRole) {
     const tenant = profile.tenants as any;
     const superAdmin = roles.globalRoles.includes("super_admin");
@@ -666,6 +739,7 @@ async function loadUserProfile(
       tenantSlug: tenant?.slug ?? (superAdmin ? null : "default"),
       tenantName: tenant?.name ?? (superAdmin ? null : "Clinic"),
       tenantStatus: tenant?.status ?? (superAdmin ? null : "active"),
+      accountStatus,
       tenantRoles: roles.tenantRoles as TenantRole[],
       globalRoles: roles.globalRoles as GlobalRole[],
       tenantStatusReason: tenant?.status_reason ?? null,
@@ -728,6 +802,10 @@ async function loadUserProfile(
       sessionVersion: nextVer,
       authMachineState: "authenticated",
       isLoading: false,
+    });
+    purgeCrossPrincipalScopedStorageLeaderOnly({
+      userId: nextUser.id,
+      tenantId: tenantOverride?.id ?? nextUser.tenantId ?? "none",
     });
   } else {
     lastPrincipalKeyCommitted = null;
@@ -812,7 +890,7 @@ authService.onAuthStateChange(async (event, sessionUser) => {
       const refreshed = await privilegedSessionService.refreshNow();
       const hasVerifiedFactor = refreshed.factors.verified.length > 0;
       const isAal2 = refreshed.aal === "aal2";
-      if (hasVerifiedFactor && !isAal2) {
+      if (hasVerifiedFactor && !isAal2 && !authListenerGuards.suppressMfaRequiredDuringReauth) {
         emitAuthMetric("mfa_challenge_required", { reason: "login" });
         setAuthMachineState("mfa_required");
       }

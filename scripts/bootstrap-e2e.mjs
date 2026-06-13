@@ -6,6 +6,7 @@ import { execFileSync } from "node:child_process";
 import { createClient } from "@supabase/supabase-js";
 
 import { loadLocalEnv } from "./lib/env.mjs";
+import { resolveSupabaseTarget } from "./lib/supabase-target.mjs";
 
 const projectRoot = process.cwd();
 loadLocalEnv(projectRoot, [".env", ".env.local"]);
@@ -55,6 +56,11 @@ function resolvePublishableKey() {
 }
 
 function fetchServiceRoleKey(projectRef) {
+  const localTarget = resolveSupabaseTarget(projectRoot);
+  if (localTarget.serviceRoleKey) {
+    return localTarget.serviceRoleKey.trim();
+  }
+
   if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return process.env.SUPABASE_SERVICE_ROLE_KEY.trim();
   }
@@ -553,10 +559,13 @@ function writeEnvFile(filePath, envEntries) {
 }
 
 async function main() {
-  const supabaseUrl = resolveSupabaseUrl();
-  const publishableKey = resolvePublishableKey();
+  const target = resolveSupabaseTarget(projectRoot);
+  const supabaseUrl = target.url ?? resolveSupabaseUrl();
+  const publishableKey = target.publishableKey ?? resolvePublishableKey();
   const projectRef = readProjectRef();
-  const serviceRoleKey = fetchServiceRoleKey(projectRef);
+  const serviceRoleKey = target.serviceRoleKey ?? fetchServiceRoleKey(projectRef);
+
+  console.log(`E2E bootstrap target: ${target.source ?? "remote"} (${supabaseUrl})`);
 
   const adminClient = createClient(supabaseUrl, serviceRoleKey, {
     auth: {

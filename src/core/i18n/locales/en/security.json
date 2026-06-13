@@ -1,0 +1,27 @@
+{
+  "title": "Identity & Security",
+  "subtitle": "Authentication posture, suspended users, and identity audit trail.",
+  "common": {
+    "yes": "Yes",
+    "no": "No"
+  },
+  "authentication": {
+    "title": "Authentication",
+    "mfaRequired": "MFA required for your role",
+    "mfaEnrolled": "MFA enrolled",
+    "assurance": "Current assurance (AAL)",
+    "unknown": "Unknown"
+  },
+  "users": {
+    "title": "Users",
+    "noSuspended": "No suspended users in this clinic.",
+    "suspended": "Suspended"
+  },
+  "audit": {
+    "title": "Identity audit (recent)",
+    "time": "Time",
+    "action": "Action",
+    "actor": "Actor",
+    "empty": "No identity events recorded yet."
+  }
+}

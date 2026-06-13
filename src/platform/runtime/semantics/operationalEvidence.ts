@@ -322,6 +322,51 @@ export function evidenceFromRecoveryAction(row: {
   });
 }
 
+export function evidenceFromNotificationDelivery(row: {
+  id: string;
+  tenant_id?: string | null;
+  action?: string | null;
+  created_at: string;
+  details?: Record<string, string | null | undefined> | null;
+}): OperationalEvidenceEnvelope {
+  const details = row.details ?? {};
+  const deliveryKey = details.deliveryKey ?? details.delivery_key ?? undefined;
+  const sourceEventId = details.sourceEventId ?? details.source_event_id ?? undefined;
+  const sourceOutboxId = details.sourceOutboxId ?? details.source_outbox_id ?? undefined;
+  return createOperationalEvidenceEnvelope({
+    id: `notification-delivery:${row.id}`,
+    category: "notification",
+    source: "audit_logs",
+    sourceId: row.id,
+    tenantId: row.tenant_id,
+    createdAt: row.created_at,
+    severity: "info",
+    failureKind: "transient",
+    runtimeEffect: "none",
+    recoveryContract: {
+      automatic: true,
+      retryable: false,
+      replaySafe: true,
+      requiresReconciliation: false,
+      requiresOperator: false,
+    },
+    traceIds: {
+      requestTraceId: details.requestTraceId ?? details.request_trace_id ?? undefined,
+      operationTraceId: details.operationTraceId ?? details.operation_trace_id ?? undefined,
+      workflowTraceId: details.workflowTraceId ?? details.workflow_trace_id ?? undefined,
+      causalParentId: sourceEventId ?? sourceOutboxId,
+    },
+    label: row.action ?? "notification_delivered",
+    detail: deliveryKey ?? "notification delivery committed",
+    metadata: {
+      deliveryKey,
+      sourceEventId,
+      sourceOutboxId,
+      notificationId: details.notificationId ?? details.notification_id,
+    },
+  });
+}
+
 export function evidenceFromEventOutbox(row: {
   id: string;
   tenant_id?: string | null;

@@ -46,6 +46,10 @@
       "checkedIn": "Patient checked in",
       "addedToQueue": "Added to the waiting room queue.",
       "updated": "Waiting room updated"
-    }
+    },
+    "boardTitle": "Queue board",
+    "boardSubtitle": "Drag patients between columns to update queue status.",
+    "tvMode": "TV mode",
+    "exitTvMode": "Exit TV mode"
   }
 }
